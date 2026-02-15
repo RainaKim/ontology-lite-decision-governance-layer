@@ -381,10 +381,11 @@ class BaseGraphRepository(ABC):
 ## 🎯 Key Features
 
 ### ✅ Deterministic Governance
-- **No LLM in critical path**
+- **No LLM in critical path** (core governance is 100% deterministic)
 - Same input → same output
 - Reproducible, auditable
 - Pure Python logic
+- **Optional o1 enhancement:** When `use_o1=True` and 2+ rules trigger, o1-mini can optimize approval chains (disabled by default in tests)
 
 ### ✅ Graph-Native Architecture
 - Nodes: Actor, Action, Policy, Risk, Resource
@@ -461,6 +462,70 @@ python -m app.e2e_runner
 
 ---
 
+## 🧠 Optional o1 Enhancement Layer
+
+### When is o1 Used?
+
+**o1 is OPTIONAL** and only used when:
+1. `use_o1=True` (defaults to True in production, False in tests)
+2. Multiple rules trigger (2+ rules)
+3. Conflict resolution is needed
+
+### What Does o1 Do?
+
+```python
+# Deterministic path (always runs)
+governance_result = evaluate_governance(decision, use_o1=False)
+# ✅ Uses: Pure Python rule evaluation
+# ✅ Output: Deterministic, reproducible
+
+# o1-enhanced path (optional)
+governance_result = evaluate_governance(decision, use_o1=True)
+# ✅ Uses: Deterministic evaluation + o1 conflict resolution
+# ✅ Output: Optimized approval chain when 2+ rules conflict
+```
+
+### Three o1 Reasoning Functions
+
+From `app/o1_reasoner.py`:
+
+1. **`reason_about_goal_alignment()`**
+   - Maps decisions to company strategic goals
+   - Analyzes KPI/owner/semantic alignment
+   - **Status:** Implemented, not currently called
+
+2. **`reason_about_ownership_validity()`**
+   - Validates owners against org hierarchy
+   - Checks authority levels
+   - **Status:** Implemented, not currently called
+
+3. **`reason_about_governance_conflicts()`**
+   - Resolves conflicts when multiple rules trigger
+   - Optimizes approval chain sequence
+   - **Status:** Implemented, called when `use_o1=True` and 2+ rules
+
+### MVP Design Decision
+
+**Day 1-2 (Current):**
+- o1 disabled in E2E tests (`use_o1=False`)
+- 100% deterministic governance
+- No API keys required
+- Demo-stable
+
+**Day 3+ (Future):**
+- Enable o1 for complex scenarios
+- Use for goal mapping and ownership validation
+- Optional enhancement, not required
+
+### Why This Design?
+
+✅ **Deterministic Core:** Governance always works without LLM
+✅ **Optional Enhancement:** o1 improves complex edge cases
+✅ **Test Stability:** Tests run without API dependencies
+✅ **Production Ready:** Can enable o1 when needed
+
+---
+
 ## 🔬 Design Principles
 
 ### 1. Governance is Deterministic
@@ -504,20 +569,22 @@ python -m app.e2e_runner
 
 ## 🛣️ Evolution Path
 
-### Day 1-2 (Current)
+### Day 1-2 (Current - MVP)
 - ✅ Pydantic schemas
-- ✅ Deterministic governance
-- ✅ Graph ontology
+- ✅ Deterministic governance (100% rule-based)
+- ✅ Graph ontology (5 nodes, 6 edges)
 - ✅ InMemory repository
 - ✅ Decision Pack generator
-- ✅ Demo fixtures
-- ✅ E2E tests
+- ✅ Demo fixtures (4 scenarios)
+- ✅ E2E tests (100% pass rate)
+- ✅ o1 reasoner (implemented but disabled in tests)
 
-### Day 3-4
-- [ ] LLM extraction endpoint
+### Day 3-4 (Enhancement Layer)
+- [ ] Enable o1 in production (`use_o1=True`)
+- [ ] LLM extraction endpoint (GPT-4o for decision parsing)
 - [ ] REST API (FastAPI)
-- [ ] Neo4j integration
-- [ ] Graph query API
+- [ ] Neo4j integration (replace InMemory)
+- [ ] Graph query API (context retrieval)
 
 ### Week 2
 - [ ] Graph analytics (approval bottlenecks)
