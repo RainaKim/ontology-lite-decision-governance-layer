@@ -183,9 +183,25 @@ class InMemoryGraphRepository(BaseGraphRepository):
 
     Trade-offs:
     ✅ Fast, no dependencies, demo-stable
-    ❌ Not persistent, limited query capability
+    ❌ Not persistent — each pipeline run starts from empty graph
+    ❌ Cannot answer "past similar decisions with risk?" because there
+       are no past decisions in memory
 
-    Good enough for hackathon. Swap for Neo4j later.
+    WHAT NEO4J UNLOCKS (future migration):
+    1. Persistent decision history — every processed decision stays as a
+       connected subgraph. Policy/Actor/Risk nodes are shared across
+       decisions, so graph traversal naturally finds similar past decisions.
+    2. Historical risk query becomes a simple Cypher:
+         MATCH (current:Action {id: $id})-[:TRIGGERS]->(r:Risk)
+               <-[:TRIGGERS]-(past:Action)
+         WHERE past.id <> $id
+         RETURN past, r
+       This returns all past decisions that triggered the same Risk nodes.
+    3. Outcome tracking — add Outcome node type:
+         (Decision)-[:RESULTED_IN]->(Outcome {status, actual_risk, lesson})
+       so o1 can reason about "last time we took this risk, it materialized."
+    4. The o1 prompt already asks for historical pattern analysis. It just
+       needs the data, which only persistence can provide.
     """
 
     def __init__(self):

@@ -8,10 +8,64 @@ Four core scenarios for demo stability:
 4. Blocked decision (critical conflicts)
 """
 
+import json
+from pathlib import Path
+from typing import Optional
+
 from app.schemas import (
     Decision, Owner, Goal, KPI, Risk, Assumption,
     StrategicImpact
 )
+
+# ---------------------------------------------------------------------------
+# Company context loader
+# ---------------------------------------------------------------------------
+
+_COMPANY_DATA_CACHE: Optional[dict] = None
+
+
+def load_mock_company_data(path: Optional[str] = None) -> dict:
+    """
+    Load mock company data from JSON file.
+
+    Used by:
+    - e2e_runner for passing company_data through the pipeline
+    - subgraph extraction (owner matching, KPI overlap, reporting chain)
+
+    Args:
+        path: Optional override path. Defaults to project-root mock_company.json.
+
+    Returns:
+        Parsed company data dict (personnel, strategic_goals, risk_tolerance, etc.)
+    """
+    global _COMPANY_DATA_CACHE
+    if _COMPANY_DATA_CACHE is not None and path is None:
+        return _COMPANY_DATA_CACHE
+
+    if path is None:
+        path = str(Path(__file__).parent.parent / "mock_company.json")
+
+    with open(path, "r") as f:
+        data = json.load(f)
+
+    if path is None or path == str(Path(__file__).parent.parent / "mock_company.json"):
+        _COMPANY_DATA_CACHE = data
+
+    return data
+
+
+def get_company_context() -> dict:
+    """
+    Get company context dict suitable for pipeline consumption.
+
+    Returns the full mock_company.json contents. The pipeline and
+    O1Reasoner._extract_mock_subgraph use keys like:
+    - approval_hierarchy.personnel (owner matching, reporting chain)
+    - strategic_goals (KPI overlap, goal alignment)
+    - risk_tolerance (risk gap analysis)
+    - governance_rules (policy context)
+    """
+    return load_mock_company_data()
 
 
 def create_compliant_decision() -> Decision:

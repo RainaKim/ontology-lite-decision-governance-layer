@@ -3,15 +3,18 @@ Decision Pack Generator - Template-based, Deterministic
 
 Generates execution-ready Decision Packs from evaluated decisions.
 Pure Python logic, no LLM, no freeform text.
+Optional: Graph reasoning for enhanced insights.
 """
 
 from typing import Optional
+import asyncio
 
 
 def build_decision_pack(
     decision: dict,
     governance: dict,
-    company: dict = None
+    company: dict = None,
+    graph_insights: dict = None
 ) -> dict:
     """
     Build a Decision Pack from decision and governance evaluation results.
@@ -72,7 +75,8 @@ def build_decision_pack(
             "risk_level": risk_level,
             "governance_status": governance_status,
             "confidence_score": confidence,
-            "strategic_impact": strategic_impact or "not_specified"
+            "strategic_impact": strategic_impact or "not_specified",
+            "graph_analysis_enabled": graph_insights is not None
         },
         "goals_kpis": {
             "goals": [
@@ -140,7 +144,108 @@ def build_decision_pack(
         }
     }
 
+    # Add graph insights if available
+    if graph_insights:
+        decision_pack["graph_reasoning"] = {
+            "analysis_method": graph_insights.get("analysis_method", "not_performed"),
+            "graph_context": graph_insights.get("graph_context", {}),
+            "logical_contradictions": graph_insights.get("contradictions_found", []),
+            "ownership_issues": graph_insights.get("ownership_validation", []),
+            "risk_gaps": graph_insights.get("risk_coverage_gaps", []),
+            "policy_conflicts": graph_insights.get("policy_conflicts", []),
+            "graph_recommendations": graph_insights.get("graph_based_recommendations", []),
+            "confidence": graph_insights.get("graph_analysis", {}).get("confidence", 0.0)
+        }
+
+    # Add conclusion_reason — one-sentence human-readable "why"
+    decision_pack["summary"]["conclusion_reason"] = _summarize_conclusion(
+        governance_status, risk_level, flags, triggered_rules,
+        approval_chain, missing_items, graph_insights
+    )
+
     return decision_pack
+
+
+def _summarize_conclusion(
+    governance_status: str,
+    risk_level: str,
+    flags: list[str],
+    triggered_rules: list[dict],
+    approval_chain: list[dict],
+    missing_items: list[str],
+    graph_insights: dict = None,
+) -> str:
+    """
+    Generate a human-readable reason for the governance conclusion.
+
+    Cross-references triggered rules with approval chain to express
+    *conditional* resolution paths, not just binary outcomes.
+
+    Examples:
+      - "Blocked by Budget Approval Rule — resolvable with CFO approval."
+      - "Blocked — missing owner and risk assessment. No resolution path until addressed."
+      - "Requires human review — risk level is high with 1 rule(s) triggered."
+    """
+    if governance_status == "blocked":
+        # What caused the block?
+        block_causes = []
+        rule_names = [r.get("name", r.get("rule_id", "unknown rule")) for r in triggered_rules]
+        if rule_names:
+            block_causes.append(", ".join(rule_names))
+
+        structural_gaps = [m for m in missing_items if m.startswith("Missing")]
+        if structural_gaps:
+            block_causes.append("; ".join(structural_gaps).lower())
+
+        if graph_insights:
+            contradictions = graph_insights.get("contradictions_found", [])
+            if contradictions:
+                block_causes.append(f"{len(contradictions)} logical contradiction(s)")
+
+        cause_str = "; ".join(block_causes) if block_causes else "governance issues"
+
+        # Is there a resolution path via approvals?
+        required_approvers = [
+            step.get("role", "unknown")
+            for step in approval_chain
+            if step.get("required", True)
+        ]
+
+        if required_approvers and not structural_gaps:
+            # Blocked by rules, but resolvable with approvals
+            approver_str = " and ".join(required_approvers)
+            return f"Blocked by {cause_str} — resolvable with {approver_str} approval."
+
+        if required_approvers and structural_gaps:
+            # Blocked AND has structural issues — approvals alone won't fix it
+            approver_str = " and ".join(required_approvers)
+            return (
+                f"Blocked by {cause_str}. "
+                f"Resolve structural gaps first, then obtain {approver_str} approval."
+            )
+
+        # No approval chain at all — no known resolution path
+        return f"Blocked by {cause_str}. No resolution path available — review decision structure."
+
+    if governance_status == "needs_review":
+        required_approvers = [
+            step.get("role", "unknown")
+            for step in approval_chain
+            if step.get("required", True)
+        ]
+        if required_approvers:
+            approver_str = ", ".join(required_approvers)
+            return (
+                f"Requires human review — risk level is {risk_level} "
+                f"with {len(triggered_rules)} rule(s) triggered. "
+                f"Proceed after {approver_str} approval."
+            )
+        return (
+            f"Requires human review — risk level is {risk_level} "
+            f"with {len(triggered_rules)} rule(s) triggered."
+        )
+
+    return "Decision is compliant with governance rules. No blocking issues found."
 
 
 def _detect_missing_items(decision: dict, governance: dict, flags: list[str]) -> list[str]:

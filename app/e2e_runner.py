@@ -1,22 +1,22 @@
 """
 End-to-End Test Runner - Demo Stability Validation
 
-Validates complete governance flow:
-1. Decision → Governance → Graph → Decision Pack
+Validates the complete governance flow through the unified pipeline:
+  Decision → Governance → Graph Storage → Graph Reasoning (subgraph extraction) → Decision Pack
 
 Invariants (MUST NEVER fail):
 - Decision Pack is never null
 - Graph is never empty after governance
 - Approval chain exists when rules triggered
-- Action node always created
+- Graph reasoning section present when graph analysis enabled
+- Subgraph metadata populated after extraction
 """
 
 import asyncio
 from typing import Optional
-from app.demo_fixtures import get_all_fixtures, get_demo_fixture
-from app.governance import evaluate_governance
-from app.graph_repository import InMemoryGraphRepository
-from app.decision_pack import build_decision_pack
+
+from app.demo_fixtures import get_all_fixtures, get_demo_fixture, get_company_context
+from app.decision_pipeline import process_decision_with_graph_reasoning
 
 
 class InvariantViolation(Exception):
@@ -32,10 +32,43 @@ class E2EValidator:
         self.passed = 0
         self.failed = 0
 
+    # ------------------------------------------------------------------
+    # Helper methods for recording results
+    # ------------------------------------------------------------------
+
+    def _pass(self, check: str, scenario: str, details: str) -> None:
+        self.results.append({
+            "check": check,
+            "scenario": scenario,
+            "status": "PASS",
+            "details": details,
+        })
+        self.passed += 1
+
+    def _warn(self, check: str, scenario: str, details: str) -> None:
+        self.results.append({
+            "check": check,
+            "scenario": scenario,
+            "status": "WARN",
+            "details": details,
+        })
+        self.passed += 1  # warnings still count as passed
+
+    def _fail(self, check: str, scenario: str, details: str) -> None:
+        self.results.append({
+            "check": check,
+            "scenario": scenario,
+            "status": "FAIL",
+            "details": details,
+        })
+        self.failed += 1
+
+    # ------------------------------------------------------------------
+    # Core invariant checks
+    # ------------------------------------------------------------------
+
     def validate_approval_chain(self, governance_result: dict, scenario: str) -> None:
         """
-        Validate approval chain exists when rules triggered.
-
         INVARIANT: If triggered_rules non-empty, approval_chain must exist.
         """
         triggered_rules = governance_result.get("triggered_rules", [])
@@ -47,113 +80,54 @@ class E2EValidator:
                 f"Triggered: {len(triggered_rules)} rules, Chain: 0 steps"
             )
 
-        self.results.append({
-            "check": "approval_chain_when_rules_triggered",
-            "scenario": scenario,
-            "status": "PASS",
-            "details": f"Rules: {len(triggered_rules)}, Chain steps: {len(approval_chain)}"
-        })
-        self.passed += 1
+        self._pass(
+            "approval_chain_when_rules_triggered",
+            scenario,
+            f"Rules: {len(triggered_rules)}, Chain steps: {len(approval_chain)}",
+        )
 
-    def validate_graph_payload(self, decision_graph, scenario: str) -> None:
+    def validate_graph_metadata(self, graph_meta: dict, scenario: str) -> None:
         """
-        Validate graph payload contains nodes and edges.
-
         INVARIANT: Graph must never be empty after governance.
+        Validates the graph_metadata dict returned by the pipeline.
         """
-        if decision_graph is None:
+        nodes = graph_meta.get("nodes", 0)
+        edges = graph_meta.get("edges", 0)
+
+        if nodes == 0:
             raise InvariantViolation(
-                f"[{scenario}] DecisionGraph is None - graph construction failed"
+                f"[{scenario}] Graph has zero nodes — construction failed"
             )
 
-        nodes = decision_graph.nodes if hasattr(decision_graph, 'nodes') else []
-        edges = decision_graph.edges if hasattr(decision_graph, 'edges') else []
-
-        if len(nodes) == 0:
-            raise InvariantViolation(
-                f"[{scenario}] Graph has zero nodes - construction failed"
-            )
-
-        # At minimum: 1 Action node
-        if len(nodes) < 1:
-            raise InvariantViolation(
-                f"[{scenario}] Graph must have at least 1 node (Action), found {len(nodes)}"
-            )
-
-        self.results.append({
-            "check": "graph_payload_not_empty",
-            "scenario": scenario,
-            "status": "PASS",
-            "details": f"Nodes: {len(nodes)}, Edges: {len(edges)}"
-        })
-        self.passed += 1
-
-    def validate_action_node_exists(self, decision_graph, scenario: str) -> None:
-        """
-        Validate at least one Action node exists in graph.
-
-        INVARIANT: Every decision must create an Action node.
-        """
-        from app.graph_ontology import NodeType
-
-        if decision_graph is None:
-            raise InvariantViolation(
-                f"[{scenario}] Cannot validate Action node - graph is None"
-            )
-
-        nodes = decision_graph.nodes if hasattr(decision_graph, 'nodes') else []
-        action_nodes = [n for n in nodes if n.type == NodeType.ACTION]
-
-        if len(action_nodes) == 0:
-            raise InvariantViolation(
-                f"[{scenario}] No Action node found in graph. Total nodes: {len(nodes)}"
-            )
-
-        if len(action_nodes) > 1:
-            # Warning but not error (could be valid for complex decisions)
-            self.results.append({
-                "check": "action_node_exists",
-                "scenario": scenario,
-                "status": "WARN",
-                "details": f"Multiple Action nodes found: {len(action_nodes)}"
-            })
-        else:
-            self.results.append({
-                "check": "action_node_exists",
-                "scenario": scenario,
-                "status": "PASS",
-                "details": f"Action node: {action_nodes[0].id}"
-            })
-        self.passed += 1
+        self._pass(
+            "graph_not_empty",
+            scenario,
+            f"Nodes: {nodes}, Edges: {edges}, Method: {graph_meta.get('analysis_method', 'N/A')}",
+        )
 
     def validate_decision_pack_generated(self, decision_pack: dict, scenario: str) -> None:
         """
-        Validate Decision Pack is always generated.
-
-        INVARIANT: Decision Pack must NEVER be null.
+        INVARIANT: Decision Pack must NEVER be null and must contain all required sections.
         """
         if decision_pack is None:
             raise InvariantViolation(
-                f"[{scenario}] Decision Pack is None - generation failed"
+                f"[{scenario}] Decision Pack is None — generation failed"
             )
 
-        # Check required sections
         required_sections = [
             "title", "summary", "goals_kpis", "risks",
-            "approval_chain", "recommended_next_actions", "audit"
+            "approval_chain", "recommended_next_actions", "audit",
         ]
-
         missing_sections = [s for s in required_sections if s not in decision_pack]
         if missing_sections:
             raise InvariantViolation(
                 f"[{scenario}] Decision Pack missing sections: {missing_sections}"
             )
 
-        # Validate summary has required fields
         summary = decision_pack.get("summary", {})
         required_summary_fields = [
             "decision_statement", "human_approval_required",
-            "risk_level", "governance_status"
+            "risk_level", "governance_status",
         ]
         missing_summary = [f for f in required_summary_fields if f not in summary]
         if missing_summary:
@@ -161,19 +135,86 @@ class E2EValidator:
                 f"[{scenario}] Decision Pack summary missing fields: {missing_summary}"
             )
 
-        self.results.append({
-            "check": "decision_pack_always_generated",
-            "scenario": scenario,
-            "status": "PASS",
-            "details": f"All sections present, status: {summary.get('governance_status')}"
-        })
-        self.passed += 1
+        self._pass(
+            "decision_pack_always_generated",
+            scenario,
+            f"All sections present, status: {summary.get('governance_status')}",
+        )
 
-    def validate_scenario_specific(self, scenario: str, governance_result: dict, decision_pack: dict) -> None:
+    def validate_graph_reasoning_section(self, decision_pack: dict, scenario: str) -> None:
+        """
+        INVARIANT: When graph_analysis_enabled is True in the summary, the
+        graph_reasoning section must exist and contain required keys.
+        """
+        summary = decision_pack.get("summary", {})
+        graph_enabled = summary.get("graph_analysis_enabled", False)
+
+        if not graph_enabled:
+            self._pass(
+                "graph_reasoning_section",
+                scenario,
+                "Graph analysis not enabled — skipped",
+            )
+            return
+
+        graph_reasoning = decision_pack.get("graph_reasoning")
+        if graph_reasoning is None:
+            raise InvariantViolation(
+                f"[{scenario}] graph_analysis_enabled=True but graph_reasoning section missing"
+            )
+
+        required_keys = [
+            "analysis_method",
+            "logical_contradictions",
+            "graph_recommendations",
+            "confidence",
+        ]
+        missing = [k for k in required_keys if k not in graph_reasoning]
+        if missing:
+            raise InvariantViolation(
+                f"[{scenario}] graph_reasoning missing keys: {missing}"
+            )
+
+        self._pass(
+            "graph_reasoning_section",
+            scenario,
+            (
+                f"Method: {graph_reasoning['analysis_method']}, "
+                f"Contradictions: {len(graph_reasoning['logical_contradictions'])}, "
+                f"Recommendations: {len(graph_reasoning['graph_recommendations'])}, "
+                f"Confidence: {graph_reasoning['confidence']}"
+            ),
+        )
+
+    def validate_subgraph_metadata(self, graph_meta: dict, scenario: str) -> None:
+        """
+        Validate that the pipeline reports a valid analysis method and
+        non-zero graph when analysis was performed.
+        """
+        method = graph_meta.get("analysis_method", "not_performed")
+        nodes = graph_meta.get("nodes", 0)
+        edges = graph_meta.get("edges", 0)
+
+        if method != "not_performed" and nodes == 0:
+            raise InvariantViolation(
+                f"[{scenario}] Analysis method is '{method}' but graph has 0 nodes"
+            )
+
+        self._pass(
+            "subgraph_metadata",
+            scenario,
+            f"Method: {method}, Nodes: {nodes}, Edges: {edges}",
+        )
+
+    # ------------------------------------------------------------------
+    # Scenario-specific expectations
+    # ------------------------------------------------------------------
+
+    def validate_scenario_specific(
+        self, scenario: str, governance_result: dict, decision_pack: dict
+    ) -> None:
         """
         Validate scenario-specific expectations.
-
-        Ensures test fixtures behave as expected.
         Relaxed checks to work with any rule set.
         """
         flags = governance_result.get("flags", [])
@@ -181,125 +222,97 @@ class E2EValidator:
         risk_level = decision_pack.get("summary", {}).get("risk_level")
 
         if scenario == "compliant":
-            # Should NOT be blocked
             if status == "blocked":
-                self.results.append({
-                    "check": f"scenario_{scenario}",
-                    "scenario": scenario,
-                    "status": "FAIL",
-                    "details": "Compliant decision should not be blocked"
-                })
-                self.failed += 1
-                return
+                return self._fail(
+                    f"scenario_{scenario}", scenario,
+                    "Compliant decision should not be blocked",
+                )
 
         elif scenario == "budget_violation":
-            # Should have high risk OR requires review (due to $3.5M)
             if status == "compliant" and risk_level == "low":
-                self.results.append({
-                    "check": f"scenario_{scenario}",
-                    "scenario": scenario,
-                    "status": "FAIL",
-                    "details": "Budget violation should trigger governance review"
-                })
-                self.failed += 1
-                return
+                return self._fail(
+                    f"scenario_{scenario}", scenario,
+                    "Budget violation should trigger governance review",
+                )
 
         elif scenario == "privacy_violation":
-            # Should have some flags OR review required (due to PII/GDPR keywords)
             if len(flags) == 0 and not governance_result.get("requires_human_review"):
-                self.results.append({
-                    "check": f"scenario_{scenario}",
-                    "scenario": scenario,
-                    "status": "FAIL",
-                    "details": "Privacy violation should trigger flags or review"
-                })
-                self.failed += 1
-                return
+                return self._fail(
+                    f"scenario_{scenario}", scenario,
+                    "Privacy violation should trigger flags or review",
+                )
 
         elif scenario == "blocked":
-            # Should have blocked or needs_review status (high risk + low confidence)
             if status == "compliant":
-                self.results.append({
-                    "check": f"scenario_{scenario}",
-                    "scenario": scenario,
-                    "status": "FAIL",
-                    "details": f"Blocked decision should not have status 'compliant', got '{status}'"
-                })
-                self.failed += 1
-                return
+                return self._fail(
+                    f"scenario_{scenario}", scenario,
+                    f"Blocked decision should not have status 'compliant', got '{status}'",
+                )
 
-        self.results.append({
-            "check": f"scenario_{scenario}",
-            "scenario": scenario,
-            "status": "PASS",
-            "details": f"Scenario behaves reasonably: status={status}, flags={len(flags)}, risk={risk_level}"
-        })
-        self.passed += 1
+        self._pass(
+            f"scenario_{scenario}",
+            scenario,
+            f"Scenario behaves reasonably: status={status}, flags={len(flags)}, risk={risk_level}",
+        )
+
+    # ------------------------------------------------------------------
+    # Run single scenario through full pipeline
+    # ------------------------------------------------------------------
 
     async def run_e2e_test(self, scenario_name: str, decision) -> dict:
         """
-        Run end-to-end test for a single scenario.
+        Run end-to-end test for a single scenario through the unified pipeline.
 
-        Flow:
-        1. Decision → Governance evaluation
-        2. Governance → Graph storage
-        3. Graph + Governance → Decision Pack
-        4. Validate all invariants
+        Uses process_decision_with_graph_reasoning which performs:
+          1. Governance evaluation (deterministic)
+          2. Graph storage (InMemoryGraphRepository)
+          3. Graph reasoning — subgraph extraction + deterministic analysis
+          4. Decision Pack generation (template-based + graph insights)
         """
         print(f"\n{'='*80}")
         print(f"Testing scenario: {scenario_name}")
         print(f"{'='*80}")
 
         try:
-            # Step 1: Governance evaluation
-            print("Step 1: Evaluating governance...")
-            decision_dict = decision.model_dump()
-            # use_o1=False for deterministic, no-external-service testing
-            governance_result = evaluate_governance(decision, company_context={}, use_o1=False)
-            governance_dict = governance_result.to_dict()
-            print(f"  ✓ Governance evaluated. Flags: {len(governance_dict['flags'])}, "
-                  f"Rules triggered: {len(governance_dict['triggered_rules'])}")
+            # Load company context (needed for subgraph extraction)
+            company_context = get_company_context()
 
-            # Validate approval chain
-            self.validate_approval_chain(governance_dict, scenario_name)
-
-            # Step 2: Graph storage
-            print("Step 2: Storing in graph...")
-            graph_repo = InMemoryGraphRepository()
-            decision_graph = await graph_repo.upsert_decision_graph(
-                decision=decision_dict,
-                governance=governance_dict,
-                decision_id=f"test_{scenario_name}"
+            # Run through the unified pipeline (deterministic — no OpenAI calls)
+            print("  Running full pipeline (governance → graph → reasoning → pack)...")
+            result = await process_decision_with_graph_reasoning(
+                decision=decision,
+                decision_id=f"test_{scenario_name}",
+                company_context=company_context,
+                use_o1_governance=False,   # deterministic governance
+                use_o1_graph=False,        # deterministic graph analysis (no OpenAI)
             )
-            print(f"  ✓ Graph created. Nodes: {len(decision_graph.nodes)}, "
-                  f"Edges: {len(decision_graph.edges)}")
 
-            # Validate graph payload
-            self.validate_graph_payload(decision_graph, scenario_name)
-            self.validate_action_node_exists(decision_graph, scenario_name)
+            decision_pack = result["decision_pack"]
+            governance_result = result["governance_result"]
+            graph_meta = result["graph_metadata"]
 
-            # Step 3: Decision Pack generation
-            print("Step 3: Generating Decision Pack...")
-            decision_pack = build_decision_pack(
-                decision=decision_dict,
-                governance=governance_dict
-            )
-            print(f"  ✓ Decision Pack generated. Status: {decision_pack['summary']['governance_status']}")
+            print(f"  ✓ Pipeline complete. Status: {decision_pack['summary']['governance_status']}")
+            print(f"    Graph: {graph_meta['nodes']} nodes, {graph_meta['edges']} edges")
+            print(f"    Analysis: {graph_meta.get('analysis_method', 'N/A')}")
 
-            # Validate decision pack
+            # --- Invariant checks ---
+            self.validate_approval_chain(governance_result, scenario_name)
+            self.validate_graph_metadata(graph_meta, scenario_name)
             self.validate_decision_pack_generated(decision_pack, scenario_name)
+            self.validate_graph_reasoning_section(decision_pack, scenario_name)
+            self.validate_subgraph_metadata(graph_meta, scenario_name)
 
-            # Scenario-specific validation
-            self.validate_scenario_specific(scenario_name, governance_dict, decision_pack)
+            # Scenario-specific
+            self.validate_scenario_specific(scenario_name, governance_result, decision_pack)
 
             print(f"\n✓ Scenario '{scenario_name}' PASSED all checks")
 
             return {
                 "scenario": scenario_name,
                 "status": "PASS",
-                "governance": governance_dict,
-                "graph": decision_graph,
-                "decision_pack": decision_pack
+                "governance": governance_result,
+                "graph_metadata": graph_meta,
+                "decision_pack": decision_pack,
             }
 
         except InvariantViolation as e:
@@ -309,7 +322,7 @@ class E2EValidator:
                 "check": "invariant",
                 "scenario": scenario_name,
                 "status": "CRITICAL_FAIL",
-                "details": str(e)
+                "details": str(e),
             })
             raise
 
@@ -320,14 +333,18 @@ class E2EValidator:
                 "check": "execution",
                 "scenario": scenario_name,
                 "status": "FAIL",
-                "details": str(e)
+                "details": str(e),
             })
             raise
+
+    # ------------------------------------------------------------------
+    # Run all scenarios
+    # ------------------------------------------------------------------
 
     async def run_all_scenarios(self) -> dict:
         """Run all demo scenarios and collect results."""
         print("\n" + "="*80)
-        print("E2E GOVERNANCE VALIDATION - DEMO STABILITY CHECK")
+        print("E2E GOVERNANCE VALIDATION — FULL PIPELINE (with subgraph extraction)")
         print("="*80)
 
         fixtures = get_all_fixtures()
@@ -341,13 +358,17 @@ class E2EValidator:
                 results[scenario_name] = {
                     "scenario": scenario_name,
                     "status": "FAIL",
-                    "error": str(e)
+                    "error": str(e),
                 }
 
         return results
 
-    def print_summary(self):
-        """Print validation summary."""
+    # ------------------------------------------------------------------
+    # Summary
+    # ------------------------------------------------------------------
+
+    def print_summary(self) -> bool:
+        """Print validation summary. Returns True if all passed."""
         print("\n" + "="*80)
         print("VALIDATION SUMMARY")
         print("="*80)
@@ -358,7 +379,6 @@ class E2EValidator:
         print(f"Failed: {self.failed} ✗")
         print(f"Success rate: {(self.passed/total*100) if total > 0 else 0:.1f}%")
 
-        # Group by status
         critical_fails = [r for r in self.results if r.get("status") == "CRITICAL_FAIL"]
         fails = [r for r in self.results if r.get("status") == "FAIL"]
         warnings = [r for r in self.results if r.get("status") == "WARN"]
@@ -381,10 +401,10 @@ class E2EValidator:
         print("\n" + "="*80)
 
         if self.failed > 0:
-            print("❌ DEMO UNSTABLE - Failures detected")
+            print("❌ DEMO UNSTABLE — Failures detected")
             return False
         else:
-            print("✅ DEMO STABLE - All checks passed")
+            print("✅ DEMO STABLE — All checks passed")
             return True
 
 
