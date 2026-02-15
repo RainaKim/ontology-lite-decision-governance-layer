@@ -1,191 +1,557 @@
-# Decision Governance Layer
+# Ontology-lite Decision Governance Layer
 
-**Ontology-lite system for enterprise decision structuring and deterministic governance.**
+**Graph-native enterprise decision governance with deterministic rule evaluation and swappable storage.**
 
-## Architecture
-
-```
-Decision Text (free-form)
-  ↓
-GPT-4o Extraction → Structured Decision JSON
-  ↓
-Deterministic Governance Evaluation (NO LLMs)
-  ├─ Completeness Checks
-  ├─ Derived Attributes (budget, EU, PII detection)
-  ├─ Rule Enforcement
-  ├─ Approval Chain Generation
-  └─ Status Calculation (approved/needs_approval/blocked)
-  ↓
-Decision Response
-```
-
-**Key Principle**: Governance is deterministic. Same input → same output. NO LLM calls in governance logic.
+[![Demo Stable](https://img.shields.io/badge/demo-stable-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
+[![Architecture](https://img.shields.io/badge/architecture-graph--native-blue)]()
 
 ---
 
-## Setup
+## 🎯 What This Is
+
+An **Ontology-lite Decision Governance Layer** that transforms unstructured business decisions into validated, graph-stored, governance-ready artifacts.
+
+**NOT:**
+- ❌ A summarization tool
+- ❌ An AI auditor
+- ❌ A full knowledge graph
+- ❌ GraphRAG
+
+**IS:**
+- ✅ Decision structuring engine
+- ✅ Deterministic governance evaluator
+- ✅ Graph-native memory system
+- ✅ Template-based Decision Pack generator
+
+---
+
+## 🏗️ Architecture
+
+### Three-Layer Design
+
+```
+┌─────────────────────────────────────────────────────┐
+│          Decision Pack (Human Layer)                │
+│  ┌─────────────────────────────────────────────┐   │
+│  │ • Title & Summary                           │   │
+│  │ • Goals, KPIs, Risks                        │   │
+│  │ • Approval Chain                            │   │
+│  │ • Recommended Next Actions                  │   │
+│  │ • Audit Trail & Rationales                  │   │
+│  └─────────────────────────────────────────────┘   │
+│           ▲ Template-based generation               │
+└───────────┼─────────────────────────────────────────┘
+            │
+┌───────────┼─────────────────────────────────────────┐
+│           │   Governance Engine (Logic Layer)       │
+│  ┌────────▼────────────────────────────────────┐   │
+│  │ • Risk Scoring (deterministic)              │   │
+│  │ • Flag Detection (keyword + structural)     │   │
+│  │ • Rule Evaluation (priority-based)          │   │
+│  │ • Approval Chain Computation                │   │
+│  └─────────────────────────────────────────────┘   │
+│           ▲ Pure Python, NO LLMs                    │
+└───────────┼─────────────────────────────────────────┘
+            │
+┌───────────┼─────────────────────────────────────────┐
+│           │  Graph Repository (Memory Layer)        │
+│  ┌────────▼────────────────────────────────────┐   │
+│  │ Graph Ontology:                             │   │
+│  │                                              │   │
+│  │  Nodes:  Actor  Action  Policy  Risk        │   │
+│  │          Resource                            │   │
+│  │                                              │   │
+│  │  Edges:  OWNS                               │   │
+│  │          REQUIRES_APPROVAL_BY                │   │
+│  │          GOVERNED_BY                         │   │
+│  │          TRIGGERS                            │   │
+│  │          IMPACTS                             │   │
+│  │          MITIGATES                           │   │
+│  └─────────────────────────────────────────────┘   │
+│           Storage: InMemory (MVP) → Neo4j (Prod)    │
+└─────────────────────────────────────────────────────┘
+```
+
+### End-to-End Flow
+
+```
+1. Decision Input
+   ↓
+2. Governance Evaluation
+   • Load rules (mock_rules.json)
+   • Compute risk score (severity-weighted)
+   • Evaluate conditions (>=, ==, contains_any)
+   • Select approval chain (priority-based)
+   • Detect flags (PRIVACY, FINANCIAL, HIGH_RISK, etc.)
+   ↓
+3. Graph Storage
+   • Create Action node (decision)
+   • Create Actor nodes (owners, approvers)
+   • Create Risk nodes (from decision.risks)
+   • Create Policy nodes (from triggered rules)
+   • Create edges (OWNS, REQUIRES_APPROVAL_BY, GOVERNED_BY, TRIGGERS)
+   ↓
+4. Decision Pack Generation
+   • Build title (with strategic impact prefix)
+   • Generate summary (risk level, status, confidence)
+   • Compile goals/KPIs/risks
+   • Detect missing items
+   • Generate next actions (deterministic rules)
+   • Extract rationales (from rules + approval chain)
+   ↓
+5. Return to Human
+```
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
+
 - Python 3.11+
-- OpenAI API key
+- No database required (uses in-memory graph)
+- No API keys required (deterministic governance)
 
 ### Installation
 
 ```bash
+# Clone repository
+git clone <repo-url>
+cd decision-governance-layer
+
 # Create virtual environment
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
 ```
 
-### Run Server
+### Run E2E Tests (Validate Demo Stability)
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+python -m app.e2e_runner
 ```
 
-Server runs at `http://localhost:8000`
+**Expected output:**
+```
+================================================================================
+E2E GOVERNANCE VALIDATION - DEMO STABILITY CHECK
+================================================================================
+
+[compliant]         ✓ 5/5 checks
+[budget_violation]  ✓ 5/5 checks
+[privacy_violation] ✓ 5/5 checks
+[blocked]           ✓ 5/5 checks
+
+✅ DEMO STABLE - All checks passed
+================================================================================
+```
+
+### Run Demo with Fixtures
+
+```python
+import asyncio
+from app.demo_fixtures import get_demo_fixture
+from app.governance import evaluate_governance
+from app.graph_repository import InMemoryGraphRepository
+from app.decision_pack import build_decision_pack
+
+# 1. Load demo fixture
+decision = get_demo_fixture("budget_violation")  # or "compliant", "privacy_violation", "blocked"
+
+# 2. Evaluate governance (deterministic, no LLM)
+governance_result = evaluate_governance(decision, company_context={}, use_o1=False)
+
+# 3. Store in graph
+async def store():
+    repo = InMemoryGraphRepository()
+    decision_graph = await repo.upsert_decision_graph(
+        decision=decision.model_dump(),
+        governance=governance_result.to_dict(),
+        decision_id="demo_001"
+    )
+    return decision_graph
+
+graph = asyncio.run(store())
+
+# 4. Generate Decision Pack
+pack = build_decision_pack(
+    decision=decision.model_dump(),
+    governance=governance_result.to_dict()
+)
+
+print(f"Status: {pack['summary']['governance_status']}")
+print(f"Risk Level: {pack['summary']['risk_level']}")
+print(f"Approval Chain: {len(pack['approval_chain'])} steps")
+```
 
 ---
 
-## API Usage
+## 📦 Graph Ontology
 
-### POST /extract
+### Node Types
 
-```bash
-curl -X POST http://localhost:8000/extract \
-  -H "Content-Type: application/json" \
-  -d '{
-    "decision_text": "Invest $600k in cloud infrastructure to reduce operating costs by 20%. Bob Martinez (CFO) will manage budget while Charlie Kim (CTO) handles implementation. Risks: migration downtime, vendor lock-in."
-  }'
+| Node Type | Description | Example |
+|-----------|-------------|---------|
+| **Actor** | People, roles, departments | `Sarah Chen (VP Strategy)` |
+| **Action** | Decisions, tasks | `Acquire TechCorp for $2.5M` |
+| **Policy** | Rules, constraints | `Financial Threshold Rule` |
+| **Risk** | Threats, concerns | `Integration challenges` |
+| **Resource** | Budget, systems, assets | `Cloud Infrastructure Budget` |
+
+### Edge Predicates
+
+| Edge | Direction | Meaning |
+|------|-----------|---------|
+| **OWNS** | Actor → Action | Actor owns/is accountable for Action |
+| **REQUIRES_APPROVAL_BY** | Action → Actor | Action requires Actor's approval |
+| **GOVERNED_BY** | Action → Policy | Action is governed by Policy |
+| **TRIGGERS** | Action → Risk | Action triggers Risk |
+| **IMPACTS** | Action → Resource | Action impacts Resource |
+| **MITIGATES** | Action → Risk | Action mitigates Risk |
+
+### Example Graph
+
+```
+[Sarah Chen (Actor)]
+       │ OWNS
+       ▼
+[Acquire TechCorp (Action)]
+       │ REQUIRES_APPROVAL_BY
+       ├──→ [CFO (Actor)]
+       ├──→ [CEO (Actor)]
+       │ GOVERNED_BY
+       ├──→ [Financial Threshold Rule (Policy)]
+       │ TRIGGERS
+       ├──→ [Integration Risk (Risk)]
+       └──→ [Retention Risk (Risk)]
 ```
 
-### Response Structure
+---
+
+## 🧪 Demo Fixtures
+
+Four production-ready test scenarios:
+
+### 1. Compliant Decision
+```python
+decision = get_demo_fixture("compliant")
+# Tool upgrade, low risk, standard approval
+# Expected: compliant status, no flags
+```
+
+### 2. Budget Violation
+```python
+decision = get_demo_fixture("budget_violation")
+# $3.5M acquisition, high risk, financial review required
+# Expected: blocked/needs_review, FINANCIAL_THRESHOLD_EXCEEDED flag
+```
+
+### 3. Privacy Violation
+```python
+decision = get_demo_fixture("privacy_violation")
+# GDPR/PII data collection, privacy review required
+# Expected: needs_review, PRIVACY_REVIEW_REQUIRED flag
+```
+
+### 4. Blocked Decision
+```python
+decision = get_demo_fixture("blocked")
+# Critical conflicts, 9.5 risk score, 0.15 confidence
+# Expected: blocked status, CRITICAL_CONFLICT flag
+```
+
+---
+
+## 🔧 Governance Rules
+
+Rules are defined in `app/mock_rules.json`. Example:
 
 ```json
 {
-  "decision": {
-    "decision_statement": "Invest $600k in cloud infrastructure optimization",
+  "rule_id": "R006",
+  "name": "Financial Threshold - Major Investment",
+  "type": "financial",
+  "description": "Decisions > $1M require CFO approval",
+  "conditions": {
+    "decision_statement_keywords": {
+      "operator": "contains_any",
+      "value": ["acquisition", "investment", "capital", "million"]
+    }
+  },
+  "approval_chain": [
+    {"level": "department_head", "role": "Budget Owner", "required": true},
+    {"level": "vp", "role": "VP of Finance", "required": true},
+    {"level": "c_level", "role": "CFO", "required": true},
+    {"level": "c_level", "role": "CEO", "required": true}
+  ],
+  "priority": 1
+}
+```
+
+**Operators supported:**
+- `==` (equals)
+- `>=` (greater than or equal)
+- `<` (less than)
+- `in` (value in list)
+- `contains_any` (text contains any keyword)
+
+---
+
+## 🏛️ Repository Pattern
+
+### Abstract Interface
+
+```python
+from app.graph_repository import BaseGraphRepository
+
+class BaseGraphRepository(ABC):
+    @abstractmethod
+    async def add_node(self, node: Node) -> Node: ...
+
+    @abstractmethod
+    async def add_edge(self, edge: Edge) -> Edge: ...
+
+    @abstractmethod
+    async def upsert_decision_graph(self, decision, governance) -> DecisionGraph: ...
+
+    @abstractmethod
+    async def get_governance_context(self, decision_id, depth=2) -> dict: ...
+```
+
+### Implementations
+
+**MVP: InMemoryGraphRepository**
+- Dict-based storage
+- Fast, no dependencies
+- Demo-stable
+
+**Production: Neo4jGraphRepository** (Day 3+)
+- Persistent storage
+- Cypher queries
+- Drop-in replacement
+
+---
+
+## 📊 Decision Pack Output
+
+```json
+{
+  "title": "[HIGH] Acquire TechStartup Inc for $2.5M to expand AI capabilities",
+  "summary": {
+    "decision_statement": "Acquire TechStartup Inc for $2.5M...",
+    "human_approval_required": true,
+    "risk_level": "high",
+    "governance_status": "needs_review",
+    "confidence_score": 0.75,
+    "strategic_impact": "high"
+  },
+  "goals_kpis": {
     "goals": [...],
-    "kpis": [...],
-    "risks": [...],
-    "owners": [...],
-    "confidence": 0.8
+    "kpis": [...]
   },
-  "extraction_metadata": {
-    "request_id": "uuid",
-    "retry_count": 0,
-    "model": "gpt-4o",
-    "success": true
-  },
-  "governance_applied": true,
-  "governance_status": "needs_approval",
+  "risks": [...],
+  "owners": [...],
+  "missing_items": [],
   "approval_chain": [
     {
-      "approver_id": "alice_001",
-      "approver_name": "Alice Chen",
-      "approver_role": "CEO",
-      "level": 4,
-      "reasons": ["Strategic alignment", "High-cost decision"],
-      "triggered_rules": ["R4", "R5"]
-    },
-    {
-      "approver_id": "bob_002",
-      "approver_name": "Bob Martinez",
-      "approver_role": "CFO",
-      "level": 3,
-      "reasons": ["Budget > $100k", "Financial approval"],
-      "triggered_rules": ["R1", "R5"]
+      "level": "c_level",
+      "role": "CFO",
+      "required": true,
+      "rationale": "Major financial decision approval"
     }
   ],
-  "triggered_rules": [
-    {"rule_id": "R1", "rule_name": "Budget Approval Rule"},
-    {"rule_id": "R4", "rule_name": "Strategic Alignment Rule"},
-    {"rule_id": "R5", "rule_name": "Multi-Approval Rule"}
+  "recommended_next_actions": [
+    "Request approvals: Budget Owner, VP Finance, CFO, CEO",
+    "Confirm budget justification with CFO"
   ],
-  "flags": ["HIGH_RISK"],
-  "requires_human_review": true,
-  "derived_attributes": {
-    "normalized_budget": 600000,
-    "has_eu_scope": false,
-    "has_pii_usage": false,
-    "is_strategic": true,
-    "estimated_risk_level": "medium"
-  },
-  "completeness_issues": []
+  "audit": {
+    "flags": ["HIGH_RISK", "FINANCIAL_THRESHOLD_EXCEEDED"],
+    "triggered_rules": [...],
+    "rationales": [...],
+    "computed_risk_score": 7.5
+  }
 }
 ```
 
 ---
 
-## Governance Pipeline
+## 🎯 Key Features
 
-### 1️⃣ Completeness Checks
-- ✓ Has decision statement
-- ✓ Has at least one owner
-- ⚠️ Has KPIs (recommended)
-- ⚠️ Has risks (recommended)
-- ⚠️ Risks have severity (recommended)
+### ✅ Deterministic Governance
+- **No LLM in critical path**
+- Same input → same output
+- Reproducible, auditable
+- Pure Python logic
 
-### 2️⃣ Derived Attributes (Deterministic)
-- **normalized_budget**: Extract $ amounts (e.g., "$600k" → 600000)
-- **has_eu_scope**: Detect EU/GDPR keywords
-- **has_pii_usage**: Detect privacy/PII keywords
-- **has_deployment**: Detect launch/deploy keywords
-- **is_strategic**: Detect strategic initiative keywords
-- **estimated_risk_level**: Calculate from risk severities
+### ✅ Graph-Native Architecture
+- Nodes: Actor, Action, Policy, Risk, Resource
+- Edges: OWNS, REQUIRES_APPROVAL_BY, GOVERNED_BY, TRIGGERS, IMPACTS, MITIGATES
+- Swappable backend (InMemory → Neo4j)
+- Repository pattern (no framework lock-in)
 
-### 3️⃣ Rule Enforcement
-Rules from `mock_company.json`:
-- **R1**: Budget > $100k → CFO approval
-- **R2**: EU or PII → CTO review
-- **R3**: Deployment → conflict check
-- **R4**: Strategic → CEO approval
-- **R5**: Budget > $500k → CFO + CEO approval
+### ✅ Template-Based Decision Packs
+- Fixed JSON structure
+- No generative text
+- Deterministic formatting
+- Legal-safe output
 
-### 4️⃣ Approval Chain Generation
-- Deduplicates approvers (same person from multiple rules)
-- Orders by level (highest first)
-- Merges reasons from all triggered rules
-
-### 5️⃣ Status Calculation
-- **BLOCKED**: Missing critical fields (owner, decision statement)
-- **NEEDS_APPROVAL**: Has approval chain or significant flags
-- **APPROVED**: No approvals needed, all checks pass
+### ✅ Demo Stability
+- E2E test coverage
+- Invariant enforcement
+- 100% pass rate
+- No external dependencies
 
 ---
 
-## Features
-
-✅ **LLM-based Extraction** (GPT-4o) - Fast, accurate JSON extraction
-✅ **Deterministic Governance** - Same input → same output, NO LLMs
-✅ **Rule-based Approval Chains** - Derived from company governance rules
-✅ **Derived Attributes** - Budget normalization, EU/PII detection
-✅ **Retry Logic** - Max 2 retries on extraction failure
-✅ **Graceful Fallback** - Never crashes, returns blocked status
-✅ **Request Tracking** - Unique IDs and retry counts
-
----
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 decision-governance-layer/
 ├── app/
-│   ├── main.py                      # FastAPI app
-│   ├── schemas.py                   # Pydantic models
-│   ├── llm_client.py               # GPT-4o client
-│   ├── extractor.py                # Extraction + retry logic
-│   ├── governance_deterministic.py  # Pure governance engine (NO LLMs)
+│   ├── main.py                    # FastAPI app (Day 3+)
+│   ├── schemas.py                 # Pydantic v2 models (Decision, Owner, Goal, etc.)
+│   ├── governance.py              # Deterministic governance engine
+│   ├── graph_ontology.py          # Graph schema (Node, Edge, NodeType, EdgePredicate)
+│   ├── graph_repository.py        # Repository pattern (BaseGraphRepository, InMemory)
+│   ├── decision_pack.py           # Template-based pack generator
+│   ├── demo_fixtures.py           # Test scenarios (compliant, budget, privacy, blocked)
+│   ├── e2e_runner.py              # End-to-end validation tests
+│   ├── mock_rules.json            # Governance rules (7 rules with conditions)
 │   └── __init__.py
-├── mock_company.json               # Company governance rules
-├── requirements.txt
-├── .env.example
-└── README.md
+├── docs/
+│   ├── README_VISION.md           # Project philosophy & vision
+│   ├── BUILD_PLAN.md              # 7-day hackathon plan
+│   ├── ARCHITECTURE.md            # Technical architecture details
+│   └── QA_SUMMARY.md              # Test results & demo stability
+├── mock_company.json              # Company context (alternate rule format)
+├── requirements.txt               # Python dependencies
+└── README.md                      # This file
 ```
+
+---
+
+## 🧪 Testing
+
+### Run All E2E Tests
+
+```bash
+python -m app.e2e_runner
+```
+
+**Test Coverage:**
+- ✅ Governance evaluation (deterministic)
+- ✅ Graph storage (nodes + edges)
+- ✅ Decision Pack generation (all sections)
+- ✅ Invariant enforcement (never null, never empty)
+- ✅ Scenario validation (4 edge cases)
+
+### Invariants Enforced
+
+1. **Decision Pack NEVER null**
+2. **Graph NEVER empty after governance**
+3. **Approval chain exists when rules triggered**
+4. **Action node always created**
+
+**Exit codes:**
+- `0` = All tests passed, demo stable ✅
+- `1` = Tests failed, DO NOT DEMO ❌
+
+---
+
+## 🔬 Design Principles
+
+### 1. Governance is Deterministic
+**Why?**
+- Enterprises can't deploy non-deterministic governance
+- Legal/compliance requires explainability
+- Debugging AI governance is impossible
+
+**How?**
+- Pure Python rule evaluation
+- Boolean conditions (>=, ==, contains)
+- Priority-based matching
+- No LLM calls
+
+### 2. Graph is Memory
+**Why?**
+- Governance is inherently relational (who approves what)
+- Traversal queries are natural
+- Schema evolution is easier than relational
+- Future: graph algorithms (pagerank, path analysis)
+
+**How?**
+- 5 node types (Actor, Action, Policy, Risk, Resource)
+- 6 edge predicates (OWNS, REQUIRES_APPROVAL_BY, etc.)
+- Repository pattern (swappable backend)
+- BFS traversal for context retrieval
+
+### 3. Decision Pack is Last
+**Why?**
+- Single source of truth (graph)
+- Always current (re-compute with latest rules)
+- No sync issues
+
+**How?**
+- Template-based generation
+- Deterministic formatting
+- Derived from graph + governance
+- Never stored (computed on-demand)
+
+---
+
+## 🛣️ Evolution Path
+
+### Day 1-2 (Current)
+- ✅ Pydantic schemas
+- ✅ Deterministic governance
+- ✅ Graph ontology
+- ✅ InMemory repository
+- ✅ Decision Pack generator
+- ✅ Demo fixtures
+- ✅ E2E tests
+
+### Day 3-4
+- [ ] LLM extraction endpoint
+- [ ] REST API (FastAPI)
+- [ ] Neo4j integration
+- [ ] Graph query API
+
+### Week 2
+- [ ] Graph analytics (approval bottlenecks)
+- [ ] Real-time policy updates
+- [ ] Audit dashboards
+
+### Month 2
+- [ ] Multi-tenant support
+- [ ] Policy versioning
+- [ ] Decision history/rollback
+
+---
+
+## 📚 Documentation
+
+- **Vision:** [docs/README_VISION.md](docs/README_VISION.md)
+- **Build Plan:** [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)
+- **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **QA Summary:** [docs/QA_SUMMARY.md](docs/QA_SUMMARY.md)
+
+---
+
+## 🎯 One-Line Summary
+
+> **Graph-native decision governance with deterministic rules, swappable storage, and template-based human outputs — optimized for hackathon speed and enterprise evolution.**
+
+---
+
+## 📄 License
+
+MIT
+
+---
+
+## 🤝 Contributing
+
+Hackathon MVP — contributions welcome after initial demo.
