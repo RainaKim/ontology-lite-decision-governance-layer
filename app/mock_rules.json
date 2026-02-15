@@ -186,6 +186,7 @@
       "rule_id": "R006",
       "name": "Financial Threshold - Major Investment",
       "description": "Decisions implying budget > $1M or containing 'acquisition', 'investment', 'capital' require CFO approval",
+      "type": "financial",
       "conditions": {
         "decision_statement_keywords": {
           "operator": "contains_any",

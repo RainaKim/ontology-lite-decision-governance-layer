@@ -2,11 +2,12 @@
 Decision Extractor - LLM-based structured extraction with validation and retry logic.
 
 Handles:
-- Structured extraction via OpenAI
+- Structured extraction via OpenAI (gpt-4o)
 - JSON parsing
 - Pydantic validation
 - Retry logic (max 2 retries)
 - Graceful fallback (never crash)
+- Deterministic governance evaluation (NO LLMs)
 """
 
 import json
@@ -17,6 +18,7 @@ from pydantic import ValidationError
 
 from app.schemas import Decision, Owner, DecisionExtractionResponse
 from app.llm_client import LLMClient
+from app.governance_deterministic import evaluate_governance
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,10 @@ class DecisionExtractor:
                 decision = Decision(**parsed_json)
                 logger.info(f"[{request_id}] Successfully validated Decision object (confidence={decision.confidence})")
 
+                # Step 4: Deterministic governance evaluation
+                logger.info(f"[{request_id}] Running deterministic governance evaluation")
+                governance_result = evaluate_governance(decision, mock_company=None, rules=None)
+
                 # Success!
                 return DecisionExtractionResponse(
                     decision=decision,
@@ -87,7 +93,14 @@ class DecisionExtractor:
                         "model": self.llm_client.model,
                         "success": True
                     },
-                    governance_applied=False
+                    governance_applied=True,
+                    approval_chain=governance_result.approval_chain,
+                    flags=governance_result.flags,
+                    triggered_rules=governance_result.triggered_rules,
+                    requires_human_review=governance_result.requires_human_review,
+                    governance_status=governance_result.governance_status.value,
+                    derived_attributes=governance_result.derived_attributes,
+                    completeness_issues=governance_result.completeness_issues
                 )
 
             except json.JSONDecodeError as e:
@@ -108,6 +121,9 @@ class DecisionExtractor:
         logger.error(f"[{request_id}] All {self.max_retries + 1} attempts failed. Returning fallback decision.")
         fallback_decision = self._create_fallback_decision(decision_text, request_id, last_error)
 
+        # Still evaluate deterministic governance on fallback
+        governance_result = evaluate_governance(fallback_decision, mock_company=None, rules=None)
+
         return DecisionExtractionResponse(
             decision=fallback_decision,
             extraction_metadata={
@@ -118,7 +134,14 @@ class DecisionExtractor:
                 "error": last_error,
                 "fallback_used": True
             },
-            governance_applied=False
+            governance_applied=True,
+            approval_chain=governance_result.approval_chain,
+            flags=governance_result.flags,
+            triggered_rules=governance_result.triggered_rules,
+            requires_human_review=True,  # Always require review for fallback
+            governance_status="blocked",  # Fallback is always blocked
+            derived_attributes=governance_result.derived_attributes,
+            completeness_issues=governance_result.completeness_issues
         )
 
     def _create_fallback_decision(self, decision_text: str, request_id: str, error_message: str) -> Decision:

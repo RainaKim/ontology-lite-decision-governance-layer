@@ -166,7 +166,7 @@ class DecisionExtractionRequest(BaseModel):
 
 
 class DecisionExtractionResponse(BaseModel):
-    """Response from decision extraction endpoint."""
+    """Response from decision extraction endpoint with deterministic governance evaluation."""
     decision: Decision
     extraction_metadata: dict = Field(
         default_factory=dict,
@@ -175,6 +175,34 @@ class DecisionExtractionResponse(BaseModel):
     governance_applied: bool = Field(
         default=False,
         description="Whether governance rules were evaluated"
+    )
+    approval_chain: list[dict] = Field(
+        default_factory=list,
+        description="Required approval chain based on governance rules"
+    )
+    flags: list[str] = Field(
+        default_factory=list,
+        description="Governance flags (warnings/issues) identified"
+    )
+    triggered_rules: list[dict] = Field(
+        default_factory=list,
+        description="List of governance rules that were triggered"
+    )
+    requires_human_review: bool = Field(
+        default=False,
+        description="Whether human review is required before proceeding"
+    )
+    governance_status: str = Field(
+        default="needs_approval",
+        description="Final governance status: approved, needs_approval, blocked"
+    )
+    derived_attributes: dict = Field(
+        default_factory=dict,
+        description="Deterministically derived attributes (budget, EU scope, PII usage, etc.)"
+    )
+    completeness_issues: list[str] = Field(
+        default_factory=list,
+        description="List of completeness issues (missing fields)"
     )
 
 

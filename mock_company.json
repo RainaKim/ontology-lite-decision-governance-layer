@@ -1,0 +1,346 @@
+{
+  "company": {
+    "name": "Nexus Tech",
+    "industry": "Enterprise SaaS",
+    "size": "500+ employees",
+    "description": "Cloud-based enterprise data platform serving Fortune 500 clients",
+    "fiscal_year_end": "2025-12-31",
+    "regions": ["North America", "Europe", "APAC"]
+  },
+
+  "approval_hierarchy": {
+    "levels": [
+      {
+        "level": 1,
+        "title": "Manager",
+        "authority": "team_level",
+        "max_budget_authority": 25000,
+        "can_approve": ["routine_operations", "team_initiatives"]
+      },
+      {
+        "level": 2,
+        "title": "CTO",
+        "authority": "department_head",
+        "max_budget_authority": 250000,
+        "can_approve": ["technical_decisions", "privacy_compliance", "security_decisions"]
+      },
+      {
+        "level": 3,
+        "title": "CFO",
+        "authority": "c_level",
+        "max_budget_authority": 1000000,
+        "can_approve": ["financial_decisions", "budgets", "contracts"]
+      },
+      {
+        "level": 4,
+        "title": "CEO",
+        "authority": "executive",
+        "max_budget_authority": null,
+        "can_approve": ["strategic_decisions", "organizational_changes", "major_investments"]
+      }
+    ],
+    "personnel": [
+      {
+        "id": "alice_001",
+        "name": "Alice Chen",
+        "role": "CEO",
+        "level": 4,
+        "department": "Executive",
+        "reports_to": null,
+        "responsible_for": ["company_strategy", "board_relations", "major_partnerships"]
+      },
+      {
+        "id": "bob_002",
+        "name": "Bob Martinez",
+        "role": "CFO",
+        "level": 3,
+        "department": "Finance",
+        "reports_to": "alice_001",
+        "responsible_for": ["financial_planning", "budget_oversight", "cost_control"]
+      },
+      {
+        "id": "charlie_003",
+        "name": "Charlie Kim",
+        "role": "CTO",
+        "level": 2,
+        "department": "Engineering",
+        "reports_to": "alice_001",
+        "responsible_for": ["technology_strategy", "privacy_compliance", "security", "infrastructure"]
+      },
+      {
+        "id": "david_004",
+        "name": "David Okonkwo",
+        "role": "Engineering Manager",
+        "level": 1,
+        "department": "Engineering",
+        "reports_to": "charlie_003",
+        "responsible_for": ["team_delivery", "sprint_planning", "developer_productivity"]
+      }
+    ]
+  },
+
+  "strategic_goals": [
+    {
+      "goal_id": "G1",
+      "name": "Expand EU Market Share",
+      "description": "Increase European customer base by 40% in 2025",
+      "owner_id": "alice_001",
+      "kpis": [
+        {
+          "kpi_id": "K1",
+          "name": "EU Customer Acquisition",
+          "target": "40% growth YoY",
+          "measurement": "quarterly"
+        },
+        {
+          "kpi_id": "K2",
+          "name": "EU Revenue",
+          "target": "$15M ARR",
+          "measurement": "monthly"
+        }
+      ],
+      "priority": "high",
+      "timeline": "2025-Q1 to 2025-Q4"
+    },
+    {
+      "goal_id": "G2",
+      "name": "Achieve SOC 2 Type II Compliance",
+      "description": "Complete SOC 2 Type II certification for enterprise clients",
+      "owner_id": "charlie_003",
+      "kpis": [
+        {
+          "kpi_id": "K3",
+          "name": "Audit Completion",
+          "target": "100% by 2025-Q3",
+          "measurement": "milestone"
+        },
+        {
+          "kpi_id": "K4",
+          "name": "Security Incidents",
+          "target": "0 critical incidents",
+          "measurement": "continuous"
+        }
+      ],
+      "priority": "critical",
+      "timeline": "2025-Q1 to 2025-Q3"
+    },
+    {
+      "goal_id": "G3",
+      "name": "Reduce Operating Costs",
+      "description": "Decrease infrastructure costs by 20% through optimization",
+      "owner_id": "bob_002",
+      "kpis": [
+        {
+          "kpi_id": "K5",
+          "name": "Infrastructure Cost Reduction",
+          "target": "20% reduction",
+          "measurement": "monthly"
+        },
+        {
+          "kpi_id": "K6",
+          "name": "Cost per Customer",
+          "target": "Under $500/mo",
+          "measurement": "monthly"
+        }
+      ],
+      "priority": "medium",
+      "timeline": "2025-Q1 to 2025-Q4"
+    }
+  ],
+
+  "risk_tolerance": {
+    "financial": {
+      "unbudgeted_spend_threshold": 10000,
+      "high_cost_threshold": 100000,
+      "critical_cost_threshold": 500000,
+      "quarterly_variance_tolerance": 0.15
+    },
+    "operational": {
+      "downtime_tolerance_minutes": 60,
+      "data_loss_tolerance": "zero",
+      "security_incident_tolerance": "zero"
+    },
+    "compliance": {
+      "gdpr_strict_mode": true,
+      "data_residency_required": ["EU"],
+      "audit_trail_required": true
+    },
+    "strategic": {
+      "acceptable_risk_level": "medium",
+      "innovation_tolerance": "high",
+      "market_risk_tolerance": "medium"
+    }
+  },
+
+  "governance_rules": [
+    {
+      "rule_id": "R1",
+      "name": "Budget Approval Rule",
+      "type": "financial",
+      "description": "Decisions with cost > $100k require CFO approval",
+      "condition": {
+        "field": "cost",
+        "operator": ">",
+        "value": 100000
+      },
+      "consequence": {
+        "action": "require_approval",
+        "approver_role": "CFO",
+        "approver_id": "bob_002",
+        "severity": "high"
+      },
+      "active": true,
+      "relationships": {
+        "enforces_goal": "G3",
+        "protects_kpi": "K5"
+      }
+    },
+    {
+      "rule_id": "R2",
+      "name": "Privacy Compliance Rule",
+      "type": "compliance",
+      "description": "Decisions affecting EU users or PII require CTO review",
+      "condition": {
+        "operator": "OR",
+        "conditions": [
+          {
+            "field": "target_market",
+            "operator": "contains",
+            "value": "EU"
+          },
+          {
+            "field": "uses_pii",
+            "operator": "==",
+            "value": true
+          }
+        ]
+      },
+      "consequence": {
+        "action": "require_review",
+        "approver_role": "CTO",
+        "approver_id": "charlie_003",
+        "severity": "critical"
+      },
+      "active": true,
+      "relationships": {
+        "enforces_goal": "G2",
+        "protects_kpi": "K4",
+        "compliance_framework": "GDPR"
+      }
+    },
+    {
+      "rule_id": "R3",
+      "name": "Deployment Conflict Rule",
+      "type": "operational",
+      "description": "Launch dates cannot overlap with scheduled maintenance windows",
+      "condition": {
+        "field": "launch_date",
+        "operator": "overlaps_with",
+        "value": "maintenance_window"
+      },
+      "consequence": {
+        "action": "flag_critical",
+        "severity": "critical",
+        "message": "Deployment conflicts with maintenance window - high risk of service disruption"
+      },
+      "active": true,
+      "relationships": {
+        "enforces_goal": "G2",
+        "protects_kpi": "K4"
+      },
+      "metadata": {
+        "maintenance_windows": [
+          {
+            "start": "2025-03-15T02:00:00Z",
+            "end": "2025-03-15T06:00:00Z",
+            "type": "database_migration"
+          },
+          {
+            "start": "2025-06-01T00:00:00Z",
+            "end": "2025-06-01T04:00:00Z",
+            "type": "security_patching"
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "R4",
+      "name": "Strategic Alignment Rule",
+      "type": "strategic",
+      "description": "Major initiatives must align with at least one strategic goal",
+      "condition": {
+        "field": "cost",
+        "operator": ">",
+        "value": 50000
+      },
+      "consequence": {
+        "action": "require_goal_mapping",
+        "severity": "medium",
+        "message": "Decision must map to at least one strategic goal (G1, G2, or G3)"
+      },
+      "active": true,
+      "relationships": {
+        "enforces": "strategic_alignment"
+      }
+    },
+    {
+      "rule_id": "R5",
+      "name": "Multi-Approval Rule",
+      "type": "financial",
+      "description": "Decisions > $500k require both CFO and CEO approval",
+      "condition": {
+        "field": "cost",
+        "operator": ">",
+        "value": 500000
+      },
+      "consequence": {
+        "action": "require_approval",
+        "approver_roles": ["CFO", "CEO"],
+        "approver_ids": ["bob_002", "alice_001"],
+        "severity": "critical",
+        "requires_sequential": true
+      },
+      "active": true,
+      "relationships": {
+        "enforces_goal": "G3",
+        "escalation_chain": ["bob_002", "alice_001"]
+      }
+    }
+  ],
+
+  "metadata": {
+    "version": "1.0.0",
+    "created_at": "2025-02-14",
+    "purpose": "Mock company data for Decision Governance Layer demo",
+    "graph_relationships": {
+      "description": "This data models organizational relationships as potential graph edges",
+      "edge_types": [
+        {
+          "type": "reports_to",
+          "from": "personnel.id",
+          "to": "personnel.reports_to"
+        },
+        {
+          "type": "owns_goal",
+          "from": "personnel.id",
+          "to": "strategic_goals.owner_id"
+        },
+        {
+          "type": "enforces_goal",
+          "from": "governance_rules.rule_id",
+          "to": "strategic_goals.goal_id"
+        },
+        {
+          "type": "protects_kpi",
+          "from": "governance_rules.rule_id",
+          "to": "strategic_goals.kpis.kpi_id"
+        },
+        {
+          "type": "requires_approval_from",
+          "from": "governance_rules.rule_id",
+          "to": "personnel.id"
+        }
+      ]
+    }
+  }
+}
