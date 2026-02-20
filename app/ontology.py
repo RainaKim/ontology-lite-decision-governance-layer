@@ -49,7 +49,7 @@ class OntologyEngine:
 
         # Initialize o1 reasoner if enabled
         if self.use_o1:
-            self.o1_reasoner = O1Reasoner(model="o1-mini")
+            self.o1_reasoner = O1Reasoner(model="o4-mini")
             logger.info("o1 reasoning enabled for ontology layer")
 
         logger.info(f"Initialized OntologyEngine with {len(self.personnel_by_id)} personnel, "

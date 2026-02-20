@@ -16,9 +16,9 @@ import uuid
 from typing import Tuple
 from pydantic import ValidationError
 
-from app.schemas import Decision, Owner, DecisionExtractionResponse
+from app.schemas import Decision, DecisionExtractionResponse
 from app.llm_client import LLMClient
-from app.governance_deterministic import evaluate_governance
+from app.governance import evaluate_governance
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +47,14 @@ class DecisionExtractor:
         self.max_retries = max_retries
         logger.info(f"Initialized DecisionExtractor with max_retries={max_retries}")
 
-    def extract(self, decision_text: str, request_id: str) -> DecisionExtractionResponse:
+    def extract(self, decision_text: str, request_id: str, company_id: str) -> DecisionExtractionResponse:
         """
         Extract structured decision from text with retry logic.
 
         Args:
             decision_text: Free-form decision description
             request_id: Unique request identifier for tracking
+            company_id: Identifier for the company context
 
         Returns:
             DecisionExtractionResponse with extracted decision and metadata
@@ -74,6 +75,15 @@ class DecisionExtractor:
 
                 # Step 2: Parse JSON
                 parsed_json = json.loads(raw_json)
+                logger.info(
+                    f"[{request_id}] LLM extracted: "
+                    f"cost={parsed_json.get('cost')} "
+                    f"uses_pii={parsed_json.get('uses_pii')} "
+                    f"involves_hiring={parsed_json.get('involves_hiring')} "
+                    f"involves_compliance_risk={parsed_json.get('involves_compliance_risk')} "
+                    f"strategic_impact={parsed_json.get('strategic_impact')} "
+                    f"headcount_change={parsed_json.get('headcount_change')}"
+                )
                 logger.info(f"[{request_id}] Successfully parsed JSON")
 
                 # Step 3: Validate with Pydantic
@@ -82,7 +92,7 @@ class DecisionExtractor:
 
                 # Step 4: Deterministic governance evaluation
                 logger.info(f"[{request_id}] Running deterministic governance evaluation")
-                governance_result = evaluate_governance(decision, mock_company=None, rules=None)
+                governance_result = evaluate_governance(decision, company_context=None, use_o1=False, company_id=company_id)
 
                 # Success!
                 return DecisionExtractionResponse(
@@ -94,13 +104,13 @@ class DecisionExtractor:
                         "success": True
                     },
                     governance_applied=True,
-                    approval_chain=governance_result.approval_chain,
-                    flags=governance_result.flags,
+                    approval_chain=[step.model_dump() for step in governance_result.approval_chain],
+                    flags=[f.value for f in governance_result.flags],
                     triggered_rules=governance_result.triggered_rules,
                     requires_human_review=governance_result.requires_human_review,
-                    governance_status=governance_result.governance_status.value,
-                    derived_attributes=governance_result.derived_attributes,
-                    completeness_issues=governance_result.completeness_issues
+                    governance_status="review_required",
+                    derived_attributes={},
+                    completeness_issues=[]
                 )
 
             except json.JSONDecodeError as e:
@@ -122,7 +132,7 @@ class DecisionExtractor:
         fallback_decision = self._create_fallback_decision(decision_text, request_id, last_error)
 
         # Still evaluate deterministic governance on fallback
-        governance_result = evaluate_governance(fallback_decision, mock_company=None, rules=None)
+        governance_result = evaluate_governance(fallback_decision, company_context=None, use_o1=False, company_id=company_id)
 
         return DecisionExtractionResponse(
             decision=fallback_decision,
@@ -135,13 +145,13 @@ class DecisionExtractor:
                 "fallback_used": True
             },
             governance_applied=True,
-            approval_chain=governance_result.approval_chain,
-            flags=governance_result.flags,
+            approval_chain=[step.model_dump() for step in governance_result.approval_chain],
+            flags=[f.value for f in governance_result.flags],
             triggered_rules=governance_result.triggered_rules,
             requires_human_review=True,  # Always require review for fallback
             governance_status="blocked",  # Fallback is always blocked
-            derived_attributes=governance_result.derived_attributes,
-            completeness_issues=governance_result.completeness_issues
+            derived_attributes={},
+            completeness_issues=[]
         )
 
     def _create_fallback_decision(self, decision_text: str, request_id: str, error_message: str) -> Decision:
@@ -158,19 +168,14 @@ class DecisionExtractor:
         """
         logger.info(f"[{request_id}] Creating fallback decision (confidence=0.1)")
 
-        # Create minimal valid decision
+        # Create minimal valid decision — no fabricated owner; ownership inference
+        # happens in the graph/reasoning step if needed.
         fallback = Decision(
             decision_statement=f"[EXTRACTION FAILED] {decision_text[:100]}...",
             goals=[],
             kpis=[],
             risks=[],
-            owners=[
-                Owner(
-                    name="Unassigned",
-                    role="Unknown",
-                    responsibility="Decision extraction failed - manual review required"
-                )
-            ],
+            owners=[],
             required_approvals=["Manual Review Required"],
             assumptions=[],
             confidence=0.1  # Very low confidence

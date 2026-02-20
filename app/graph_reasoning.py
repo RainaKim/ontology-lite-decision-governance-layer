@@ -98,6 +98,7 @@ async def analyze_decision_graph_with_o1(
         "risk_coverage": o1_insights.get("risk_gaps", []),
         "policy_conflicts": o1_insights.get("policy_conflicts", []),
         "recommendations": o1_insights.get("recommendations", []),
+        "next_actions": o1_insights.get("next_actions", []),
         "confidence": o1_insights.get("confidence", 0.0),
         "analysis_method": "o1-reasoning" if use_o1 and not o1_insights.get("fallback") else "deterministic"
     }
@@ -193,7 +194,7 @@ async def _reason_about_graph_with_o1(
     Returns:
         o1 analysis with contradictions, ownership issues, risk gaps, recommendations
     """
-    reasoner = O1Reasoner(model="o1-mini")
+    reasoner = O1Reasoner(model="o4-mini")
 
     # o1 API is sync, run in executor
     result = await asyncio.get_event_loop().run_in_executor(
@@ -381,5 +382,6 @@ def format_graph_insights_for_pack(insights: dict) -> dict:
         "ownership_validation": insights.get("ownership_validation", []),
         "risk_coverage_gaps": insights.get("risk_coverage", []),
         "policy_conflicts": insights.get("policy_conflicts", []),
-        "graph_based_recommendations": insights.get("recommendations", [])
+        "graph_based_recommendations": insights.get("recommendations", []),
+        "next_actions": insights.get("next_actions", [])
     }

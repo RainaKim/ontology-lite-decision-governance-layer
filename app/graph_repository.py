@@ -61,7 +61,8 @@ class BaseGraphRepository(ABC):
         self,
         decision: dict,
         governance: dict,
-        decision_id: Optional[str] = None
+        decision_id: Optional[str] = None,
+        company_context: Optional[dict] = None,
     ) -> DecisionGraph:
         """
         Upsert a complete decision subgraph from decision + governance evaluation.
@@ -226,14 +227,16 @@ class InMemoryGraphRepository(BaseGraphRepository):
         self,
         decision: dict,
         governance: dict,
-        decision_id: Optional[str] = None
+        decision_id: Optional[str] = None,
+        company_context: Optional[dict] = None,
     ) -> DecisionGraph:
         """Build decision subgraph from decision + governance."""
         from app.graph_ontology import (
             create_action_node, create_actor_node, create_risk_node,
-            create_policy_node, create_edge, EdgePredicate
+            create_policy_node, create_edge, EdgePredicate, NodeType, Node
         )
         import uuid
+        import re
 
         if decision_id is None:
             decision_id = f"decision_{uuid.uuid4().hex[:8]}"
@@ -251,7 +254,10 @@ class InMemoryGraphRepository(BaseGraphRepository):
         await self.add_node(action_node)
         nodes.append(action_node)
 
-        # 2. Create Actor nodes for owners
+        # 2. Create Actor nodes for explicitly stated owners only.
+        # If owners is empty (not stated in input), no Actor nodes are added here.
+        # Ownership inference is delegated to the o1 reasoning step (step 4),
+        # which has full access to company personnel and governance signals.
         for idx, owner in enumerate(decision.get("owners", [])):
             actor_id = f"{decision_id}_owner_{idx}"
             actor_node = create_actor_node(
@@ -267,32 +273,96 @@ class InMemoryGraphRepository(BaseGraphRepository):
             await self.add_edge(edge)
             edges.append(edge)
 
-        # 3. Create Actor nodes for approval chain
-        for idx, step in enumerate(governance.get("approval_chain", [])):
-            actor_id = f"{decision_id}_approver_{step.get('level')}_{idx}"
-            actor_node = create_actor_node(
-                actor_id=actor_id,
-                name=step.get("role", ""),
-                role=step.get("level")
+        # 3. Create Goal nodes
+        for idx, goal in enumerate(decision.get("goals", [])):
+            goal_id = f"{decision_id}_goal_{idx}"
+            goal_desc = goal.get("description", "") if isinstance(goal, dict) else str(goal)
+            goal_node = Node(
+                id=goal_id,
+                type=NodeType.GOAL,
+                label=f"G{idx+1}: {goal_desc[:50]}",
+                properties={"description": goal_desc, "metric": goal.get("metric") if isinstance(goal, dict) else None}
             )
+            await self.add_node(goal_node)
+            nodes.append(goal_node)
 
-            # Check if already exists before adding
-            if actor_id not in self._nodes:
-                await self.add_node(actor_node)
-                nodes.append(actor_node)
-
-            # Edge: Action -[REQUIRES_APPROVAL_BY]-> Actor
-            edge = create_edge(
-                decision_id,
-                actor_id,
-                EdgePredicate.REQUIRES_APPROVAL_BY,
-                required=step.get("required", True),
-                rationale=step.get("rationale")
-            )
+            # Edge: Decision -[HAS_GOAL]-> Goal
+            edge = create_edge(decision_id, goal_id, EdgePredicate.HAS_GOAL)
             await self.add_edge(edge)
             edges.append(edge)
 
-        # 4. Create Risk nodes
+        # 4. Create KPI nodes
+        for idx, kpi in enumerate(decision.get("kpis", [])):
+            kpi_id = f"{decision_id}_kpi_{idx}"
+            kpi_name = kpi.get("name", "") if isinstance(kpi, dict) else str(kpi)
+            kpi_target = kpi.get("target") or "" if isinstance(kpi, dict) else ""
+            kpi_node = Node(
+                id=kpi_id,
+                type=NodeType.KPI,
+                label=f"K{idx+1}: {kpi_name[:30]} {kpi_target[:20]}",
+                properties={"name": kpi_name, "target": kpi_target}
+            )
+            await self.add_node(kpi_node)
+            nodes.append(kpi_node)
+
+            # Edge: Decision -[HAS_KPI]-> KPI
+            edge = create_edge(decision_id, kpi_id, EdgePredicate.HAS_KPI)
+            await self.add_edge(edge)
+            edges.append(edge)
+
+        # 5. Extract and create Cost node from decision text or assumptions
+        cost_amount, cost_currency = self._extract_cost_and_currency(decision)
+        if cost_amount:
+            cost_id = f"{decision_id}_cost"
+            cost_label = f"{cost_amount} {cost_currency}" if cost_currency else str(cost_amount)
+            cost_node = Node(
+                id=cost_id,
+                type=NodeType.COST,
+                label=cost_label,
+                properties={"amount": cost_amount, "currency": cost_currency}
+            )
+            await self.add_node(cost_node)
+            nodes.append(cost_node)
+
+            edge = create_edge(decision_id, cost_id, EdgePredicate.HAS_COST)
+            await self.add_edge(edge)
+            edges.append(edge)
+
+        # 6. Extract and create Region node
+        region = self._extract_region(decision)
+        if region:
+            region_id = f"{decision_id}_region"
+            region_node = Node(
+                id=region_id,
+                type=NodeType.REGION,
+                label=region,
+                properties={"name": region}
+            )
+            await self.add_node(region_node)
+            nodes.append(region_node)
+
+            edge = create_edge(decision_id, region_id, EdgePredicate.AFFECTS_REGION)
+            await self.add_edge(edge)
+            edges.append(edge)
+
+        # 7. Extract and create DataType node
+        data_type = self._extract_data_type(decision)
+        if data_type:
+            data_id = f"{decision_id}_data"
+            data_node = Node(
+                id=data_id,
+                type=NodeType.DATA_TYPE,
+                label=data_type,
+                properties={"classification": data_type}
+            )
+            await self.add_node(data_node)
+            nodes.append(data_node)
+
+            edge = create_edge(decision_id, data_id, EdgePredicate.USES_DATA)
+            await self.add_edge(edge)
+            edges.append(edge)
+
+        # 8. Create Risk nodes
         for idx, risk in enumerate(decision.get("risks", [])):
             risk_id = f"{decision_id}_risk_{idx}"
             risk_node = create_risk_node(
@@ -309,7 +379,41 @@ class InMemoryGraphRepository(BaseGraphRepository):
             await self.add_edge(edge)
             edges.append(edge)
 
-        # 5. Create Policy nodes from triggered rules
+        # 9. Create Approver nodes for approval chain (distinct from Actor/owner nodes)
+        for idx, step in enumerate(governance.get("approval_chain", [])):
+            approver_id = f"{decision_id}_approver_{step.get('level')}_{idx}"
+            rule_action = step.get("rule_action", "require_approval")
+            auth_label = "ESCALATION" if rule_action == "require_review" else "REQUIRED"
+            approver_node = Node(
+                id=approver_id,
+                type=NodeType.APPROVER,
+                label=step.get("role", ""),
+                properties={
+                    "role": step.get("role", ""),
+                    "auth_type": auth_label,
+                    "source_rule_id": step.get("source_rule_id"),
+                    "rationale": step.get("rationale"),
+                    "required": step.get("required", True),
+                }
+            )
+
+            # Check if already exists before adding
+            if approver_id not in self._nodes:
+                await self.add_node(approver_node)
+                nodes.append(approver_node)
+
+            # Edge: Action -[REQUIRES_APPROVAL_BY]-> Approver
+            edge = create_edge(
+                decision_id,
+                approver_id,
+                EdgePredicate.REQUIRES_APPROVAL_BY,
+                required=step.get("required", True),
+                rationale=step.get("rationale")
+            )
+            await self.add_edge(edge)
+            edges.append(edge)
+
+        # 10. Create Policy nodes from triggered rules
         for rule in governance.get("triggered_rules", []):
             policy_id = f"policy_{rule.get('rule_id')}"
 
@@ -337,6 +441,41 @@ class InMemoryGraphRepository(BaseGraphRepository):
                 "edge_count": len(edges)
             }
         )
+
+    def _extract_cost_and_currency(self, decision: dict) -> tuple[Optional[str], Optional[str]]:
+        """Extract cost and currency from LLM-extracted cost field and decision statement."""
+        cost = decision.get("cost")
+        currency = None
+        # Try to infer currency from decision statement or cost field
+        statement = decision.get("decision_statement", "")
+        if isinstance(cost, str):
+            if "원" in cost or "KRW" in cost:
+                currency = "KRW"
+            elif "$" in cost or "USD" in cost:
+                currency = "USD"
+        elif isinstance(cost, (int, float)):
+            if "원" in statement or "KRW" in statement:
+                currency = "KRW"
+            elif "$" in statement or "USD" in statement:
+                currency = "USD"
+        # Default to KRW for Korean company
+        if currency is None and decision.get("company_id") == "nexus_dynamics":
+            currency = "KRW"
+        if cost is not None:
+            # Format as integer if whole number, otherwise as float
+            amount = f"{int(cost):,}" if isinstance(cost, (int, float)) and cost == int(cost) else str(cost)
+            return amount, currency
+        return None, None
+
+    def _extract_region(self, decision: dict) -> Optional[str]:
+        """Extract geographic region from LLM-extracted target_market field."""
+        return decision.get("target_market") or None
+
+    def _extract_data_type(self, decision: dict) -> Optional[str]:
+        """Extract data classification from LLM-extracted uses_pii field."""
+        if decision.get("uses_pii"):
+            return "PII"
+        return None
 
     async def get_governance_context(
         self,

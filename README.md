@@ -79,9 +79,9 @@ An **Ontology-lite Decision Governance Layer** that transforms unstructured busi
 1. Decision Input
    ↓
 2. Governance Evaluation
-   • Load rules (mock_rules.json)
+   • Load rules from company context JSON (mock_company*.json)
    • Compute risk score (severity-weighted)
-   • Evaluate conditions (>=, ==, contains_any)
+   • Evaluate conditions (>=, ==, contains, OR)
    • Select approval chain (priority-based)
    • Detect flags (PRIVACY, FINANCIAL, HIGH_RISK, etc.)
    ↓
@@ -137,54 +137,48 @@ python -m app.e2e_runner
 **Expected output:**
 ```
 ================================================================================
-E2E GOVERNANCE VALIDATION - DEMO STABILITY CHECK
+E2E GOVERNANCE VALIDATION — FULL PIPELINE (with subgraph extraction)
 ================================================================================
 
-[compliant]         ✓ 5/5 checks
-[budget_violation]  ✓ 5/5 checks
-[privacy_violation] ✓ 5/5 checks
-[blocked]           ✓ 5/5 checks
+...
 
-✅ DEMO STABLE - All checks passed
 ================================================================================
+VALIDATION SUMMARY
+================================================================================
+
+Total checks: 180
+Passed: 180 ✓
+Failed: 0 ✗
+Success rate: 100.0%
+
+================================================================================
+✅ DEMO STABLE — All checks passed
 ```
 
 ### Run Demo with Fixtures
 
 ```python
 import asyncio
-from app.demo_fixtures import get_demo_fixture
-from app.governance import evaluate_governance
-from app.graph_repository import InMemoryGraphRepository
-from app.decision_pack import build_decision_pack
+from app.demo_fixtures import get_demo_fixture, get_company_context
+from app.decision_pipeline import process_decision_with_graph_reasoning
 
-# 1. Load demo fixture
-decision = get_demo_fixture("budget_violation")  # or "compliant", "privacy_violation", "blocked"
+# Load a scenario by key
+decision = get_demo_fixture("C03_core_ip_protection")
+company = get_company_context()
 
-# 2. Evaluate governance (deterministic, no LLM)
-governance_result = evaluate_governance(decision, company_context={}, use_o1=False)
-
-# 3. Store in graph
-async def store():
-    repo = InMemoryGraphRepository()
-    decision_graph = await repo.upsert_decision_graph(
-        decision=decision.model_dump(),
-        governance=governance_result.to_dict(),
-        decision_id="demo_001"
+async def run():
+    result = await process_decision_with_graph_reasoning(
+        decision=decision,
+        company_context=company,
+        use_o1_governance=False,
+        use_o1_graph=False,
     )
-    return decision_graph
+    pack = result["decision_pack"]
+    print(f"Status: {pack['summary']['governance_status']}")
+    print(f"Risk Level: {pack['summary']['risk_level']}")
+    print(f"Approval Chain: {len(pack['approval_chain'])} steps")
 
-graph = asyncio.run(store())
-
-# 4. Generate Decision Pack
-pack = build_decision_pack(
-    decision=decision.model_dump(),
-    governance=governance_result.to_dict()
-)
-
-print(f"Status: {pack['summary']['governance_status']}")
-print(f"Risk Level: {pack['summary']['risk_level']}")
-print(f"Approval Chain: {len(pack['approval_chain'])} steps")
+asyncio.run(run())
 ```
 
 ---
@@ -233,70 +227,93 @@ print(f"Approval Chain: {len(pack['approval_chain'])} steps")
 
 ## 🧪 Demo Fixtures
 
-Four production-ready test scenarios:
+30 production-ready scenarios across three governance frameworks:
 
-### 1. Compliant Decision
-```python
-decision = get_demo_fixture("compliant")
-# Tool upgrade, low risk, standard approval
-# Expected: compliant status, no flags
-```
+### Corporate Finance — Nexus Dynamics (C01–C10)
 
-### 2. Budget Violation
-```python
-decision = get_demo_fixture("budget_violation")
-# $3.5M acquisition, high risk, financial review required
-# Expected: blocked/needs_review, FINANCIAL_THRESHOLD_EXCEEDED flag
-```
+| Key | Scenario | Status |
+|-----|----------|--------|
+| `C01_marketing_budget_overrun` | Marketing Budget Overrun | needs_review |
+| `C02_related_party_transaction` | Related Party Transaction | needs_review |
+| `C03_core_ip_protection` | Core IP Protection | **blocked** |
+| `C04_shadow_it_saas` | Shadow IT SaaS Adoption | **blocked** |
+| `C05_goal_mismatch_hiring` | Strategic Goal Mismatch Hiring | needs_review |
+| `C06_entertainment_expense` | Excessive Entertainment Expense | needs_review |
+| `C07_subsidiary_loan` | Subsidiary Financial Support | needs_review |
+| `C08_cloud_overprovisioning` | Cloud Infrastructure Over-provisioning | needs_review |
+| `C09_esg_supply_chain` | ESG Supply Chain Violation | needs_review |
+| `C10_retroactive_bonus` | Retroactive Bonus Application | **blocked** |
 
-### 3. Privacy Violation
-```python
-decision = get_demo_fixture("privacy_violation")
-# GDPR/PII data collection, privacy review required
-# Expected: needs_review, PRIVACY_REVIEW_REQUIRED flag
-```
+### Healthcare & Data Privacy — Mayo Central Hospital (H01–H10)
 
-### 4. Blocked Decision
-```python
-decision = get_demo_fixture("blocked")
-# Critical conflicts, 9.5 risk score, 0.15 confidence
-# Expected: blocked status, CRITICAL_CONFLICT flag
-```
+| Key | Scenario | Status |
+|-----|----------|--------|
+| `H01_unauthorized_patient_data_access` | Unauthorized Patient Data Access | **blocked** |
+| `H02_off_label_prescription_risk` | Off-label Prescription Risk | **blocked** |
+| `H03_equipment_maintenance_gap` | Critical Equipment Maintenance Gap | **blocked** |
+| `H04_clinical_trial_conflict_of_interest` | Clinical Trial Conflict of Interest | **blocked** |
+| `H05_telemedicine_data_leakage` | Telemedicine Data Leakage | **blocked** |
+| `H06_nurse_patient_ratio_violation` | Nurse-to-Patient Ratio Violation | **blocked** |
+| `H07_redundant_equipment_purchase` | Redundant Medical Equipment Purchase | needs_review |
+| `H08_ai_training_without_consent` | AI Training without Consent | **blocked** |
+| `H09_er_golden_hour_protocol_failure` | ER Golden Hour Protocol Failure | **blocked** |
+| `H10_controlled_substance_inventory_gap` | Controlled Substance Inventory Gap | **blocked** |
+
+### Public Sector & Procurement — State of Delaware GSA (G01–G10)
+
+| Key | Scenario | Status |
+|-----|----------|--------|
+| `G01_sole_source_procurement` | Sole Source Procurement Violation | needs_review |
+| `G02_budget_dumping` | End-of-Year Budget Dumping | needs_review |
+| `G03_lobbyist_vendor_conflict` | Lobbyist-Linked Vendor Conflict | **blocked** |
+| `G04_double_dipping_grant` | Double Dipping Grant Detection | **blocked** |
+| `G05_emergency_fund_misappropriation` | Emergency Fund Misappropriation | **blocked** |
+| `G06_missing_environmental_assessment` | Missing Environmental Assessment | **blocked** |
+| `G07_public_official_ethics_violation` | Public Official Ethics Violation | **blocked** |
+| `G08_legacy_system_overexpenditure` | Legacy System Over-expenditure | needs_review |
+| `G09_mwbe_quota_noncompliance` | MWBE Quota Non-compliance | needs_review |
+| `G10_sensitive_data_open_access` | Sensitive Data Open-Access Risk | **blocked** |
 
 ---
 
 ## 🔧 Governance Rules
 
-Rules are defined in `app/mock_rules.json`. Example:
+Rules are embedded in each company context JSON (`mock_company*.json`) under the `governance_rules` key. Each company file represents a different governance framework:
+
+| File | Framework | Approval Chain |
+|------|-----------|----------------|
+| `mock_company.json` | Corporate Finance (Nexus Dynamics) | CFO > Compliance > CEO |
+| `mock_company_healthcare.json` | Healthcare & Data Privacy (Mayo Central Hospital) | Security > Compliance > Medical Director |
+| `mock_company_public.json` | Public Sector & Procurement (State of Delaware GSA) | Legal > Compliance > Board |
+
+**Rule structure example:**
 
 ```json
 {
-  "rule_id": "R006",
-  "name": "Financial Threshold - Major Investment",
+  "rule_id": "R1",
+  "name": "Capital Expenditure Approval",
   "type": "financial",
-  "description": "Decisions > $1M require CFO approval",
-  "conditions": {
-    "decision_statement_keywords": {
-      "operator": "contains_any",
-      "value": ["acquisition", "investment", "capital", "million"]
-    }
+  "description": "Decisions with expenditure over budget threshold require CFO approval",
+  "condition": {
+    "field": "cost",
+    "operator": ">",
+    "value": 50000000
   },
-  "approval_chain": [
-    {"level": "department_head", "role": "Budget Owner", "required": true},
-    {"level": "vp", "role": "VP of Finance", "required": true},
-    {"level": "c_level", "role": "CFO", "required": true},
-    {"level": "c_level", "role": "CEO", "required": true}
-  ],
-  "priority": 1
+  "consequence": {
+    "action": "require_approval",
+    "approver_role": "CFO",
+    "approver_id": "cfo_001",
+    "severity": "high"
+  },
+  "active": true
 }
 ```
 
-**Operators supported:**
+**Condition operators supported:**
 - `==` (equals)
-- `>=` (greater than or equal)
-- `<` (less than)
-- `in` (value in list)
-- `contains_any` (text contains any keyword)
+- `>` (greater than)
+- `contains` (text contains substring)
+- `OR` (top-level logical OR over multiple sub-conditions)
 
 ---
 
@@ -412,22 +429,26 @@ class BaseGraphRepository(ABC):
 ```
 decision-governance-layer/
 ├── app/
-│   ├── main.py                    # FastAPI app (Day 3+)
 │   ├── schemas.py                 # Pydantic v2 models (Decision, Owner, Goal, etc.)
 │   ├── governance.py              # Deterministic governance engine
 │   ├── graph_ontology.py          # Graph schema (Node, Edge, NodeType, EdgePredicate)
 │   ├── graph_repository.py        # Repository pattern (BaseGraphRepository, InMemory)
+│   ├── graph_reasoning.py         # Graph analysis orchestration + deterministic fallback
 │   ├── decision_pack.py           # Template-based pack generator
-│   ├── demo_fixtures.py           # Test scenarios (compliant, budget, privacy, blocked)
-│   ├── e2e_runner.py              # End-to-end validation tests
-│   ├── mock_rules.json            # Governance rules (7 rules with conditions)
+│   ├── decision_pipeline.py       # End-to-end 5-step pipeline orchestration
+│   ├── o1_reasoner.py             # o1 API integration + subgraph extraction
+│   ├── demo_fixtures.py           # 30 scenarios across 3 governance frameworks
+│   ├── e2e_runner.py              # End-to-end validation (180 checks, 30 scenarios)
 │   └── __init__.py
 ├── docs/
 │   ├── README_VISION.md           # Project philosophy & vision
-│   ├── BUILD_PLAN.md              # 7-day hackathon plan
+│   ├── BUILD_PLAN.md              # Hackathon build plan
 │   ├── ARCHITECTURE.md            # Technical architecture details
-│   └── QA_SUMMARY.md              # Test results & demo stability
-├── mock_company.json              # Company context (alternate rule format)
+│   └── QA_SUMMARY.md             # Test results & demo stability
+├── mock_company.json              # Corporate Finance governance context (Nexus Dynamics)
+├── mock_company_healthcare.json   # Healthcare governance context (Mayo Central Hospital)
+├── mock_company_public.json       # Public Sector governance context (State of Delaware GSA)
+├── GRAPH_REASONING_SUMMARY.md    # Graph reasoning implementation notes
 ├── requirements.txt               # Python dependencies
 └── README.md                      # This file
 ```
@@ -446,8 +467,9 @@ python -m app.e2e_runner
 - ✅ Governance evaluation (deterministic)
 - ✅ Graph storage (nodes + edges)
 - ✅ Decision Pack generation (all sections)
+- ✅ Graph reasoning section (when enabled)
 - ✅ Invariant enforcement (never null, never empty)
-- ✅ Scenario validation (4 edge cases)
+- ✅ Scenario validation (30 scenarios across 3 frameworks)
 
 ### Invariants Enforced
 
@@ -569,22 +591,23 @@ From `app/o1_reasoner.py`:
 
 ## 🛣️ Evolution Path
 
-### Day 1-2 (Current - MVP)
+### Completed
 - ✅ Pydantic schemas
 - ✅ Deterministic governance (100% rule-based)
 - ✅ Graph ontology (5 nodes, 6 edges)
 - ✅ InMemory repository
 - ✅ Decision Pack generator
-- ✅ Demo fixtures (4 scenarios)
-- ✅ E2E tests (100% pass rate)
-- ✅ o1 reasoner (implemented but disabled in tests)
+- ✅ Graph reasoning (deterministic + optional o1)
+- ✅ End-to-end pipeline (`decision_pipeline.py`)
+- ✅ 30 demo scenarios across 3 governance frameworks
+- ✅ E2E tests (180 checks, 100% pass rate)
+- ✅ Multi-company governance contexts (Corporate Finance, Healthcare, Public Sector)
 
-### Day 3-4 (Enhancement Layer)
-- [ ] Enable o1 in production (`use_o1=True`)
-- [ ] LLM extraction endpoint (GPT-4o for decision parsing)
+### Next Steps
 - [ ] REST API (FastAPI)
 - [ ] Neo4j integration (replace InMemory)
-- [ ] Graph query API (context retrieval)
+- [ ] LLM extraction endpoint (GPT-4o for decision parsing)
+- [ ] Enable o1 graph reasoning in production (`use_o1_graph=True`)
 
 ### Week 2
 - [ ] Graph analytics (approval bottlenecks)

@@ -8,12 +8,15 @@ Hybrid governance evaluation:
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Optional
 from enum import Enum
 
 from app.schemas import Decision, ApprovalChainStep, ApprovalLevel
 from app.o1_reasoner import O1Reasoner
+
+logger = logging.getLogger(__name__)
 
 
 class GovernanceFlag(str, Enum):
@@ -26,6 +29,7 @@ class GovernanceFlag(str, Enum):
     MISSING_OWNER = "MISSING_OWNER"
     MISSING_RISK_ASSESSMENT = "MISSING_RISK_ASSESSMENT"
     FINANCIAL_THRESHOLD_EXCEEDED = "FINANCIAL_THRESHOLD_EXCEEDED"
+    GOVERNANCE_COVERAGE_GAP = "GOVERNANCE_COVERAGE_GAP"
 
 
 class GovernanceResult:
@@ -53,7 +57,9 @@ class GovernanceResult:
                     "level": step.level.value,
                     "role": step.role,
                     "required": step.required,
-                    "rationale": step.rationale
+                    "rationale": step.rationale,
+                    "source_rule_id": step.source_rule_id,
+                    "rule_action": step.rule_action
                 }
                 for step in self.approval_chain
             ],
@@ -64,12 +70,16 @@ class GovernanceResult:
         }
 
 
-def load_rules(rules_path: str = None) -> dict:
-    """Load governance rules from JSON file."""
+def load_rules(rules_path: str = None, company_id: str = None) -> dict:
+    """Load governance rules from JSON file, selecting by company_id."""
     if rules_path is None:
-        # Default to mock_company.json in project root
-        rules_path = Path(__file__).parent.parent / "mock_company.json"
-
+        if company_id == "mayo_central":
+            rules_path = Path(__file__).parent.parent / "mock_company_healthcare.json"
+        elif company_id == "delaware_gsa":
+            rules_path = Path(__file__).parent.parent / "mock_company_public.json"
+        else:
+            rules_path = Path(__file__).parent.parent / "mock_company.json"
+    print("current loaded rules!!!!!!!!!!!!!!!!!!!!!: ", rules_path)
     with open(rules_path, 'r') as f:
         return json.load(f)
 
@@ -140,77 +150,21 @@ def extract_field_value(field: str, decision: Decision, company_context: dict) -
     """
     Generic field value extractor.
 
-    Extracts values from Decision object or infers from decision text.
-    Works for any company's governance rules.
+    All governance-relevant fields are extracted by the LLM and stored on the
+    Decision object. This function simply reads them off the model, falling back
+    to company_context for any company-level overrides.
 
     Returns:
         Extracted value (str, bool, int, float, or None)
     """
-    decision_text = f"{decision.decision_statement} {' '.join([g.description for g in decision.goals])}"
-    decision_text_lower = decision_text.lower()
-
-    # Try to get from Decision object first
+    # LLM-extracted fields live directly on the Decision object
     if hasattr(decision, field):
         return getattr(decision, field)
 
-    # Try to get from company context
+    # Company context can supply additional fields (e.g. estimated_cost override)
     if field in company_context:
         return company_context[field]
 
-    # Field inference from text (generic patterns)
-
-    # Cost field: Check for financial indicators
-    if field == 'cost':
-        # Check context first
-        if 'estimated_cost' in company_context:
-            return company_context['estimated_cost']
-
-        # Infer from text: look for $ amounts, budget keywords, strategic terms
-        financial_keywords = ['$', 'cost', 'budget', 'million', 'thousand', 'k', 'expense', 'investment']
-        strategic_keywords = ['strategic', 'major', 'initiative', 'expansion', 'market', 'revenue',
-                            'growth', 'acquisition', 'platform', 'goal', 'company-wide']
-
-        # Rough inference: if mentions money or strategic terms, assume significant cost
-        has_financial = any(kw in decision_text_lower for kw in financial_keywords)
-        has_strategic = any(kw in decision_text_lower for kw in strategic_keywords)
-
-        if has_financial or has_strategic:
-            # Try to extract $ amount from text
-            import re
-            cost_patterns = [
-                r'\$(\d+)k', r'\$(\d+),(\d+)',r'\$(\d+)m', r'\$(\d+)\s*million'
-            ]
-            for pattern in cost_patterns:
-                match = re.search(pattern, decision_text_lower)
-                if match:
-                    # Extract and convert to number
-                    if 'k' in decision_text_lower[match.start():match.end()]:
-                        return int(match.group(1)) * 1000
-                    elif 'm' in decision_text_lower[match.start():match.end()] or 'million' in decision_text_lower[match.start():match.end()]:
-                        return int(match.group(1)) * 1000000
-
-            # If no specific amount found but has indicators, assume high value
-            if has_strategic:
-                return 75000  # Default strategic initiative cost estimate
-
-        return 0  # No cost indicators found
-
-    # Target market: Check if specific market mentioned
-    if field == 'target_market':
-        # Return the decision text itself for contains/keyword matching
-        return decision_text_lower
-
-    # Boolean fields inferred from keywords
-    if field == 'uses_pii':
-        pii_keywords = ['pii', 'personal data', 'user data', 'privacy', 'gdpr', 'data protection']
-        return any(kw in decision_text_lower for kw in pii_keywords)
-
-    if field == 'launch_date':
-        # Return decision text for deployment keyword matching
-        deployment_keywords = ['launch', 'deploy', 'release', 'go live', 'rollout', 'ship']
-        return any(kw in decision_text_lower for kw in deployment_keywords)
-
-    # Default: return None if can't extract
     return None
 
 
@@ -298,6 +252,7 @@ def select_approval_chain(decision: Decision, rules_data: dict, company_context:
         triggered, _ = evaluate_company_rule(rule, decision, company_context)
 
         if triggered:
+            logger.info(f"Rule {rule['rule_id']} ({rule['name']}) TRIGGERED")
             triggered_rules.append({
                 "rule_id": rule["rule_id"],
                 "name": rule["name"],
@@ -330,28 +285,67 @@ def select_approval_chain(decision: Decision, rules_data: dict, company_context:
                             level=approval_level,
                             role=role,
                             required=True,
-                            rationale=rule['description']
+                            rationale=rule['description'],
+                            source_rule_id=rule['rule_id'],
+                            rule_action=action
                         ))
 
-            elif action == "require_goal_mapping":
-                # R4 Strategic Alignment - require CEO approval for major initiatives
-                # Find CEO from personnel hierarchy
-                ceo_info = find_role_in_hierarchy("CEO", rules_data)
-                if ceo_info:
-                    ceo_id = ceo_info['id']
-                    if ceo_id not in approval_set:
-                        approval_set.add(ceo_id)
-                        approval_steps.append(ApprovalChainStep(
-                            level=ApprovalLevel.C_LEVEL,
-                            role="CEO",
-                            required=True,
-                            rationale=rule['description']
-                        ))
+            # require_goal_mapping means: flag for strategic alignment review,
+            # but does NOT add an approver. The rule is tracked in triggered_rules
+            # and raises a STRATEGIC_CRITICAL flag via detect_flags.
+            # CEO approval only comes from R3 (strategic_impact == critical) or R5 (cost > 1B).
 
     return approval_steps, triggered_rules
 
 
-def detect_flags(decision: Decision, company_context: dict, computed_risk_score: float, triggered_rules: list[dict]) -> list[GovernanceFlag]:
+def infer_owner_from_approval_chain(approval_chain: list, rules_data: dict) -> Optional[str]:
+    """
+    Infer the decision owner from the approval chain using the personnel hierarchy.
+
+    Ownership ≠ approval. Strategy:
+    1. Find the lowest-level required approver (closest to the operational work)
+    2. If that approver has direct reports → the direct report is the inferred owner
+       (e.g. R1 requires CFO → 재무팀장 reports to CFO → 재무팀장 is owner)
+    3. If no direct reports → the approver themselves is the inferred owner
+       (e.g. R6 requires CISO → CISO owns security decisions directly)
+
+    Returns the inferred owner role, or None if no approval chain exists.
+    """
+    if not approval_chain:
+        return None
+
+    personnel = rules_data.get('approval_hierarchy', {}).get('personnel', [])
+
+    # Find the lowest-level required approver (smallest level = closest to the work)
+    lowest_level = 999
+    lowest_approver_id = None
+    lowest_approver_role = None
+
+    for step in approval_chain:
+        role = step.role if hasattr(step, 'role') else step.get('role', '')
+        for person in personnel:
+            if person.get('role', '').upper() == role.upper():
+                level = person.get('level', 999)
+                if level < lowest_level:
+                    lowest_level = level
+                    lowest_approver_id = person.get('id')
+                    lowest_approver_role = person.get('role')
+
+    if not lowest_approver_id:
+        return None
+
+    # Look for direct reports to this approver
+    direct_reports = [p for p in personnel if p.get('reports_to') == lowest_approver_id]
+
+    if direct_reports:
+        # The direct report owns the operational work
+        return direct_reports[0].get('role')
+
+    # No direct reports — the approver themselves is the domain owner
+    return lowest_approver_role
+
+
+def detect_flags(decision: Decision, company_context: dict, computed_risk_score: float, triggered_rules: list[dict], approval_chain: list = None, rules_data: dict = None) -> list[GovernanceFlag]:
     """
     Detect governance flags based on decision properties.
 
@@ -359,21 +353,24 @@ def detect_flags(decision: Decision, company_context: dict, computed_risk_score:
     Domain-specific flags come from triggered rules.
     """
     flags = []
+    if approval_chain is None:
+        approval_chain = []
 
     # STRUCTURAL FLAGS (universal for any company)
 
-    # Check for missing owner
+    # MISSING_OWNER: flag only when no explicit owner AND no owner can be inferred.
+    # Owner inference: direct report to the lowest-level approver (or the approver
+    # themselves if they have no direct reports). Users are not required to name an
+    # owner in the input — the governance rules imply accountability.
     if not decision.owners or len(decision.owners) == 0:
-        flags.append(GovernanceFlag.MISSING_OWNER)
+        inferred = infer_owner_from_approval_chain(approval_chain, rules_data or {})
+        if not inferred:
+            flags.append(GovernanceFlag.MISSING_OWNER)
 
-    # Check for missing risk assessment
+    # Check for missing risk assessment — only flag when no risks were identified at all.
+    # Having risks without severity is still a risk assessment; don't penalize partial data.
     if not decision.risks or len(decision.risks) == 0:
         flags.append(GovernanceFlag.MISSING_RISK_ASSESSMENT)
-    else:
-        # Check if risks have severity specified
-        risks_without_severity = sum(1 for risk in decision.risks if not risk.severity)
-        if risks_without_severity > 0:
-            flags.append(GovernanceFlag.MISSING_RISK_ASSESSMENT)
 
     # High computed risk score
     if computed_risk_score >= 7.0:
@@ -383,12 +380,8 @@ def detect_flags(decision: Decision, company_context: dict, computed_risk_score:
     if decision.strategic_impact and decision.strategic_impact.value == "critical":
         flags.append(GovernanceFlag.STRATEGIC_CRITICAL)
 
-    # Too many objectives (potential conflict indicator)
+    # Too many objectives (potential conflict indicator — structural contradiction)
     if len(decision.kpis) > 5 or len(decision.goals) > 5:
-        flags.append(GovernanceFlag.CRITICAL_CONFLICT)
-
-    # Conflicting risk vs confidence (low confidence + high risk)
-    if computed_risk_score >= 7.0 and decision.confidence < 0.6:
         flags.append(GovernanceFlag.CRITICAL_CONFLICT)
 
     # RULE-BASED FLAGS (from triggered rules)
@@ -396,7 +389,7 @@ def detect_flags(decision: Decision, company_context: dict, computed_risk_score:
 
     rule_types = [rule.get('rule_type') or rule.get('type') for rule in triggered_rules]
 
-    if 'compliance' in rule_types or 'privacy' in rule_types:
+    if 'privacy' in rule_types:
         flags.append(GovernanceFlag.PRIVACY_REVIEW_REQUIRED)
 
     if 'financial' in rule_types:
@@ -405,17 +398,22 @@ def detect_flags(decision: Decision, company_context: dict, computed_risk_score:
     if 'strategic' in rule_types:
         flags.append(GovernanceFlag.STRATEGIC_CRITICAL)
 
-    # Check for critical severity consequences
-    for rule in triggered_rules:
-        consequence = rule.get('consequence', {})
-        if consequence.get('severity') == 'critical':
-            flags.append(GovernanceFlag.CRITICAL_CONFLICT)
-            break
+    # GOVERNANCE_COVERAGE_GAP: no rules matched but decision has meaningful content.
+    # Signals that the governance framework may not cover this decision type.
+    # Only fire for substantive decisions (has goals/KPIs/risks, confidence > 0.3).
+    if not triggered_rules:
+        has_content = (
+            len(decision.goals) > 0 or
+            len(decision.kpis) > 0 or
+            len(decision.risks) > 0
+        )
+        if has_content and decision.confidence > 0.3:
+            flags.append(GovernanceFlag.GOVERNANCE_COVERAGE_GAP)
 
     return flags
 
 
-def evaluate_governance(decision: Decision, company_context: dict = None, use_o1: bool = True) -> GovernanceResult:
+def evaluate_governance(decision: Decision, company_context: dict = None, use_o1: bool = True, company_id: str = None) -> GovernanceResult:
     """
     Main governance evaluation function with o1 reasoning.
 
@@ -423,6 +421,7 @@ def evaluate_governance(decision: Decision, company_context: dict = None, use_o1
         decision: Decision object to evaluate
         company_context: Optional company-specific context (policies, thresholds, etc.)
         use_o1: Whether to use o1 for conflict resolution (default: True)
+        company_id: Which company to select rules for
 
     Returns:
         GovernanceResult with approval_chain, flags, requires_human_review, triggered_rules
@@ -430,8 +429,8 @@ def evaluate_governance(decision: Decision, company_context: dict = None, use_o1
     if company_context is None:
         company_context = {}
 
-    # Load rules
-    rules_data = load_rules()
+    # Load rules for correct company
+    rules_data = load_rules(company_id=company_id)
 
     # Compute risk score if not present
     computed_risk_score = compute_risk_score(decision)
@@ -449,8 +448,8 @@ def evaluate_governance(decision: Decision, company_context: dict = None, use_o1
             approval_chain, triggered_rules, decision, rules_data
         )
 
-    # Detect flags (passing triggered_rules for rule-based flags)
-    flags = detect_flags(decision, company_context, computed_risk_score, triggered_rules)
+    # Detect flags (passing triggered_rules and approval_chain for rule-based flags)
+    flags = detect_flags(decision, company_context, computed_risk_score, triggered_rules, approval_chain, rules_data)
 
     # Check if compliance/privacy/strategic rules were triggered (always require review)
     compliance_triggered = any(
@@ -493,7 +492,7 @@ def optimize_approval_chain_with_o1(approval_chain: list, triggered_rules: list,
     }
 
     # Initialize o1 reasoner
-    o1_reasoner = O1Reasoner(model="o1-mini")
+    o1_reasoner = O1Reasoner(model="o4-mini")
 
     # Call o1 for governance reasoning
     o1_result = o1_reasoner.reason_about_governance_conflicts(
@@ -529,18 +528,19 @@ def optimize_approval_chain_with_o1(approval_chain: list, triggered_rules: list,
     return approval_chain
 
 
-def apply_governance_to_decision(decision: Decision, company_context: dict = None) -> Decision:
+def apply_governance_to_decision(decision: Decision, company_context: dict = None, company_id: str = None) -> Decision:
     """
     Apply governance evaluation and update decision object.
 
     Args:
         decision: Decision object to evaluate
         company_context: Optional company-specific context
+        company_id: Which company to select rules for
 
     Returns:
         Updated Decision object with governance fields populated
     """
-    result = evaluate_governance(decision, company_context)
+    result = evaluate_governance(decision, company_context, company_id=company_id)
 
     # Update decision with governance results
     decision.risk_score = result.computed_risk_score

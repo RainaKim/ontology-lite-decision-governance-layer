@@ -21,7 +21,7 @@ class O1Reasoner:
     Uses o1-mini for fast reasoning or o1-preview for deeper analysis.
     """
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "o1-mini"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "o4-mini"):
         """
         Initialize o1 reasoner.
 
@@ -493,38 +493,56 @@ Output JSON:
         decision_owner_names = set()
         matched_person_ids = set()
 
-        for i, owner in enumerate(decision_data.get("owners", [])):
-            owner_name = owner.get("name", owner.get("role", "")).strip().lower()
-            decision_owner_names.add(owner_name)
-            owner_node_id = f"{decision_id}_owner_{i}"
+        explicit_owners = decision_data.get("owners", [])
 
-            _add_node(owner_node_id, "DecisionOwner", "Actor", owner)
-            _add_edge(decision_id, owner_node_id, "OWNED_BY")
+        if explicit_owners:
+            # Owners were stated in input — match them to real personnel
+            for i, owner in enumerate(explicit_owners):
+                owner_name = owner.get("name", owner.get("role", "")).strip().lower()
+                decision_owner_names.add(owner_name)
+                owner_node_id = f"{decision_id}_owner_{i}"
 
-            # Try to match to real personnel
+                _add_node(owner_node_id, "DecisionOwner", "Actor", owner)
+                _add_edge(decision_id, owner_node_id, "OWNED_BY")
+
+                for person in personnel:
+                    p_name = person.get("name", "").lower()
+                    p_role = person.get("role", "").lower()
+                    p_id = person.get("id")
+
+                    if owner_name and (owner_name in p_name or owner_name in p_role
+                                       or p_name in owner_name or p_role in owner_name):
+                        _add_node(p_id, "Person", "Actor", person)
+                        _add_edge(owner_node_id, p_id, "MATCHES_PERSON")
+                        matched_person_ids.add(p_id)
+
+                        # Walk reporting chain upward (2 hops max)
+                        current_id = p_id
+                        for _ in range(2):
+                            reports_to = personnel_by_id.get(current_id, {}).get("reports_to")
+                            if reports_to and reports_to in personnel_by_id:
+                                mgr = personnel_by_id[reports_to]
+                                _add_node(reports_to, "Person", "Actor", mgr)
+                                _add_edge(current_id, reports_to, "REPORTS_TO")
+                                matched_person_ids.add(reports_to)
+                                current_id = reports_to
+                            else:
+                                break
+        else:
+            # No owners stated — inject full personnel hierarchy as candidates
+            # so o1 can reason about who should be accountable.
             for person in personnel:
-                p_name = person.get("name", "").lower()
-                p_role = person.get("role", "").lower()
                 p_id = person.get("id")
+                p_name = person.get("name", "")
+                _add_node(p_id, "CandidateOwner", "Actor", person)
+                matched_person_ids.add(p_id)
 
-                if owner_name and (owner_name in p_name or owner_name in p_role
-                                   or p_name in owner_name or p_role in owner_name):
-                    _add_node(p_id, "Person", "Actor", person)
-                    _add_edge(owner_node_id, p_id, "MATCHES_PERSON")
-                    matched_person_ids.add(p_id)
-
-                    # Walk reporting chain upward (2 hops max)
-                    current_id = p_id
-                    for _ in range(2):
-                        reports_to = personnel_by_id.get(current_id, {}).get("reports_to")
-                        if reports_to and reports_to in personnel_by_id:
-                            mgr = personnel_by_id[reports_to]
-                            _add_node(reports_to, "Person", "Actor", mgr)
-                            _add_edge(current_id, reports_to, "REPORTS_TO")
-                            matched_person_ids.add(reports_to)
-                            current_id = reports_to
-                        else:
-                            break
+            # Add reporting chain edges between candidates
+            for person in personnel:
+                p_id = person.get("id")
+                reports_to = person.get("reports_to")
+                if reports_to and reports_to in personnel_by_id:
+                    _add_edge(p_id, reports_to, "REPORTS_TO")
 
         # ── 3. Decision KPIs → match to strategic goal KPIs ──────────────
         decision_kpi_names = set()
@@ -739,6 +757,9 @@ ANALYSIS TASKS:
    - Do risk mitigations contradict decision goals?
 
 2. **OWNERSHIP & AUTHORITY ISSUES**
+   - If the subgraph contains `CandidateOwner` nodes (no owner was stated in the input),
+     reason about which candidate(s) should be accountable based on the decision's nature,
+     the governance signals, and the reporting hierarchy. Identify them explicitly in `ownership_issues`.
    - Does the decision owner have sufficient authority per the reporting chain?
    - Are there strategic goals owned by different people that this decision spans?
    - Are critical stakeholders missing from the subgraph?
@@ -758,6 +779,21 @@ ANALYSIS TASKS:
    - Missing critical relationships
    - Approval chain inconsistencies
 
+6. **NEXT ACTIONS** (Korean language required)
+   Based on the subgraph — specifically the triggered Policy nodes (governance rules with
+   their actual conditions and thresholds), the approval hierarchy from Actor/Approver nodes,
+   and any missing elements — generate a prioritized list of concrete actions the decision
+   submitter should take to move this decision toward approval.
+
+   Guidelines:
+   - Each action must be specific and actionable, not generic
+   - Where a governance rule sets a financial threshold, name it explicitly
+     (e.g. "예산을 X원 미만으로 조정하거나 — 또는 CFO 승인 요청서와 비용 편익 분석을 첨부하세요")
+   - Where an approver is required, specify what document/evidence to prepare
+   - If a compliance risk must be resolved first, say what to prepare
+   - If owner is missing, suggest which role based on the decision domain
+   - Output in Korean only
+
 Output JSON:
 {{
   "contradictions": [
@@ -773,9 +809,9 @@ Output JSON:
   ],
   "ownership_issues": [
     {{
-      "issue_type": "missing_stakeholder" | "insufficient_authority" | "wrong_owner" | "cross_goal_conflict",
+      "issue_type": "inferred_owner" | "missing_stakeholder" | "insufficient_authority" | "wrong_owner" | "cross_goal_conflict",
       "severity": "critical" | "high" | "medium" | "low",
-      "description": "What's wrong",
+      "description": "What's wrong or who was inferred as the accountable owner and why",
       "recommendation": "Who should be involved or what to change"
     }}
   ],
@@ -795,9 +831,14 @@ Output JSON:
       "reasoning": "Why this is needed based on subgraph analysis"
     }}
   ],
+  "next_actions": [
+    "Korean string: concrete step toward approval — e.g. 'CFO 승인을 받으세요 — 2.5억 원 규모로 자본적 지출 승인 규정(R1)이 적용됩니다. 비용 편익 분석 및 예산 근거를 첨부하거나, 예산을 5,000만 원 이하로 조정하세요'",
+    "Korean string: next step..."
+  ],
   "graph_health_score": 0.0-1.0,
   "confidence": 0.0-1.0,
   "reasoning_summary": "Overall assessment based on subgraph structure"
 }}
 
-Be rigorous. Focus on LOGICAL reasoning from the graph structure. Identify contradictions a human reviewer might miss."""
+Be rigorous. Focus on LOGICAL reasoning from the graph structure. Identify contradictions a human reviewer might miss.
+For next_actions: use the actual rule conditions and thresholds visible in the Policy nodes — do not invent generic guidance."""

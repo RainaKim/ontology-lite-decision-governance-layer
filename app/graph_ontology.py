@@ -12,11 +12,18 @@ from enum import Enum
 
 class NodeType(str, Enum):
     """Core node types in decision governance graph."""
-    ACTOR = "Actor"           # People, roles, departments (who)
+    ACTOR = "Actor"           # Decision owners — people accountable for executing the decision
+    APPROVER = "Approver"     # Governance approvers — people who must authorize the decision
     ACTION = "Action"         # Decisions, tasks, executions (what)
     POLICY = "Policy"         # Rules, constraints, governance policies (how)
     RISK = "Risk"             # Failure vectors, threats, concerns (why not)
     RESOURCE = "Resource"     # Budget, systems, assets, capabilities (with what)
+    # Extended types for frontend visualization
+    GOAL = "Goal"             # Strategic goals
+    KPI = "KPI"               # Key performance indicators
+    COST = "Cost"             # Financial costs/budget
+    REGION = "Region"         # Geographic regions affected
+    DATA_TYPE = "DataType"    # Data classifications (PII, PHI, etc.)
 
 
 class EdgePredicate(str, Enum):
@@ -27,6 +34,12 @@ class EdgePredicate(str, Enum):
     TRIGGERS = "TRIGGERS"                   # Action triggers Policy/Risk
     IMPACTS = "IMPACTS"                     # Action impacts Resource/Actor
     MITIGATES = "MITIGATES"                 # Action mitigates Risk
+    # Extended predicates for ontology triples visualization
+    HAS_GOAL = "HAS_GOAL"                   # Decision has goal
+    HAS_KPI = "HAS_KPI"                     # Decision has KPI
+    HAS_COST = "HAS_COST"                   # Decision has cost
+    AFFECTS_REGION = "AFFECTS_REGION"       # Decision affects region
+    USES_DATA = "USES_DATA"                 # Decision uses data type
 
 
 class Node(BaseModel):

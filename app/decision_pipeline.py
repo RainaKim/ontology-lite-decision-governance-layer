@@ -24,7 +24,8 @@ async def process_decision_with_graph_reasoning(
     repository: Optional[BaseGraphRepository] = None,
     company_context: dict = None,
     use_o1_governance: bool = False,
-    use_o1_graph: bool = True
+    use_o1_graph: bool = True,
+    company_id: Optional[str] = None
 ) -> dict:
     """
     Complete decision governance pipeline with graph reasoning.
@@ -36,6 +37,7 @@ async def process_decision_with_graph_reasoning(
         company_context: Company context for governance
         use_o1_governance: Use o1 for approval chain optimization
         use_o1_graph: Use o1 for graph contradiction analysis
+        company_id: Optional company ID for governance
 
     Returns:
         Complete decision pack with graph reasoning
@@ -55,7 +57,8 @@ async def process_decision_with_graph_reasoning(
     governance_result = evaluate_governance(
         decision,
         company_context=company_context,
-        use_o1=use_o1_governance
+        use_o1=use_o1_governance,
+        company_id=company_id
     )
     governance_dict = governance_result.to_dict()
     decision_dict = decision.model_dump()

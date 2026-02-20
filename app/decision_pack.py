@@ -56,9 +56,19 @@ def build_decision_pack(
     )
 
     # Generate recommended next actions
-    recommended_next_actions = _generate_next_actions(
-        missing_items, approval_chain, flags, governance_status, triggered_rules
-    )
+    # When o1 graph reasoning ran successfully, use its company-context-aware guidance.
+    # It has access to the actual governance rules, thresholds, and personnel hierarchy,
+    # so it can generate accurate guidance for any company — not just hardcoded thresholds.
+    # Fall back to deterministic generation when o1 was not used or failed.
+    o1_next_actions = (graph_insights or {}).get("next_actions", []) if graph_insights else []
+    o1_was_used = (graph_insights or {}).get("analysis_method") == "o1-reasoning"
+
+    if o1_was_used and o1_next_actions:
+        recommended_next_actions = o1_next_actions
+    else:
+        recommended_next_actions = _generate_next_actions(
+            missing_items, approval_chain, flags, governance_status, triggered_rules, decision
+        )
 
     # Extract rationales from triggered rules and approval chain
     rationales = _extract_rationales(triggered_rules, approval_chain)
@@ -252,42 +262,46 @@ def _detect_missing_items(decision: dict, governance: dict, flags: list[str]) ->
     """
     Detect missing required items in the decision.
 
+    KPI and goals are only expected for high/critical strategic-impact decisions.
+    Operational and approval-request decisions (low/medium/null strategic_impact)
+    do not require measurable success criteria — flagging them adds noise.
+
+    Owner uses the governance MISSING_OWNER flag, which already accounts for
+    infer_owner_from_approval_chain so we don't double-flag inferred owners.
+
     Returns list of missing item descriptions.
     """
     missing = []
 
-    # Check for missing owner
-    owners = decision.get("owners", [])
-    if not owners or len(owners) == 0:
+    # Missing owner — use governance flag (already accounts for inferred owners)
+    if "MISSING_OWNER" in flags:
         missing.append("Missing owner")
 
-    # Check for missing KPIs
-    kpis = decision.get("kpis", [])
-    if not kpis or len(kpis) == 0:
-        missing.append("Missing KPI")
+    # KPI and goals — only meaningful for high/critical strategic-impact decisions.
+    # Operational approval requests (low/null strategic_impact) don't need these.
+    strategic_impact = decision.get("strategic_impact")
+    requires_measurables = strategic_impact in ("high", "critical")
+    if requires_measurables:
+        if not decision.get("kpis"):
+            missing.append("Missing KPI")
+        if not decision.get("goals"):
+            missing.append("Missing goals")
 
-    # Check for missing risks
-    risks = decision.get("risks", [])
-    if not risks or len(risks) == 0:
+    # Risks are always expected when the decision has substantive content
+    if not decision.get("risks"):
         missing.append("Missing risk")
 
     # Check for missing approvals flag
     if "MISSING_APPROVAL" in flags:
         missing.append("Missing required approvals")
 
-    # Check for any MISSING_* flags
+    # Check for any other MISSING_* flags
     for flag in flags:
-        if flag.startswith("MISSING_") and flag != "MISSING_APPROVAL":
-            # Convert flag to readable format
+        if flag.startswith("MISSING_") and flag not in ("MISSING_APPROVAL", "MISSING_OWNER"):
             field_name = flag.replace("MISSING_", "").replace("_", " ").lower()
             item_text = f"Missing {field_name}"
             if item_text not in missing:
                 missing.append(item_text)
-
-    # Check for missing goals
-    goals = decision.get("goals", [])
-    if not goals or len(goals) == 0:
-        missing.append("Missing goals")
 
     return missing
 
@@ -325,63 +339,182 @@ def _generate_next_actions(
     approval_chain: list[dict],
     flags: list[str],
     governance_status: str,
-    triggered_rules: list[dict]
+    triggered_rules: list[dict],
+    decision: dict = None
 ) -> list[str]:
     """
-    Generate deterministic recommended next actions.
+    Generate context-aware recommended next actions.
 
-    Returns list of action items.
+    Derives guidance from actual governance data:
+    - Approval chain rationale + rule types → per-approver "approvable path"
+    - Flags → structural issue guidance with resolution alternatives
+    - Decision content → context when no rules match (GOVERNANCE_COVERAGE_GAP)
+
+    No hardcoded rule-ID lookups. All guidance is derived from data.
     """
     actions = []
+    seen = set()
+    decision = decision or {}
 
-    # Handle blocked status first
-    if governance_status == "blocked":
-        actions.append("Resolve blocking conflicts before proceeding")
+    def add(action: str):
+        if action not in seen:
+            seen.add(action)
+            actions.append(action)
 
-    # Missing item actions
+    # Build rule_id → rule metadata map for type/name lookup
+    rule_map = {r.get("rule_id", ""): r for r in triggered_rules}
+
+    # 1. Per-approval-chain step: derive "approvable path" guidance
+    for step in approval_chain:
+        role = step.get("role", "")
+        rationale = step.get("rationale", "")
+        rule_id = step.get("source_rule_id", "")
+        rule_action = step.get("rule_action", "require_approval")
+
+        rule = rule_map.get(rule_id, {})
+        rule_type = rule.get("type", "")
+
+        if rule_action == "require_review":
+            add(_build_review_guidance(role, rule_type, rationale, decision))
+        else:
+            add(_build_approval_guidance(role, rule_type, rationale, decision))
+
+    # 2. Missing item actions — with "OR" alternatives where applicable
     if "Missing owner" in missing_items:
-        actions.append("Assign an accountable owner")
+        add("의사결정 실행 책임자를 지정하세요 — 담당 팀장 또는 프로젝트 리더를 명시하거나, 의사결정문에 실행 주체를 추가하세요")
 
     if "Missing KPI" in missing_items:
-        actions.append("Define measurable KPI and target")
+        add("측정 가능한 KPI를 정의하세요 — 목표 수치, 달성 시점, 측정 주기를 포함하거나, 기존 전략 목표(G1/G2/G3)의 KPI와 연계하세요")
 
     if "Missing risk" in missing_items:
-        actions.append("Add risk assessment and mitigation")
+        add("리스크 평가를 추가하세요 — 주요 실패 요인과 완화 방안을 1개 이상 명시하거나, 리스크가 없다고 판단되면 그 근거를 기술하세요")
 
     if "Missing goals" in missing_items:
-        actions.append("Define organizational goals for this decision")
+        add("조직 목표를 연결하세요 — 글로벌 매출 확대(G1), 규제 준수(G2), 운영비 효율화(G3) 중 하나 이상과 연결하세요")
 
-    if "Missing required approvals" in missing_items:
-        actions.append("Identify and document required approvals")
+    # 3. GOVERNANCE_COVERAGE_GAP — use decision content for context-aware guidance
+    if "GOVERNANCE_COVERAGE_GAP" in flags:
+        risks = decision.get("risks", [])
+        decision_stmt = decision.get("decision_statement", "")
+        if risks:
+            first_risk_desc = risks[0].get("description", "")
+            snippet = first_risk_desc[:60] + "..." if len(first_risk_desc) > 60 else first_risk_desc
+            add(
+                f"적용 가능한 거버넌스 규정이 없습니다 — '{snippet}' 리스크를 고려하여 "
+                f"수동 검토를 진행하거나 거버넌스팀에 해당 의사결정 유형에 대한 규정 추가를 요청하세요"
+            )
+        else:
+            snippet = decision_stmt[:50] if decision_stmt else "이 의사결정"
+            add(
+                f"적용 가능한 거버넌스 규정이 없습니다 — '{snippet}' 유형의 의사결정에 대한 "
+                f"거버넌스 규정 추가를 검토하거나, 준법감시인에게 수동 검토를 요청하세요"
+            )
 
-    # Approval chain actions
-    if approval_chain and len(approval_chain) > 0:
-        required_approvals = [
-            step["role"] for step in approval_chain if step.get("required", True)
-        ]
-        if required_approvals:
-            roles_str = ", ".join(required_approvals)
-            actions.append(f"Request approvals: {roles_str}")
+    # 4. Other flag-specific guidance
+    if "CRITICAL_CONFLICT" in flags:
+        add("의사결정 내 상충 항목을 해소하세요 — 목표, KPI, 리스크 간 모순 내용을 수정한 후 재제출하세요")
 
-    # Flag-specific actions
-    if "PRIVACY_REVIEW_REQUIRED" in flags:
-        actions.append("Initiate privacy/security review with CTO")
+    # 5. Blocked with no actions yet — escalation fallback
+    if governance_status == "blocked" and not actions:
+        add("차단 원인 해소 전 진행 불가 — 위 항목들을 해결한 후 거버넌스 검토팀에 재제출하세요")
 
-    if "FINANCIAL_THRESHOLD_EXCEEDED" in flags:
-        actions.append("Confirm budget justification with CFO")
+    # 6. Needs review with no actions yet — reviewer assignment fallback
+    if governance_status in ("needs_review", "review_required") and not actions:
+        add("검토 담당자를 배정하고 의사결정 패키지를 전달하세요")
 
-    # Rule-specific actions
-    for rule in triggered_rules:
-        rule_id = rule.get("rule_id", "")
-        if rule_id == "R006":  # Financial threshold rule
-            if "Confirm budget justification with CFO" not in actions:
-                actions.append("Prepare financial impact analysis")
-
-    # Default action if nothing else
-    if not actions and governance_status == "compliant":
-        actions.append("Proceed with execution after final review")
+    # 7. Compliant — confirm and proceed
+    if governance_status == "compliant" and not actions:
+        add("모든 거버넌스 요건을 충족했습니다 — 최종 검토 후 실행을 진행하세요")
 
     return actions
+
+
+def _build_review_guidance(role: str, rule_type: str, rationale: str, decision: dict) -> str:
+    """
+    Build context-aware guidance for a review-type (require_review) approval step.
+    Tells the user what to prepare and attach for this reviewer.
+    """
+    if rule_type == "compliance":
+        if rationale:
+            return (
+                f"{role} 검토를 받으세요 — {rationale} 관련 내용을 사전에 정리하고 "
+                f"관련 문서(정책 근거, 위험 완화 방안)를 첨부하세요"
+            )
+        return f"{role} 검토를 받으세요 — 준법 리스크 관련 서류(정책 근거, 위험 완화 방안)를 첨부하세요"
+
+    if rule_type == "hr":
+        headcount = decision.get("headcount_change")
+        if headcount and headcount > 0:
+            return (
+                f"{role} 검토를 받으세요 — {headcount}명 채용에 대한 "
+                f"직무 기술서, 예산, 채용 일정이 포함된 인력 계획서를 첨부하세요"
+            )
+        return f"{role} 검토를 받으세요 — 인력 계획서 및 채용 요건을 첨부하세요"
+
+    if rule_type == "financial":
+        cost = decision.get("cost")
+        if cost:
+            cost_str = f"{int(cost):,}원"
+            return (
+                f"{role} 검토를 받으세요 — {cost_str} 규모 지출에 대한 "
+                f"예산 근거 및 비용 편익 분석을 첨부하세요"
+            )
+        return f"{role} 검토를 받으세요 — 예산 근거 및 비용 편익 분석을 첨부하세요"
+
+    if rationale:
+        return f"{role} 검토를 받으세요 — {rationale}"
+    return f"{role} 검토를 받으세요"
+
+
+def _build_approval_guidance(role: str, rule_type: str, rationale: str, decision: dict) -> str:
+    """
+    Build context-aware 'approve OR adjust' guidance for a hard approval step.
+    Where possible, offers a concrete alternative path (e.g. reduce below threshold).
+    """
+    if rule_type == "financial":
+        cost = decision.get("cost")
+        if cost:
+            cost_str = f"{int(cost):,}원"
+            if cost > 1_000_000_000:
+                return (
+                    f"{role} 승인을 받으세요 — {cost_str} 규모로 이사회급 승인이 필요합니다. "
+                    f"CFO 및 CEO 순차 승인 문서를 준비하거나, 예산 규모를 10억 원 미만으로 조정하세요"
+                )
+            elif cost > 50_000_000:
+                return (
+                    f"{role} 승인을 받으세요 — {cost_str} 규모로 CFO 승인이 필요합니다. "
+                    f"비용 편익 분석 및 예산 근거를 포함한 승인 요청서를 제출하거나, "
+                    f"예산을 5,000만 원 이하로 조정하세요"
+                )
+            else:
+                return f"{role} 승인을 받으세요 — {cost_str} 규모 지출에 대한 승인 요청서를 제출하세요"
+        if rationale:
+            return f"{role} 승인을 받으세요 — {rationale}. 예산 근거 및 비용 편익 분석을 첨부하세요"
+        return f"{role} 승인을 받으세요 — 예산 근거 및 비용 편익 분석을 첨부하세요"
+
+    if rule_type == "strategic":
+        strategic_impact = decision.get("strategic_impact", "")
+        if strategic_impact == "critical":
+            return (
+                f"{role} 승인을 받으세요 — 전사적 전략 영향도가 '중대(critical)'로 평가되었습니다. "
+                f"전략 검토 보고서 및 이해관계자 분석을 포함한 경영진 보고서를 준비하세요"
+            )
+        if rationale:
+            return f"{role} 승인을 받으세요 — {rationale}. 전략 정합성 검토 자료를 첨부하세요"
+        return f"{role} 승인을 받으세요 — 전략적 영향도 검토 자료를 첨부하세요"
+
+    if rule_type == "hr":
+        headcount = decision.get("headcount_change")
+        if headcount and headcount >= 10:
+            return (
+                f"{role} 승인을 받으세요 — {headcount}명 이상 대규모 인력 변경으로 CEO 승인이 필요합니다. "
+                f"조직 변경 계획서(인력 계획, 예산, 전략적 근거)를 준비하거나, 채용 규모를 10명 미만으로 조정하세요"
+            )
+        return f"{role} 승인을 받으세요 — 인력 변경 계획서를 제출하세요"
+
+    if rationale:
+        return f"{role} 승인을 받으세요 — {rationale}"
+    return f"{role} 승인을 받으세요"
 
 
 def _extract_rationales(triggered_rules: list[dict], approval_chain: list[dict]) -> list[str]:
