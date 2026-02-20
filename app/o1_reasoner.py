@@ -756,7 +756,18 @@ ANALYSIS TASKS:
    - Are KPIs measuring opposing outcomes (e.g. "reduce cost" vs "increase spend")?
    - Do risk mitigations contradict decision goals?
 
-2. **OWNERSHIP & AUTHORITY ISSUES**
+2. **STRATEGIC GOAL CONFLICTS** (CRITICAL)
+   - Does this decision CONTRADICT any company strategic goals (StrategicGoal nodes)?
+   - Examples of contradictions:
+     * Decision increases costs significantly but G3 targets cost reduction
+     * Decision creates compliance risk but G2 targets zero violations
+     * Decision causes delays but G1 targets faster time-to-market
+     * Decision violates safety protocols but G1 targets patient safety excellence
+   - Look at decision risks, costs, and impacts vs. strategic goal descriptions and KPI targets
+   - If contradiction found, mark as severity "critical" and add to contradictions list
+   - This is the MOST IMPORTANT check - strategic misalignment must be flagged
+
+3. **OWNERSHIP & AUTHORITY ISSUES**
    - If the subgraph contains `CandidateOwner` nodes (no owner was stated in the input),
      reason about which candidate(s) should be accountable based on the decision's nature,
      the governance signals, and the reporting hierarchy. Identify them explicitly in `ownership_issues`.
@@ -764,22 +775,22 @@ ANALYSIS TASKS:
    - Are there strategic goals owned by different people that this decision spans?
    - Are critical stakeholders missing from the subgraph?
 
-3. **RISK COVERAGE GAPS**
+4. **RISK COVERAGE GAPS**
    - Are decision risks within company risk tolerance thresholds?
    - Are there obvious risks not captured?
    - Do mitigations actually address the identified risks?
 
-4. **ALIGNMENT GAPS**
+5. **ALIGNMENT GAPS**
    - Does the decision connect to appropriate strategic goals?
    - Are there orphaned goals or KPIs with no clear link?
    - Do KPI targets conflict across connected goals?
 
-5. **STRUCTURAL ISSUES**
+6. **STRUCTURAL ISSUES**
    - Circular dependencies between nodes
    - Missing critical relationships
    - Approval chain inconsistencies
 
-6. **NEXT ACTIONS** (Korean language required)
+7. **NEXT ACTIONS** (Korean language required)
    Based on the subgraph — specifically the triggered Policy nodes (governance rules with
    their actual conditions and thresholds), the approval hierarchy from Actor/Approver nodes,
    and any missing elements — generate a prioritized list of concrete actions the decision
@@ -805,6 +816,18 @@ Output JSON:
       "evidence": "Specific edges/nodes that prove this",
       "impact": "What could go wrong",
       "recommendation": "How to resolve"
+    }}
+  ],
+  "strategic_goal_conflicts": [
+    {{
+      "goal_id": "G1" | "G2" | "G3",
+      "goal_name": "Strategic goal name from StrategicGoal node",
+      "conflict_type": "cost_contradiction" | "compliance_contradiction" | "timeline_contradiction" | "safety_contradiction" | "quality_contradiction",
+      "severity": "critical" | "high" | "medium",
+      "description": "How the decision contradicts this strategic goal",
+      "evidence": "Specific decision properties (cost, risks, timeline) vs. goal KPI targets",
+      "impact": "Impact on achieving the strategic goal",
+      "recommendation": "How to align decision with goal"
     }}
   ],
   "ownership_issues": [
