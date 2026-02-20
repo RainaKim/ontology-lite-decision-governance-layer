@@ -1,34 +1,34 @@
 {
   "company": {
     "name": "State of Delaware (GSA)",
-    "industry": "Public Sector",
-    "size": "12000+ employees",
-    "regions": ["Delaware", "Mid-Atlantic"]
+    "industry": "공공부문",
+    "size": "12,000명 이상",
+    "regions": ["델라웨어주", "미국 중부대서양"]
   },
 
   "approval_hierarchy": {
     "levels": [
-      { "level": 1, "title": "Budget Officer", "authority": "team_level", "max_budget_authority": 50000 },
-      { "level": 2, "title": "Director of Procurement", "authority": "department_head", "max_budget_authority": 500000 },
-      { "level": 3, "title": "Chief Legal Counsel", "authority": "c_level", "max_budget_authority": null },
-      { "level": 3, "title": "Chief Ethics Officer", "authority": "c_level", "max_budget_authority": null },
-      { "level": 3, "title": "State Controller", "authority": "c_level", "max_budget_authority": 10000000 },
-      { "level": 4, "title": "State Board Chair", "authority": "executive", "max_budget_authority": null }
+      { "level": 1, "title": "예산담당관", "authority": "team_level", "max_budget_authority": 50000 },
+      { "level": 2, "title": "조달책임자", "authority": "department_head", "max_budget_authority": 500000 },
+      { "level": 3, "title": "법률고문", "authority": "c_level", "max_budget_authority": null },
+      { "level": 3, "title": "윤리책임자", "authority": "c_level", "max_budget_authority": null },
+      { "level": 3, "title": "재정통제관", "authority": "c_level", "max_budget_authority": 10000000 },
+      { "level": 4, "title": "이사회장", "authority": "executive", "max_budget_authority": null }
     ],
     "personnel": [
-      { "id": "board_chair_001", "name": "Commissioner Eleanor Hayes", "role": "State Board Chair", "level": 4, "department": "Executive Board", "reports_to": null },
-      { "id": "legal_counsel_001", "name": "Robert Caldwell", "role": "Chief Legal Counsel", "level": 3, "department": "Office of Legal Affairs", "reports_to": "board_chair_001" },
-      { "id": "chief_ethics_001", "name": "Sandra Kim", "role": "Chief Ethics Officer", "level": 3, "department": "Office of Ethics & Compliance", "reports_to": "board_chair_001" },
-      { "id": "state_controller_001", "name": "Marcus Johnson", "role": "State Controller", "level": 3, "department": "Office of Management & Budget", "reports_to": "board_chair_001" },
-      { "id": "procurement_dir_001", "name": "Diane Foster", "role": "Director of Procurement", "level": 2, "department": "Division of Procurement Services", "reports_to": "legal_counsel_001" },
-      { "id": "budget_officer_001", "name": "Thomas Wright", "role": "Budget Officer", "level": 1, "department": "Office of Management & Budget", "reports_to": "state_controller_001" }
+      { "id": "board_chair_001", "name": "Eleanor Hayes", "role": "이사회장", "level": 4, "department": "집행이사회", "reports_to": null },
+      { "id": "legal_counsel_001", "name": "Robert Caldwell", "role": "법률고문", "level": 3, "department": "법무실", "reports_to": "board_chair_001" },
+      { "id": "chief_ethics_001", "name": "Sandra Kim", "role": "윤리책임자", "level": 3, "department": "윤리준법실", "reports_to": "board_chair_001" },
+      { "id": "state_controller_001", "name": "Marcus Johnson", "role": "재정통제관", "level": 3, "department": "예산관리국", "reports_to": "board_chair_001" },
+      { "id": "procurement_dir_001", "name": "Diane Foster", "role": "조달책임자", "level": 2, "department": "조달서비스부", "reports_to": "legal_counsel_001" },
+      { "id": "budget_officer_001", "name": "Thomas Wright", "role": "예산담당관", "level": 1, "department": "예산관리국", "reports_to": "state_controller_001" }
     ]
   },
 
   "strategic_goals": [
-    { "goal_id": "G1", "name": "Procurement Integrity & Transparency", "description": "공정하고 투명한 경쟁 입찰 및 조달 절차 준수", "owner_id": "procurement_dir_001", "kpis": [ { "kpi_id": "K1", "name": "Competitive Bid Rate", "target": "95% 이상 경쟁 입찰" }, { "kpi_id": "K2", "name": "Sole Source Justification Compliance", "target": "100% 수의계약 사유 보고서" } ], "priority": "critical" },
-    { "goal_id": "G2", "name": "Ethics Compliance & Anti-Corruption", "description": "윤리 위반 및 이해충돌, 부패 사례 제로 유지", "owner_id": "chief_ethics_001", "kpis": [ { "kpi_id": "K3", "name": "Ethics Violations", "target": "연간 0건" }, { "kpi_id": "K4", "name": "Conflict of Interest Disclosures", "target": "100% 72시간 내 신고" } ], "priority": "critical" },
-    { "goal_id": "G3", "name": "Fiscal Accountability & Budget Discipline", "description": "공공 자금의 적정 집행 및 예산 효율성 8% 개선", "owner_id": "state_controller_001", "kpis": [ { "kpi_id": "K5", "name": "Budget Variance", "target": "3% 미만 예산 변동" }, { "kpi_id": "K6", "name": "Procurement Cost Efficiency", "target": "계약당 비용 8% 절감" } ], "priority": "high" }
+    { "goal_id": "G1", "name": "조달 투명성 및 청렴성", "description": "공정하고 투명한 경쟁 입찰 및 조달 절차 준수", "owner_id": "procurement_dir_001", "kpis": [ { "kpi_id": "K1", "name": "경쟁입찰 비율", "target": "95% 이상 경쟁 입찰" }, { "kpi_id": "K2", "name": "수의계약 사유 보고 준수율", "target": "100% 수의계약 사유 보고서" } ], "priority": "critical" },
+    { "goal_id": "G2", "name": "윤리 준수 및 부패 방지", "description": "윤리 위반 및 이해충돌, 부패 사례 제로 유지", "owner_id": "chief_ethics_001", "kpis": [ { "kpi_id": "K3", "name": "윤리 위반 건수", "target": "연간 0건" }, { "kpi_id": "K4", "name": "이해충돌 신고 준수", "target": "100% 72시간 내 신고" } ], "priority": "critical" },
+    { "goal_id": "G3", "name": "재정 책임성 및 예산 규율", "description": "공공 자금의 적정 집행 및 예산 효율성 8% 개선", "owner_id": "state_controller_001", "kpis": [ { "kpi_id": "K5", "name": "예산 변동률", "target": "3% 미만 예산 변동" }, { "kpi_id": "K6", "name": "조달 비용 효율성", "target": "계약당 비용 8% 절감" } ], "priority": "high" }
   ],
 
   "risk_tolerance": {
@@ -37,15 +37,15 @@
   },
 
   "governance_rules": [
-    { "rule_id": "R1", "name": "Competitive Procurement Requirement", "type": "financial", "description": "기준 초과 계약은 경쟁 입찰 또는 수의계약 사유 보고서 필요", "condition": { "field": "cost", "operator": ">", "value": 100000 }, "consequence": { "action": "require_approval", "approver_role": "State Controller", "approver_id": "state_controller_001", "severity": "high" }, "active": true },
-    { "rule_id": "R2", "name": "Ethics & Conflict of Interest Review", "type": "compliance", "description": "특수관계자, 정치 후원, 로비스트 연계, 소급 정책 변경은 윤리 책임자 검토 필요", "condition": { "operator": "OR", "conditions": [ { "field": "counterparty_relation", "operator": "==", "value": "related_party" }, { "field": "policy_change_type", "operator": "==", "value": "retroactive" } ] }, "consequence": { "action": "require_review", "approver_role": "Chief Ethics Officer", "approver_id": "chief_ethics_001", "severity": "critical" }, "active": true },
-    { "rule_id": "R3", "name": "Critical Public Interest Escalation", "type": "strategic", "description": "공공 이익 및 법 준수에 중대한 영향 시 이사회장 승인 필요", "condition": { "field": "strategic_impact", "operator": "==", "value": "critical" }, "consequence": { "action": "require_approval", "approver_role": "State Board Chair", "approver_id": "board_chair_001", "severity": "critical" }, "active": true },
-    { "rule_id": "R4", "name": "Strategic Alignment Rule", "type": "strategic", "description": "주요 공공 지출은 최소 하나의 전략 목표와 연계 필요", "condition": { "field": "cost", "operator": ">", "value": 50000 }, "consequence": { "action": "require_goal_mapping", "severity": "medium", "message": "의사결정은 최소 하나의 전략 목표(G1, G2, G3)와 연계되어야 합니다" }, "active": true },
-    { "rule_id": "R5", "name": "Major Contract Board Approval", "type": "financial", "description": "대규모 계약은 State Controller 및 이사회장 이중 승인 필요", "condition": { "field": "cost", "operator": ">", "value": 5000000 }, "consequence": { "action": "require_approval", "approver_roles": ["State Controller", "State Board Chair"], "approver_ids": ["state_controller_001", "board_chair_001"], "severity": "critical", "requires_sequential": true }, "active": true }
+    { "rule_id": "R1", "name": "경쟁 조달 요건", "type": "financial", "description": "기준 초과 계약은 경쟁 입찰 또는 수의계약 사유 보고서 필요", "condition": { "field": "cost", "operator": ">", "value": 100000 }, "consequence": { "action": "require_approval", "approver_role": "재정통제관", "approver_id": "state_controller_001", "severity": "high" }, "active": true },
+    { "rule_id": "R2", "name": "윤리 및 이해충돌 검토", "type": "compliance", "description": "특수관계자, 정치 후원, 로비스트 연계, 소급 정책 변경은 윤리 책임자 검토 필요", "condition": { "operator": "OR", "conditions": [ { "field": "counterparty_relation", "operator": "==", "value": "related_party" }, { "field": "policy_change_type", "operator": "==", "value": "retroactive" } ] }, "consequence": { "action": "require_review", "approver_role": "윤리책임자", "approver_id": "chief_ethics_001", "severity": "critical" }, "active": true },
+    { "rule_id": "R3", "name": "중대 공익 승인", "type": "strategic", "description": "공공 이익 및 법 준수에 중대한 영향 시 이사회장 승인 필요", "condition": { "field": "strategic_impact", "operator": "==", "value": "critical" }, "consequence": { "action": "require_approval", "approver_role": "이사회장", "approver_id": "board_chair_001", "severity": "critical" }, "active": true },
+    { "rule_id": "R4", "name": "전략 정합성 규정", "type": "strategic", "description": "주요 공공 지출 또는 전략적으로 중대한 의사결정은 최소 하나의 전략 목표와 연계 필요", "condition": { "operator": "OR", "conditions": [ { "field": "cost", "operator": ">", "value": 50000 }, { "field": "strategic_impact", "operator": "==", "value": "high" }, { "field": "strategic_impact", "operator": "==", "value": "critical" } ] }, "consequence": { "action": "require_goal_mapping", "severity": "medium", "message": "의사결정은 최소 하나의 전략 목표(G1, G2, G3)와 연계되어야 합니다" }, "active": true },
+    { "rule_id": "R5", "name": "대규모 계약 이사회 승인", "type": "financial", "description": "대규모 계약은 재정통제관 및 이사회장 이중 승인 필요", "condition": { "field": "cost", "operator": ">", "value": 5000000 }, "consequence": { "action": "require_approval", "approver_roles": ["재정통제관", "이사회장"], "approver_ids": ["state_controller_001", "board_chair_001"], "severity": "critical", "requires_sequential": true }, "active": true }
   ],
 
   "metadata": {
-    "version": "1.0.0",
+    "version": "2.0.0",
     "purpose": "State of Delaware GSA 거버넌스 프레임워크 데모"
   }
 }

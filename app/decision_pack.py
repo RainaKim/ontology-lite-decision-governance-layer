@@ -41,11 +41,16 @@ def build_decision_pack(
     strategic_impact = decision.get("strategic_impact")
 
     # Extract governance fields
-    flags = governance.get("flags", [])
+    flags = list(governance.get("flags", []))  # Copy to avoid mutating original
     requires_human_review = governance.get("requires_human_review", True)
     approval_chain = governance.get("approval_chain", [])
     triggered_rules = governance.get("triggered_rules", [])
     computed_risk_score = governance.get("computed_risk_score", 0.0)
+
+    # Add STRATEGIC_MISALIGNMENT flag if graph insights detected conflicts
+    if graph_insights and graph_insights.get("strategic_goal_conflicts"):
+        if "STRATEGIC_MISALIGNMENT" not in flags:
+            flags.append("STRATEGIC_MISALIGNMENT")
 
     # Detect missing items
     missing_items = _detect_missing_items(decision, governance, flags)
@@ -73,6 +78,9 @@ def build_decision_pack(
     # Extract rationales from triggered rules and approval chain
     rationales = _extract_rationales(triggered_rules, approval_chain)
 
+    # Map strategic goals with conflict/alignment indicators
+    strategic_goals_mapped = _map_strategic_goals(company, graph_insights)
+
     # Build title
     title = _generate_title(decision_statement, strategic_impact)
 
@@ -89,7 +97,8 @@ def build_decision_pack(
             "graph_analysis_enabled": graph_insights is not None
         },
         "goals_kpis": {
-            "goals": [
+            "strategic_goals": strategic_goals_mapped,
+            "decision_objectives": [
                 {
                     "description": g.get("description", ""),
                     "metric": g.get("metric")
@@ -256,6 +265,73 @@ def _summarize_conclusion(
         )
 
     return "Decision is compliant with governance rules. No blocking issues found."
+
+
+def _map_strategic_goals(company: dict, graph_insights: dict = None) -> list[dict]:
+    """
+    Map decision to company strategic goals with alignment/conflict indicators.
+
+    Uses o1 graph reasoning results to determine which strategic goals are relevant
+    and whether the decision aligns or conflicts with them.
+
+    Args:
+        company: Company data with strategic_goals
+        graph_insights: O1 graph reasoning results with strategic_goal_conflicts
+
+    Returns:
+        List of strategic goals with alignment status:
+        [
+            {
+                "goal_id": "G3",
+                "name": "운영비용 효율화",
+                "status": "conflict" | "aligned" | "neutral",
+                "reasoning": "사용량 대비 30% 과다 지출이 10% 비용 절감 목표와 상충",
+                "kpis": [...],
+                "priority": "high"
+            }
+        ]
+    """
+    if not company:
+        return []
+
+    strategic_goals = company.get("strategic_goals", [])
+    if not strategic_goals:
+        return []
+
+    # Build goal map
+    goal_map = {g["goal_id"]: g for g in strategic_goals}
+
+    # Extract conflicts from o1 insights
+    conflicts_by_goal = {}
+    if graph_insights and graph_insights.get("strategic_goal_conflicts"):
+        for conflict in graph_insights["strategic_goal_conflicts"]:
+            goal_id = conflict.get("goal_id")
+            if goal_id:
+                conflicts_by_goal[goal_id] = conflict
+
+    # Map each strategic goal
+    mapped_goals = []
+    for goal_id, goal in goal_map.items():
+        conflict = conflicts_by_goal.get(goal_id)
+
+        if conflict:
+            # Goal has conflict
+            mapped_goals.append({
+                "goal_id": goal_id,
+                "name": goal.get("name"),
+                "status": "conflict",
+                "reasoning": conflict.get("description", "전략 목표와 상충"),
+                "conflict_type": conflict.get("conflict_type"),
+                "kpis": goal.get("kpis", []),
+                "priority": goal.get("priority"),
+                "severity": conflict.get("severity", "high")
+            })
+        # If no explicit conflict, only show goals that are likely relevant
+        # (otherwise we'd show all 3 goals for every decision)
+        # For now, we'll rely on o1 to only include relevant goals in the subgraph
+        # Future: Add heuristic alignment detection for non-o1 path
+
+    return mapped_goals
 
 
 def _detect_missing_items(decision: dict, governance: dict, flags: list[str]) -> list[str]:

@@ -268,8 +268,15 @@
       "rule_id": "R4",
       "name": "전략 정합성 규정",
       "type": "strategic",
-      "description": "주요 재무 의사결정은 최소 하나 이상의 전략 목표와 연계 필요",
-      "condition": { "field": "cost", "operator": ">", "value": 50000000 },
+      "description": "주요 재무 의사결정 또는 전략적으로 중대한 의사결정은 최소 하나 이상의 전략 목표와 연계 필요",
+      "condition": {
+        "operator": "OR",
+        "conditions": [
+          { "field": "cost", "operator": ">", "value": 50000000 },
+          { "field": "strategic_impact", "operator": "==", "value": "high" },
+          { "field": "strategic_impact", "operator": "==", "value": "critical" }
+        ]
+      },
       "consequence": {
         "action": "require_goal_mapping",
         "severity": "medium",

@@ -189,9 +189,14 @@ policy_change_type  'retroactive' when the decision changes rules for events tha
                     breaching current limits is not retroactive.
 
 strategic_impact    How severely would this alter the company's trajectory if it
-                    went wrong? critical = largely irreversible, company-wide.
+                    went wrong? critical = largely irreversible, company-wide, OR
+                    involves patient safety/life-threatening scenarios (healthcare).
                     high = significant but recoverable. medium = department-level.
                     low = local or operational.
+
+                    HEALTHCARE: Patient safety issues, clinical protocol violations
+                    (Emergency Care Protocol, Patient Safety Protocol), and emergency
+                    care failures are ALWAYS "critical" regardless of scope.
 
 involves_compliance_risk  True when the decision explicitly raises anti-bribery,
                     ethics code, gift/entertainment policy, or conflict-of-interest
@@ -199,6 +204,19 @@ involves_compliance_risk  True when the decision explicitly raises anti-bribery,
 
 involves_hiring     True only when someone is being added to the payroll or
                     employment headcount changes as a direct result.
+
+risks.severity      Assess actual impact if risk materializes:
+                    Critical = life-threatening, irreversible harm, or existential
+                             threat (patient death/injury, clinical protocol violations,
+                             major compliance breach, company bankruptcy)
+                    High = severe but recoverable damage (reputation harm, major
+                           financial loss, regulatory penalty)
+                    Medium = moderate recoverable impact (delays, minor losses)
+                    Low = minimal impact (process inefficiency, minor cost)
+
+                    HEALTHCARE: Clinical protocol violations (Emergency Care Protocol,
+                    Patient Safety Protocol) = CRITICAL severity. Quality standard
+                    violations = HIGH severity.
 
 ── OUTPUT RULES ────────────────────────────────────────────────────────────
 
