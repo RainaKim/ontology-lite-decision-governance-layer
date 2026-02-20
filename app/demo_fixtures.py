@@ -127,13 +127,6 @@ _FIXTURES_BY_COMPANY: dict[str, list[Fixture]] = {
             tags=["Procurement", "Compliance", "Sole Source"],
         ),
         Fixture(
-            id="G02",
-            company_id="delaware_gsa",
-            title="연말 잔여 예산 불필요 소진",
-            text="회계연도 종료 직전, 불필요한 사무용 기기 대량 구매를 통한 남은 예산 소진 시도. 예산 이월 방지를 위한 부적절 집행 리스크. 과거 동일 패턴의 낭비 사례와 대조.",
-            tags=["Budget", "Waste", "Procurement"],
-        ),
-        Fixture(
             id="G03",
             company_id="delaware_gsa",
             title="로비스트 연계 업체 이해충돌 계약",
