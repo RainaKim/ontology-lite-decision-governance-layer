@@ -134,13 +134,6 @@ _FIXTURES_BY_COMPANY: dict[str, list[Fixture]] = {
             tags=["Ethics", "Conflict of Interest", "Lobbyist"],
         ),
         Fixture(
-            id="G04",
-            company_id="delaware_gsa",
-            title="공공 보조금 중복 수혜 탐지",
-            text="타 부서에서 이미 동일한 목적으로 보조금을 수령한 중소기업에 추가 지원금 배정. 공공 보조금 중복 수혜 방지 조항 위반. 부처 간 데이터 연동을 통한 부정 수급 차단.",
-            tags=["Grant", "Fraud", "Compliance"],
-        ),
-        Fixture(
             id="G05",
             company_id="delaware_gsa",
             title="긴급 재난 예산 용도 외 전용",
@@ -153,27 +146,6 @@ _FIXTURES_BY_COMPANY: dict[str, list[Fixture]] = {
             title="환경영향평가 미승인 입찰 공고",
             text="환경 영향 평가 보고서가 최종 승인되지 않은 상태에서 대규모 교량 건설 입찰 공고. Environmental Policy Act 위반. 절차적 결격 사유로 인한 입찰 무효화 가능성.",
             tags=["Environment", "Compliance", "Infrastructure"],
-        ),
-        Fixture(
-            id="G07",
-            company_id="delaware_gsa",
-            title="공직자 한도 초과 외부 강의료 수령",
-            text="조달 담당 공무원이 관련 업체로부터 규정된 한도를 초과하는 외부 강의료 수령. 공직자 윤리 규정 및 부정청탁금지법 위반. 징계 위원회 자동 회부 로직.",
-            tags=["Ethics", "Public Official", "Discipline"],
-        ),
-        Fixture(
-            id="G08",
-            company_id="delaware_gsa",
-            title="노후 시스템 고비용 유지보수 갱신",
-            text="신규 전환보다 유지보수 비용이 더 높은 노후 메인프레임 유지보수 계약 갱신 요청. Digital Transformation 전략과 상충. 예산 효율성(Efficiency) 관점의 기각 권고.",
-            tags=["IT", "Budget", "Modernization"],
-        ),
-        Fixture(
-            id="G09",
-            company_id="delaware_gsa",
-            title="사회적 약자 기업 비율 미달 조달",
-            text="사회적 약자 기업(MWBE) 우대 비율 15%를 충족하지 못한 연간 조달 계획 승인 요청. State Procurement Goal 미달. 할당량 충족을 위한 공급망 재설계 권고.",
-            tags=["Equity", "MWBE", "Procurement"],
         ),
         Fixture(
             id="G10",
