@@ -94,6 +94,7 @@ async def analyze_decision_graph_with_o1(
             "selection_criteria": subgraph_meta.get("selection_criteria", []),
         },
         "logical_analysis": o1_insights.get("contradictions", []),
+        "strategic_goal_conflicts": o1_insights.get("strategic_goal_conflicts", []),
         "ownership_validation": o1_insights.get("ownership_issues", []),
         "risk_coverage": o1_insights.get("risk_gaps", []),
         "policy_conflicts": o1_insights.get("policy_conflicts", []),
