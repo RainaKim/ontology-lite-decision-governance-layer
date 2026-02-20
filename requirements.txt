@@ -1,14 +1,14 @@
 # Decision Governance Layer - Dependencies
 # Python 3.11+
 
-# FastAPI and server
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
-pydantic-core==2.14.6
+# FastAPI and server (versions with guaranteed pre-built wheels)
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.4.2
+pydantic-core==2.10.1
 
 # OpenAI client
-openai>=1.54.0
+openai==1.54.0
 
 # Utilities
 python-dotenv==1.0.0
