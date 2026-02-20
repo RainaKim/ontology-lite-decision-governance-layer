@@ -3,11 +3,13 @@ services:
     name: decision-governance-api
     runtime: python
     plan: free
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install --only-binary :all: -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
+      - key: PIP_NO_BINARY
+        value: ""
       - key: OPENAI_API_KEY
         sync: false
     healthCheckPath: /health
