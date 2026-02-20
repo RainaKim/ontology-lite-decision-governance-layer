@@ -35,10 +35,21 @@ def build_decision_pack(
     goals = decision.get("goals", [])
     kpis = decision.get("kpis", [])
     risks = decision.get("risks", [])
-    owners = decision.get("owners", [])
+    owners = list(decision.get("owners", []))  # Copy to allow mutation
     assumptions = decision.get("assumptions", [])
     confidence = decision.get("confidence", 0.0)
     strategic_impact = decision.get("strategic_impact")
+
+    # Apply high-confidence inferred owners from graph reasoning
+    if graph_insights and graph_insights.get("inferred_owners"):
+        for inferred in graph_insights["inferred_owners"]:
+            # Only apply high-confidence inferences
+            if inferred.get("confidence") == "high":
+                owners.append({
+                    "name": inferred.get("name"),
+                    "role": inferred.get("role"),
+                    "responsibility": None
+                })
 
     # Extract governance fields
     flags = list(governance.get("flags", []))  # Copy to avoid mutating original
