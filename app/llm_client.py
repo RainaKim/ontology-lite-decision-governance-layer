@@ -79,7 +79,7 @@ class LLMClient:
   "policy_change_type": "string or null ('retroactive' ONLY if the decision explicitly applies new rules or terms to past events/transactions that already occurred; decisions that conflict with current strategy or KPIs are NOT retroactive; null otherwise)",
   "strategic_impact": "string or null (one of: 'low', 'medium', 'high', 'critical' — assess based on scope, cost, and organizational impact)",
   "uses_pii": "boolean or null (true ONLY if the decision involves processing, transferring, exposing, or accessing identifiable CUSTOMER/end-user personal data — e.g. 고객 개인정보, customer profiles, user behavioral data, patient health records; null otherwise. HR/hiring decisions, internal employee data, budget figures, and operational decisions do NOT trigger this — only customer-facing personal data)",
-  "cost": "number or null (explicit amount stated in text → convert: '2.5억 원' → 250000000, '$3.5M' → 3500000; OR for well-known expensive equipment/assets with no stated amount → use UPPER BOUND of typical market range; null for items with variable costs)",
+  "cost": "number or null (explicit amount stated in text → convert: '2.5억 원' → 250000000, '$3.5M' → 3500000; OR for well-known expensive equipment/assets with no stated amount → use UPPER BOUND of typical market range; use context to determine equipment type if needed (e.g., 'idle MRI... new expensive equipment' implies new equipment is also MRI); null for items with variable costs)",
   "cost_estimate_range": "string or null (when cost is inferred from domain knowledge, provide the market range in the INPUT LANGUAGE, e.g. '$1.5M-$3.5M (typical MRI equipment)' or '15억-35억 원 (일반적인 MRI 장비 시장가)'; null if cost was explicitly stated)",
   "target_market": "string or null (target market or geographic region if explicitly mentioned, e.g. '북미', 'EU', 'North America'; null otherwise)",
   "launch_date": "boolean or null (true if the decision involves a product launch, service deployment, or system release; null otherwise)",
@@ -128,7 +128,9 @@ from the principle when you encounter a pattern not described below.
    Examples when NO explicit cost is stated:
    - "MRI 장비 구매" → cost: 3500000, cost_estimate_range: "$1.5M-$3.5M (typical MRI equipment)"
    - "신규 CT scanner" → cost: 3000000, cost_estimate_range: "$1M-$3M (CT scanner market range)"
+   - "유휴 MRI 장비가 있음에도... 신규 고가 장비 구매" → cost: 3500000, cost_estimate_range: "$1.5M-$3.5M (typical MRI equipment)" (context implies MRI)
    - "ERP 시스템 도입" → cost: 700000, cost_estimate_range: "$300K-$700K (enterprise ERP)"
+   - "고가 장비 구매" (without context) → cost: null (type unclear, cannot infer)
    - "사무실 임대" → cost: null, cost_estimate_range: null (too variable by location)
    - "마케팅 캠페인" → cost: null, cost_estimate_range: null (could be $10K or $10M)
 
@@ -146,12 +148,16 @@ from the principle when you encounter a pattern not described below.
    of this specific decision?" Proximity or relevance is not enough. Only set true
    when the decision directly triggers that review process.
 
-3. OWNER BY DOMAIN
-   An owner is the person accountable for delivering the outcome. If the decision
-   domain unambiguously implies a role (R&D work → 연구개발팀장, marketing campaign
-   → 마케팅팀장, IT infrastructure → IT팀장, HR policy → 인사팀장, equipment purchase
-   → 재무팀장 or 최고재무책임자), include it even if no name is given. If the domain
-   is genuinely ambiguous, use [].
+3. OWNER - STATED ONLY
+   An owner is the person accountable for delivering the outcome.
+
+   Extract ONLY if explicitly stated in the text:
+   - "김철수 팀장이 담당" → name: "김철수", role: "팀장"
+   - "연구개발팀장 책임 하에" → name: "연구개발팀장", role: "연구개발팀장"
+
+   DO NOT infer owners based on decision domain.
+   If no owner is mentioned, use empty array [].
+   Graph reasoning will infer appropriate owner from company personnel later.
 
 ── FIELD NOTES ─────────────────────────────────────────────────────────────
 
@@ -191,12 +197,18 @@ policy_change_type  'retroactive' when the decision changes rules for events tha
 strategic_impact    How severely would this alter the company's trajectory if it
                     went wrong? critical = largely irreversible, company-wide, OR
                     involves patient safety/life-threatening scenarios (healthcare).
-                    high = significant but recoverable. medium = department-level.
-                    low = local or operational.
+                    high = significant but recoverable, policy violations, major
+                    financial decisions, compliance breaches, strategic misalignments.
+                    medium = department-level. low = local or operational.
 
                     HEALTHCARE: Patient safety issues, clinical protocol violations
                     (Emergency Care Protocol, Patient Safety Protocol), and emergency
                     care failures are ALWAYS "critical" regardless of scope.
+
+                    POLICY VIOLATIONS: Any decision that explicitly violates company
+                    policies (Asset Optimization Policy, Resource Sharing Policy, etc.)
+                    should be "high" minimum, "critical" if it also involves patient
+                    safety or large financial impact.
 
 involves_compliance_risk  True when the decision explicitly raises anti-bribery,
                     ethics code, gift/entertainment policy, or conflict-of-interest

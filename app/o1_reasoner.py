@@ -546,10 +546,18 @@ Output JSON:
 
         # ── 3. Decision KPIs → match to strategic goal KPIs ──────────────
         decision_kpi_names = set()
+        decision_kpi_keywords = set()  # Extract keywords for fuzzy matching
         for i, kpi in enumerate(decision_data.get("kpis", [])):
             kpi_id = kpi.get("id", f"{decision_id}_kpi_{i}")
             kpi_name = kpi.get("name", kpi.get("metric", "")).strip().lower()
             decision_kpi_names.add(kpi_name)
+
+            # Extract keywords from KPI name (e.g., "운영비 -10%" → {"운영비"})
+            # Remove numbers, percentages, and common filler words
+            keywords = [w for w in kpi_name.replace("-", " ").replace("%", " ").split()
+                       if len(w) >= 2 and not w.isdigit()]
+            decision_kpi_keywords.update(keywords)
+
             _add_node(kpi_id, "KPI", "Resource", kpi)
             _add_edge(decision_id, kpi_id, "MEASURED_BY")
 
@@ -569,12 +577,17 @@ Output JSON:
             sg_name = sg.get("name", "").lower()
             sg_desc = sg.get("description", "").lower()
 
-            # Check KPI overlap
-            sg_kpi_names = set()
+            # Check KPI overlap (keyword-based for fuzzy matching)
+            sg_kpi_keywords = set()
             for kpi in sg.get("kpis", []):
-                sg_kpi_names.add(kpi.get("name", "").strip().lower())
+                kpi_name = kpi.get("name", "").strip().lower()
+                # Extract keywords from strategic goal KPI (e.g., "운영비 절감률" → {"운영비", "절감률"})
+                keywords = [w for w in kpi_name.replace("%", " ").split()
+                           if len(w) >= 2 and not w.isdigit()]
+                sg_kpi_keywords.update(keywords)
 
-            kpi_overlap = bool(decision_kpi_names & sg_kpi_names)
+            # Match on keyword overlap instead of exact name (e.g., "운영비" in both)
+            kpi_overlap = bool(decision_kpi_keywords & sg_kpi_keywords)
 
             # Check owner overlap
             owner_overlap = sg_owner_id in matched_person_ids
@@ -768,9 +781,32 @@ ANALYSIS TASKS:
    - This is the MOST IMPORTANT check - strategic misalignment must be flagged
 
 3. **OWNERSHIP & AUTHORITY ISSUES**
-   - If the subgraph contains `CandidateOwner` nodes (no owner was stated in the input),
-     reason about which candidate(s) should be accountable based on the decision's nature,
-     the governance signals, and the reporting hierarchy. Identify them explicitly in `ownership_issues`.
+
+   CRITICAL: Owner ≠ Approver. These are SEPARATE roles:
+   - **Owner** (Person nodes linked via OWNED_BY): Accountable for delivering the outcome
+   - **Approver** (ApprovalActor nodes via REQUIRES_APPROVAL): Reviews/signs off for governance
+
+   The same person can be BOTH owner and approver, but they're distinct responsibilities.
+
+   Ownership analysis when CandidateOwner nodes exist (no owner stated in input):
+
+   **HIGH CONFIDENCE inference → Add to inferred_owners array:**
+   - Decision domain has clear 1:1 role mapping AND that role exists in personnel:
+     * R&D work → 연구개발팀장 exists → confidence: "high"
+     * Finance/budget → CFO exists → confidence: "high"
+     * IT infrastructure → IT팀장 exists → confidence: "high"
+     * Marketing → 마케팅팀장 exists → confidence: "high"
+   - Strategic goal ownership aligns with decision domain → confidence: "high"
+   - Return person_id, name, role, confidence="high", reasoning
+
+   **LOW CONFIDENCE / Ambiguous → Add to ownership_issues only:**
+   - Multiple possible owners → "Consider assigning to X or Y"
+   - No clear domain match → "Missing owner - please specify"
+   - Required role doesn't exist in personnel → "Missing owner"
+
+   DO NOT just pick from the approval chain. Approvers review; owners execute.
+
+   Other ownership checks:
    - Does the decision owner have sufficient authority per the reporting chain?
    - Are there strategic goals owned by different people that this decision spans?
    - Are critical stakeholders missing from the subgraph?
@@ -830,11 +866,20 @@ Output JSON:
       "recommendation": "How to align decision with goal"
     }}
   ],
+  "inferred_owners": [
+    {{
+      "person_id": "string (person ID from CandidateOwner nodes, e.g. 'rd_dir_001')",
+      "name": "string (actual person name from company personnel, e.g. '오세훈')",
+      "role": "string (person's role, e.g. '연구개발팀장')",
+      "confidence": "high" | "medium" | "low",
+      "reasoning": "string (why this person should be the owner)"
+    }}
+  ],
   "ownership_issues": [
     {{
-      "issue_type": "inferred_owner" | "missing_stakeholder" | "insufficient_authority" | "wrong_owner" | "cross_goal_conflict",
+      "issue_type": "missing_owner" | "missing_stakeholder" | "insufficient_authority" | "wrong_owner" | "cross_goal_conflict",
       "severity": "critical" | "high" | "medium" | "low",
-      "description": "What's wrong or who was inferred as the accountable owner and why",
+      "description": "What's wrong",
       "recommendation": "Who should be involved or what to change"
     }}
   ],
