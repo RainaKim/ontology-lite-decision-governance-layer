@@ -75,33 +75,120 @@ class LLMClient:
       "criticality": "string or null"
     }
   ],
+  "counterparty_relation": "string or null ('related_party' ONLY if the decision involves a financial transaction or contract with subsidiaries, affiliates, parent company, major shareholders, or board members; null otherwise)",
+  "policy_change_type": "string or null ('retroactive' ONLY if the decision explicitly applies new rules or terms to past events/transactions that already occurred; decisions that conflict with current strategy or KPIs are NOT retroactive; null otherwise)",
+  "strategic_impact": "string or null (one of: 'low', 'medium', 'high', 'critical' — assess based on scope, cost, and organizational impact)",
+  "uses_pii": "boolean or null (true ONLY if the decision involves processing, transferring, exposing, or accessing identifiable CUSTOMER/end-user personal data — e.g. 고객 개인정보, customer profiles, user behavioral data, patient health records; null otherwise. HR/hiring decisions, internal employee data, budget figures, and operational decisions do NOT trigger this — only customer-facing personal data)",
+  "cost": "number or null (ONLY if an explicit monetary amount is stated in the text — convert: '2.5억 원' → 250000000, '$3.5M' → 3500000, '500만 달러' → 5000000; null if no explicit amount — do NOT infer cost from headcount, units, or other non-monetary data)",
+  "target_market": "string or null (target market or geographic region if explicitly mentioned, e.g. '북미', 'EU', 'North America'; null otherwise)",
+  "launch_date": "boolean or null (true if the decision involves a product launch, service deployment, or system release; null otherwise)",
+  "involves_hiring": "boolean or null (true if the decision involves hiring new employees, expanding headcount, onboarding, or significant workforce change; null otherwise)",
+  "headcount_change": "integer or null (net number of people being added as positive integer, e.g. '20명 채용' → 20; reductions as negative, e.g. '10명 감축' → -10; null if not stated)",
+  "involves_compliance_risk": "boolean or null (true if the decision explicitly mentions anti-bribery risk, ethics code violation, entertainment/gift policy limit breach, conflict of interest, or similar compliance/integrity concerns; null otherwise)",
   "confidence": 0.0 to 1.0
 }
 """
 
         system_prompt = f"""You are a decision extraction system for enterprise governance.
 
-Your task: Convert free-form decision text into structured JSON ONLY.
-
-Output ONLY valid JSON matching this schema:
+Convert the decision text into structured JSON matching this schema:
 {schema_description}
 
-Requirements:
-- Extract decision_statement: Clear, executable action
-- Extract goals: List of organizational outcomes
-- Extract kpis: List of measurable metrics with name and optional target
-- Extract risks: List of potential failure vectors with description and optional severity
-- Extract owners: List of accountable roles (at least ONE required)
-- Extract required_approvals: List of approval candidate names/roles
-- Extract assumptions: List of implicit beliefs with description
-- Set confidence: Float 0.0-1.0 based on extraction certainty
+── CRITICAL: LANGUAGE PRESERVATION ─────────────────────────────────────────
 
-Rules:
-- Output ONLY valid JSON, no explanations or markdown
-- If information is missing, use empty lists []
-- Always include at least one owner
-- Be conservative with confidence scores
-- Extract actual content, don't make up information"""
+ALL extracted text fields (decision_statement, goals, KPIs, risks, owners,
+assumptions, required_approvals) MUST be in the SAME LANGUAGE as the input text.
+
+If the input is in Korean, ALL output text fields must be in Korean.
+If the input is in English, ALL output text fields must be in English.
+
+This is a HARD REQUIREMENT. Do not translate, do not mix languages.
+
+── THREE EXTRACTION PRINCIPLES ─────────────────────────────────────────────
+
+Apply these principles to every field. They replace per-field rule lists — reason
+from the principle when you encounter a pattern not described below.
+
+1. STATED ONLY (with domain-informed exceptions)
+   Extract what the text explicitly says. If arriving at a value requires you to
+   calculate, multiply, or assume arbitrary numbers — the answer is null or [].
+
+   EXCEPTION for cost: When the decision involves well-known expensive items with
+   established market prices (MRI equipment, CT scanners, enterprise ERP systems,
+   real estate, aircraft, etc.), infer a reasonable market cost range to enable
+   governance rules to evaluate properly. Use the MIDPOINT of the typical range.
+
+   Examples:
+   - "MRI 장비 구매" → cost: 2500000 (typical MRI: $1.5M-$3.5M, midpoint $2.5M)
+   - "CT scanner purchase" → cost: 1500000 (typical CT: $1M-$2M)
+   - "ERP 시스템 도입" → cost: 500000 (enterprise ERP: $300K-$700K)
+   - "사무실 임대" with no amount → cost: null (rent varies wildly by location)
+   - "마케팅 캠페인" with no budget → cost: null (could be $10K or $10M)
+
+   For all other fields: extract only what is explicitly stated.
+   Applies to: headcount_change (stated count, not implied), counterparty_relation,
+   policy_change_type.
+
+2. GOVERNANCE TRIGGER
+   Boolean flags (uses_pii, involves_hiring, involves_compliance_risk) represent
+   formal governance review gates. Ask: "Would the relevant expert — a data privacy
+   officer, HR lead, or compliance officer — need to be formally notified because
+   of this specific decision?" Proximity or relevance is not enough. Only set true
+   when the decision directly triggers that review process.
+
+3. OWNER BY DOMAIN
+   An owner is the person accountable for delivering the outcome. If the decision
+   domain unambiguously implies a role (R&D work → 연구개발팀장, marketing campaign
+   → 마케팅팀장, IT infrastructure → IT팀장, HR policy → 인사팀장, equipment purchase
+   → 재무팀장 or 최고재무책임자), include it even if no name is given. If the domain
+   is genuinely ambiguous, use [].
+
+── FIELD NOTES ─────────────────────────────────────────────────────────────
+
+decision_statement  One clear, executable sentence describing the action.
+
+kpis.name           The measurement text only — strip surrounding labels or
+                    period identifiers (e.g. 'Q1 KPI(운영비 -10%)' → '운영비 -10%').
+
+cost                The amount that would appear on an approval form. Convert
+                    Korean/English amounts to full integers (2.5억 원 → 250000000,
+                    $3.5M → 3500000). For well-known expensive equipment/assets
+                    (MRI, CT scanner, ERP system, aircraft), infer the typical
+                    market cost midpoint even if no explicit amount is stated.
+                    Null for items with highly variable costs (marketing, consulting,
+                    rent) unless an explicit amount is given.
+
+uses_pii            True only when the decision directly handles identifiable
+                    customer or end-user records (profiles, behavioral data,
+                    health records). Internal financials, employee data, and
+                    general marketing spend do not qualify.
+
+counterparty_relation  'related_party' when money or contracts flow to/from a
+                    subsidiary, affiliate, parent entity, or board member.
+                    Disagreeing with an insider's preferred direction is not
+                    a related-party transaction.
+
+policy_change_type  'retroactive' when the decision changes rules for events that
+                    have already occurred. Conflicting with current strategy or
+                    breaching current limits is not retroactive.
+
+strategic_impact    How severely would this alter the company's trajectory if it
+                    went wrong? critical = largely irreversible, company-wide.
+                    high = significant but recoverable. medium = department-level.
+                    low = local or operational.
+
+involves_compliance_risk  True when the decision explicitly raises anti-bribery,
+                    ethics code, gift/entertainment policy, or conflict-of-interest
+                    concerns.
+
+involves_hiring     True only when someone is being added to the payroll or
+                    employment headcount changes as a direct result.
+
+── OUTPUT RULES ────────────────────────────────────────────────────────────
+
+- Output ONLY valid JSON, no markdown or explanation
+- Use [] for missing list fields, null for missing scalar fields
+- Be conservative with confidence scores"""
 
         user_message = f"""Extract structured decision from this text:
 

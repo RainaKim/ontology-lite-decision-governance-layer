@@ -1,0 +1,343 @@
+{
+  "company": {
+    "id": "nexus_dynamics",
+    "name": "넥서스 다이나믹스",
+    "industry": "기업 금융",
+    "governance_framework": "기업 금융",
+    "size": "1,200명 이상",
+    "regions": ["한국 (본사)", "북미", "유럽", "동남아시아"]
+  },
+
+  "approval_hierarchy": {
+    "levels": [
+      {
+        "level": 1,
+        "title": "재무팀장",
+        "authority": "team_level",
+        "max_budget_authority": 50000000
+      },
+      {
+        "level": 2,
+        "title": "내부감사실장",
+        "authority": "department_head",
+        "max_budget_authority": 200000000
+      },
+      {
+        "level": 3,
+        "title": "CFO (최고재무책임자)",
+        "authority": "c_level",
+        "max_budget_authority": 1000000000
+      },
+      {
+        "level": 3,
+        "title": "준법감시인",
+        "authority": "c_level",
+        "max_budget_authority": null
+      },
+      {
+        "level": 4,
+        "title": "CEO (대표이사)",
+        "authority": "executive",
+        "max_budget_authority": null
+      }
+    ],
+    "personnel": [
+      {
+        "id": "ceo_001",
+        "name": "박지영",
+        "role": "CEO",
+        "level": 4,
+        "department": "경영진",
+        "reports_to": null
+      },
+      {
+        "id": "cfo_001",
+        "name": "김재원",
+        "role": "CFO",
+        "level": 3,
+        "department": "재무본부",
+        "reports_to": "ceo_001"
+      },
+      {
+        "id": "cco_001",
+        "name": "이수진",
+        "role": "준법감시인",
+        "level": 3,
+        "department": "준법감시팀",
+        "reports_to": "ceo_001"
+      },
+      {
+        "id": "audit_001",
+        "name": "최민서",
+        "role": "내부감사실장",
+        "level": 2,
+        "department": "내부감사실",
+        "reports_to": "cco_001"
+      },
+      {
+        "id": "finance_mgr_001",
+        "name": "정현우",
+        "role": "재무팀장",
+        "level": 1,
+        "department": "재무팀",
+        "reports_to": "cfo_001"
+      },
+      {
+        "id": "ciso_001",
+        "name": "한지훈",
+        "role": "정보보호최고책임자",
+        "level": 3,
+        "department": "정보보호팀",
+        "reports_to": "ceo_001"
+      },
+      {
+        "id": "rnd_mgr_001",
+        "name": "오세훈",
+        "role": "연구개발팀장",
+        "level": 1,
+        "department": "연구개발팀",
+        "reports_to": "ceo_001"
+      },
+      {
+        "id": "marketing_mgr_001",
+        "name": "최유진",
+        "role": "마케팅팀장",
+        "level": 1,
+        "department": "마케팅팀",
+        "reports_to": "ceo_001"
+      },
+      {
+        "id": "it_mgr_001",
+        "name": "이정훈",
+        "role": "IT팀장",
+        "level": 1,
+        "department": "IT팀",
+        "reports_to": "ceo_001"
+      },
+      {
+        "id": "security_mgr_001",
+        "name": "박민지",
+        "role": "보안팀장",
+        "level": 1,
+        "department": "보안팀",
+        "reports_to": "ciso_001"
+      },
+      {
+        "id": "hr_mgr_001",
+        "name": "정다은",
+        "role": "인사팀장",
+        "level": 1,
+        "department": "인사팀",
+        "reports_to": "ceo_001"
+      },
+      {
+        "id": "legal_mgr_001",
+        "name": "김태현",
+        "role": "법무팀장",
+        "level": 1,
+        "department": "법무팀",
+        "reports_to": "cco_001"
+      },
+      {
+        "id": "procurement_mgr_001",
+        "name": "이서준",
+        "role": "구매팀장",
+        "level": 1,
+        "department": "구매팀",
+        "reports_to": "cfo_001"
+      },
+      {
+        "id": "esg_mgr_001",
+        "name": "문지수",
+        "role": "ESG팀장",
+        "level": 1,
+        "department": "ESG팀",
+        "reports_to": "ceo_001"
+      },
+      {
+        "id": "infra_mgr_001",
+        "name": "장현석",
+        "role": "인프라팀장",
+        "level": 1,
+        "department": "인프라팀",
+        "reports_to": "it_mgr_001"
+      }
+    ]
+  },
+
+  "strategic_goals": [
+    {
+      "goal_id": "G1",
+      "name": "글로벌 매출 확대",
+      "description": "2025년 신규 시장 진출 및 M&A 활동을 통해 연결 매출 25% 성장 달성",
+      "owner_id": "ceo_001",
+      "kpis": [
+        { "kpi_id": "K1", "name": "매출 성장률", "target": "전년 대비 25% 증가" },
+        { "kpi_id": "K2", "name": "신규 시장 매출", "target": "$50M ARR 달성" }
+      ],
+      "priority": "high"
+    },
+    {
+      "goal_id": "G2",
+      "name": "규제 및 윤리 준수",
+      "description": "모든 관할권에서 중대 준법 위반 제로 달성",
+      "owner_id": "cco_001",
+      "kpis": [
+        { "kpi_id": "K3", "name": "준법 위반 건수", "target": "중대 위반 0건" },
+        { "kpi_id": "K4", "name": "감사 통과율", "target": "100%" }
+      ],
+      "priority": "critical"
+    },
+    {
+      "goal_id": "G3",
+      "name": "운영비용 효율화",
+      "description": "벤더 합리화 및 프로세스 자동화를 통해 운영비용 10% 절감",
+      "owner_id": "cfo_001",
+      "kpis": [
+        { "kpi_id": "K5", "name": "운영비 절감률", "target": "전년 대비 10% 절감" },
+        { "kpi_id": "K6", "name": "매출 대비 비용 비율", "target": "0.65 미만" }
+      ],
+      "priority": "high"
+    }
+  ],
+
+  "risk_tolerance": {
+    "financial": {
+      "unbudgeted_spend_threshold": 50000000,
+      "high_cost_threshold": 250000000,
+      "critical_cost_threshold": 1000000000
+    },
+    "compliance": {
+      "audit_trail_required": true,
+      "anti_bribery_policy": "zero_tolerance",
+      "conflict_of_interest_review": "mandatory"
+    }
+  },
+
+  "governance_rules": [
+    {
+      "rule_id": "R1",
+      "name": "자본적 지출 승인",
+      "type": "financial",
+      "description": "예산 기준을 초과하는 지출 의사결정은 CFO 승인 필요",
+      "condition": { "field": "cost", "operator": ">", "value": 50000000 },
+      "consequence": {
+        "action": "require_approval",
+        "approver_role": "CFO",
+        "approver_id": "cfo_001",
+        "severity": "high"
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R2",
+      "name": "준법 및 윤리 검토",
+      "type": "compliance",
+      "description": "특수관계자 거래, 소급 정책 변경, ESG 위반 관련 의사결정은 준법감시인 검토 필요",
+      "condition": {
+        "operator": "OR",
+        "conditions": [
+          { "field": "counterparty_relation", "operator": "==", "value": "related_party" },
+          { "field": "policy_change_type", "operator": "==", "value": "retroactive" },
+          { "field": "involves_compliance_risk", "operator": "==", "value": true }
+        ]
+      },
+      "consequence": {
+        "action": "require_review",
+        "approver_role": "준법감시인",
+        "approver_id": "cco_001",
+        "severity": "critical"
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R3",
+      "name": "중대 전략 리스크 규정",
+      "type": "strategic",
+      "description": "중대한 전략적 영향을 수반하는 의사결정은 CEO 승인 필요",
+      "condition": { "field": "strategic_impact", "operator": "==", "value": "critical" },
+      "consequence": {
+        "action": "require_approval",
+        "approver_role": "CEO",
+        "approver_id": "ceo_001",
+        "severity": "critical"
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R4",
+      "name": "전략 정합성 규정",
+      "type": "strategic",
+      "description": "주요 재무 의사결정은 최소 하나 이상의 전략 목표와 연계 필요",
+      "condition": { "field": "cost", "operator": ">", "value": 50000000 },
+      "consequence": {
+        "action": "require_goal_mapping",
+        "severity": "medium",
+        "message": "의사결정은 최소 하나의 전략 목표(G1, G2, G3)와 연계되어야 합니다"
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R5",
+      "name": "이사회급 승인",
+      "type": "financial",
+      "description": "대규모 투자 기준 초과 의사결정은 CFO 및 CEO 순차 승인 필요",
+      "condition": { "field": "cost", "operator": ">", "value": 1000000000 },
+      "consequence": {
+        "action": "require_approval",
+        "approver_roles": ["CFO", "CEO"],
+        "approver_ids": ["cfo_001", "ceo_001"],
+        "severity": "critical",
+        "requires_sequential": true
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R6",
+      "name": "개인정보 및 보안 검토",
+      "type": "privacy",
+      "description": "고객 개인정보(PII) 처리·이전·노출이 수반되는 의사결정은 정보보호최고책임자(CISO) 검토 필요",
+      "condition": { "field": "uses_pii", "operator": "==", "value": true },
+      "consequence": {
+        "action": "require_review",
+        "approver_role": "정보보호최고책임자",
+        "approver_id": "ciso_001",
+        "severity": "high"
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R7",
+      "name": "인력 채용 검토",
+      "type": "hr",
+      "description": "인력 채용 또는 조직 변경을 수반하는 의사결정은 인사팀장 검토 필요",
+      "condition": { "field": "involves_hiring", "operator": "==", "value": true },
+      "consequence": {
+        "action": "require_review",
+        "approver_role": "인사팀장",
+        "approver_id": "hr_mgr_001",
+        "severity": "medium"
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R8",
+      "name": "대규모 인력 변경 승인",
+      "type": "hr",
+      "description": "10인 이상 인력 채용 또는 조직 구조 변경을 수반하는 의사결정은 CEO 승인 필요",
+      "condition": { "field": "headcount_change", "operator": ">=", "value": 10 },
+      "consequence": {
+        "action": "require_approval",
+        "approver_role": "CEO",
+        "approver_id": "ceo_001",
+        "severity": "high"
+      },
+      "active": true
+    }
+  ],
+
+  "metadata": {
+    "version": "2.0.0",
+    "purpose": "넥서스 다이나믹스 거버넌스 프레임워크 데모"
+  }
+}

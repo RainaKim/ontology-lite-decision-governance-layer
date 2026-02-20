@@ -1,0 +1,241 @@
+{
+  "company": {
+    "name": "Mayo Central Hospital",
+    "industry": "헬스케어",
+    "size": "3,500명 이상",
+    "regions": ["북미", "유럽"]
+  },
+
+  "approval_hierarchy": {
+    "levels": [
+      {
+        "level": 1,
+        "title": "재무팀장",
+        "authority": "team_level",
+        "max_budget_authority": 100000
+      },
+      {
+        "level": 2,
+        "title": "정보보호책임자",
+        "authority": "team_level",
+        "max_budget_authority": 500000
+      },
+      {
+        "level": 3,
+        "title": "최고재무책임자",
+        "authority": "c_level",
+        "max_budget_authority": 5000000
+      },
+      {
+        "level": 3,
+        "title": "의료원장",
+        "authority": "c_level",
+        "max_budget_authority": 5000000
+      },
+      {
+        "level": 3,
+        "title": "준법감시인",
+        "authority": "c_level",
+        "max_budget_authority": null
+      },
+      {
+        "level": 4,
+        "title": "병원장",
+        "authority": "executive",
+        "max_budget_authority": null
+      }
+    ],
+    "personnel": [
+      {
+        "id": "admin_001",
+        "name": "Dr. Raymond Park",
+        "role": "병원장",
+        "level": 4,
+        "department": "경영진",
+        "reports_to": null
+      },
+      {
+        "id": "medical_dir_001",
+        "name": "Dr. Sarah Johnson",
+        "role": "의료원장",
+        "level": 3,
+        "department": "임상관리",
+        "reports_to": "admin_001"
+      },
+      {
+        "id": "cco_001",
+        "name": "Carol Watson",
+        "role": "준법감시인",
+        "level": 3,
+        "department": "준법/개인정보",
+        "reports_to": "admin_001"
+      },
+      {
+        "id": "cfo_001",
+        "name": "Linda Kim",
+        "role": "최고재무책임자",
+        "level": 3,
+        "department": "재무",
+        "reports_to": "admin_001"
+      },
+      {
+        "id": "security_001",
+        "name": "Marcus Lee",
+        "role": "정보보호책임자",
+        "level": 2,
+        "department": "정보보호",
+        "reports_to": "cco_001"
+      },
+      {
+        "id": "irb_001",
+        "name": "Dr. Minji Choi",
+        "role": "임상시험심의위원장",
+        "level": 2,
+        "department": "임상시험/연구윤리",
+        "reports_to": "medical_dir_001"
+      },
+      {
+        "id": "fin_mgr_001",
+        "name": "Jihyun Lee",
+        "role": "재무팀장",
+        "level": 1,
+        "department": "재무",
+        "reports_to": "cfo_001"
+      }
+    ]
+  },
+
+  "strategic_goals": [
+    {
+      "goal_id": "G1",
+      "name": "환자 안전 우수성",
+      "description": "환자 안전 사고 제로 달성 및 최고 수준의 안전 등급 유지",
+      "owner_id": "medical_dir_001",
+      "kpis": [
+        { "kpi_id": "K1", "name": "예방 가능한 이상사건", "target": "0건/분기" },
+        { "kpi_id": "K2", "name": "프로토콜 준수율", "target": "99.5%" }
+      ],
+      "priority": "critical"
+    },
+    {
+      "goal_id": "G2",
+      "name": "규제 및 데이터 준수",
+      "description": "HIPAA, GDPR 및 임상 거버넌스 프레임워크 완전 준수",
+      "owner_id": "cco_001",
+      "kpis": [
+        { "kpi_id": "K3", "name": "규제 위반 건수", "target": "중대 위반 0건" },
+        { "kpi_id": "K4", "name": "데이터 프라이버시 사고", "target": "무단 공개 0건" }
+      ],
+      "priority": "critical"
+    },
+    {
+      "goal_id": "G3",
+      "name": "운영 및 재무 효율화",
+      "description": "자원 공유 및 프로세스 개선을 통한 환자당 비용 12% 절감",
+      "owner_id": "cfo_001",
+      "kpis": [
+        { "kpi_id": "K5", "name": "환자당 비용", "target": "전년 대비 12% 절감" },
+        { "kpi_id": "K6", "name": "장비 활용률", "target": "85%" }
+      ],
+      "priority": "high"
+    }
+  ],
+
+  "risk_tolerance": {
+    "financial": {
+      "unbudgeted_spend_threshold": 100000,
+      "high_cost_threshold": 500000,
+      "critical_cost_threshold": 5000000
+    },
+    "compliance": {
+      "hipaa_strict_mode": true,
+      "gdpr_strict_mode": true,
+      "audit_trail_required": true,
+      "patient_consent_required": true
+    }
+  },
+
+  "governance_rules": [
+    {
+      "rule_id": "R1",
+      "name": "자본 장비 구매 승인",
+      "type": "financial",
+      "description": "의료 장비 구매가 기준 초과 시 CFO 승인 및 자산 재고 검토 필요",
+      "condition": { "field": "cost", "operator": ">", "value": 100000000 },
+      "consequence": {
+        "action": "require_approval",
+        "approver_role": "최고재무책임자",
+        "approver_id": "cfo_001",
+        "severity": "high"
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R2",
+      "name": "환자 데이터 프라이버시 및 HIPAA 준수",
+      "type": "compliance",
+      "description": "환자 PII, 임상 데이터 접근 또는 2차 데이터 사용 관련 의사결정은 CCO 검토 필요",
+      "condition": {
+        "operator": "OR",
+        "conditions": [
+          { "field": "uses_pii", "operator": "==", "value": true },
+          { "field": "data_type", "operator": "contains", "value": "PHI" }
+        ]
+      },
+      "consequence": {
+        "action": "require_review",
+        "approver_role": "준법감시인",
+        "approver_id": "cco_001",
+        "severity": "critical"
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R3",
+      "name": "중대 환자 안전 승인",
+      "type": "strategic",
+      "description": "환자 안전에 영향을 미치는 중대한 의사결정은 의료원장 승인 필요",
+      "condition": { "field": "strategic_impact", "operator": "==", "value": "critical" },
+      "consequence": {
+        "action": "require_approval",
+        "approver_role": "의료원장",
+        "approver_id": "medical_dir_001",
+        "severity": "critical"
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R4",
+      "name": "전략 정합성 규정",
+      "type": "strategic",
+      "description": "주요 임상 또는 기술 의사결정은 최소 하나의 병원 전략 목표와 연계 필요",
+      "condition": { "field": "cost", "operator": ">", "value": 50000 },
+      "consequence": {
+        "action": "require_goal_mapping",
+        "severity": "medium",
+        "message": "의사결정은 최소 하나의 전략 목표(G1, G2, G3)와 연계되어야 합니다"
+      },
+      "active": true
+    },
+    {
+      "rule_id": "R5",
+      "name": "대규모 투자 이사회 승인",
+      "type": "financial",
+      "description": "대규모 투자는 병원장 및 CFO 이중 승인 필요",
+      "condition": { "field": "cost", "operator": ">", "value": 500000000 },
+      "consequence": {
+        "action": "require_approval",
+        "approver_roles": ["최고재무책임자", "병원장"],
+        "approver_ids": ["cfo_001", "admin_001"],
+        "severity": "critical",
+        "requires_sequential": true
+      },
+      "active": true
+    }
+  ],
+
+  "metadata": {
+    "version": "2.0.0",
+    "purpose": "Mayo Central Hospital 거버넌스 프레임워크 데모"
+  }
+}
