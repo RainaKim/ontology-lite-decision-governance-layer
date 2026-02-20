@@ -1,18 +1,21 @@
 """
 Decision Governance Layer - FastAPI Application
 
-Day 1-2 Scope: /extract endpoint for reliable decision objectization.
+All public API routes are mounted under /v1 prefix via routers.
 """
 
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
-from app.schemas import DecisionExtractionRequest, DecisionExtractionResponse
 from app.llm_client import LLMClient
-from app.extractor import DecisionExtractor, create_request_id
+from app.extractor import DecisionExtractor
+from app.graph_repository import InMemoryGraphRepository
+from app.services import company_service
+from app.routers import companies_router, decisions_router, fixtures_router
 
 # Load environment variables from .env file
 load_dotenv()
@@ -24,9 +27,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global instances (initialized in lifespan)
+# Global instances (initialized in lifespan, exported for routers)
 llm_client = None
 extractor = None
+graph_repo = None
 
 
 @asynccontextmanager
@@ -35,13 +39,15 @@ async def lifespan(app: FastAPI):
     Lifespan context manager for startup and shutdown.
     """
     # Startup
-    global llm_client, extractor
+    global llm_client, extractor, graph_repo
     logger.info("Initializing Decision Governance Layer...")
 
     try:
         llm_client = LLMClient()
         extractor = DecisionExtractor(llm_client=llm_client, max_retries=2)
-        logger.info("Application initialized successfully")
+        graph_repo = InMemoryGraphRepository()
+        company_service.init()
+        logger.info("Application initialized successfully (LLM + Graph Repository + Company Service)")
     except Exception as e:
         logger.error(f"Failed to initialize application: {e}")
         raise
@@ -56,100 +62,63 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Decision Governance Layer",
     description="Ontology-lite system for enterprise decision structuring and governance",
-    version="0.1.0",
+    version="1.0.0",
     lifespan=lifespan
 )
 
+# ── CORS Middleware ──────────────────────────────────────────────────────────
+# Allow frontend dev server and production origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── Mount v1 routers ─────────────────────────────────────────────────────────
+# All routes are under /v1 prefix (defined in each router)
+app.include_router(companies_router)
+app.include_router(decisions_router)
+app.include_router(fixtures_router)
+
+
+# ── Root-level endpoints (no /v1 prefix) ─────────────────────────────────────
 
 @app.get("/")
 async def root():
-    """Health check endpoint."""
+    """Root — lists available v1 endpoints."""
     return {
         "service": "Decision Governance Layer",
         "status": "operational",
-        "version": "0.1.0",
+        "version": "1.0.0",
+        "api_version": "v1",
         "endpoints": {
-            "extract": "/extract"
-        }
+            "list_companies": "GET /v1/companies",
+            "get_company": "GET /v1/companies/{company_id}",
+            "submit_decision": "POST /v1/decisions",
+            "stream_decision": "GET /v1/decisions/{decision_id}/stream",
+            "get_decision": "GET /v1/decisions/{decision_id}",
+        },
     }
 
 
 @app.get("/health")
 async def health():
-    """Detailed health check."""
+    """Health check endpoint."""
+    graph_stats = {}
+    if graph_repo:
+        graph_stats = {
+            "nodes_count": len(graph_repo._nodes),
+            "edges_count": len(graph_repo._edges)
+        }
     return {
         "status": "healthy",
         "llm_client": "initialized" if llm_client else "not_initialized",
-        "extractor": "initialized" if extractor else "not_initialized"
+        "extractor": "initialized" if extractor else "not_initialized",
+        "graph_repository": "initialized" if graph_repo else "not_initialized",
+        "graph_stats": graph_stats
     }
-
-
-@app.post("/extract", response_model=DecisionExtractionResponse)
-async def extract_decision(request: DecisionExtractionRequest):
-    """
-    Extract structured decision from free-form text.
-
-    Behavior:
-    - Calls LLM (OpenAI GPT-4o) to output JSON
-    - Validates with Pydantic
-    - Retries up to 2 times if parsing/validation fails
-    - Returns fallback Decision (confidence=0.1) if all attempts fail
-    - Never crashes
-
-    Request body:
-    ```json
-    {
-        "decision_text": "We should launch a new mobile app to increase user engagement...",
-        "apply_governance_rules": false
-    }
-    ```
-
-    Response:
-    ```json
-    {
-        "decision": { ... },
-        "extraction_metadata": {
-            "request_id": "uuid",
-            "retry_count": 0,
-            "model": "gpt-4o",
-            "success": true
-        },
-        "governance_applied": false
-    }
-    ```
-    """
-    request_id = create_request_id()
-
-    try:
-        logger.info(f"[{request_id}] Received extraction request")
-        logger.debug(f"[{request_id}] Decision text: {request.decision_text[:100]}...")
-
-        # Extract decision with retry logic
-        response = extractor.extract(
-            decision_text=request.decision_text,
-            request_id=request_id
-        )
-
-        # Check if extraction was successful
-        if response.extraction_metadata.get("success", True):
-            logger.info(f"[{request_id}] Extraction successful (confidence={response.decision.confidence})")
-        else:
-            logger.warning(f"[{request_id}] Extraction failed - returned fallback decision")
-
-        return response
-
-    except Exception as e:
-        logger.error(f"[{request_id}] Unexpected error in /extract endpoint: {e}", exc_info=True)
-
-        # Even on catastrophic failure, return a valid response (never crash)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "Internal server error during extraction",
-                "request_id": request_id,
-                "message": str(e)
-            }
-        )
 
 
 @app.exception_handler(Exception)
