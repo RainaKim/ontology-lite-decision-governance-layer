@@ -72,28 +72,7 @@ _FIXTURES_BY_COMPANY: dict[str, list[Fixture]] = {
             title="한도 초과 접대비 승인 요청",
             text="인당 50만 원 상당의 고액 고객 접대비 승인 요청. 뇌물방지 및 윤리강령 위반 위험. 기준 한도는 20만 원.",
             tags=["Compliance", "Ethics", "Expense"],
-        ),
-        Fixture(
-            id="C06",
-            company_id="nexus_dynamics",
-            title="해외 자회사 무담보 자금 대여",
-            text="해외 자회사 대상 무담보/저금리 자금 대여 결정. 불공정 거래 위험. 연결 현금흐름에 영향.",
-            tags=["Financial", "Treasury", "Legal"],
-        ),
-        Fixture(
-            id="C07",
-            company_id="nexus_dynamics",
-            title="클라우드 인프라 과다 약정",
-            text="사용량 대비 30% 과다한 클라우드 장기 약정 체결. 재정 낭비 감지됨. 약정 전 적정 규모 조정 권장.",
-            tags=["IT", "Cost", "Infrastructure"],
-        ),
-        Fixture(
-            id="C08",
-            company_id="nexus_dynamics",
-            title="성과급 규정 소급 변경",
-            text="성과급 규정 소급 변경 및 특정 부서 우선 지급. 부서 간 형평성 위험. 보상 원칙 위반.",
-            tags=["HR", "Compliance", "Policy"],
-        ),
+        )
     ],
     "mayo_central": [
         Fixture(
@@ -132,35 +111,7 @@ _FIXTURES_BY_COMPANY: dict[str, list[Fixture]] = {
             tags=["Security", "Telemedicine", "Data Residency"],
         ),
         Fixture(
-            id="H06",
-            company_id="mayo_central",
-            title="법정 인력 기준 초과 입원 강행",
-            text="법정 인력 기준을 초과하여 중환자실(ICU) 신규 환자 입원 접수 강행. Medical Law Article 45 위반. 의료 서비스 품질 저하 및 법적 리스크 발생.",
-            tags=["Staffing", "Legal", "Patient Safety"],
-        ),
-        Fixture(
             id="H07",
-            company_id="mayo_central",
-            title="유휴 장비 보유 중 신규 MRI 구매",
-            text="병원 그룹 내 유휴 MRI 장비가 있음에도 불구하고 신규 고가 장비 구매 요청. Asset Optimization Policy 위반. 그룹사 간 자원 공유 원칙 우선 적용.",
-            tags=["Procurement", "Financial", "Asset Management"],
-        ),
-        Fixture(
-            id="H08",
-            company_id="mayo_central",
-            title="환자 동의 없는 AI 학습 데이터 활용",
-            text="환자의 추가 동의 없이 과거 병력 데이터를 AI 진단 모델 학습에 사용. Data Ethics 및 GDPR 제7조(동의) 위반 리스크. 학습 파이프라인 즉시 차단.",
-            tags=["AI", "Consent", "GDPR"],
-        ),
-        Fixture(
-            id="H09",
-            company_id="mayo_central",
-            title="응급 황금시간 전문의 대면 미이행",
-            text="중증 응급 환자 내원 후 30분 이내 전문의 대면 미이행 상태 방치. Emergency Care Protocol 위반. 실시간 알림 및 강제 배정 로직 가동.",
-            tags=["Emergency", "Protocol", "Patient Safety"],
-        ),
-        Fixture(
-            id="H10",
             company_id="mayo_central",
             title="마약류 재고-시스템 기록 불일치",
             text="마약류 의약품의 실제 재고와 시스템 기록 간의 불일치 발생. Narcotics Control Act 위반. 즉시 자동 감사 모드 및 사법기관 보고 준비.",
@@ -174,13 +125,6 @@ _FIXTURES_BY_COMPANY: dict[str, list[Fixture]] = {
             title="경쟁 입찰 없는 수의계약 시도",
             text="긴급성 사유가 불분명한 상태에서 특정 IT 업체와 500만 달러 규모의 단일 응찰 수의계약 시도. 공공 조달법상 경쟁 입찰 원칙 위반 가능성. 수의계약 타당성 보고서(Justification) 누락 확인.",
             tags=["Procurement", "Compliance", "Sole Source"],
-        ),
-        Fixture(
-            id="G02",
-            company_id="delaware_gsa",
-            title="연말 잔여 예산 불필요 소진",
-            text="회계연도 종료 직전, 불필요한 사무용 기기 대량 구매를 통한 남은 예산 소진 시도. 예산 이월 방지를 위한 부적절 집행 리스크. 과거 동일 패턴의 낭비 사례와 대조.",
-            tags=["Budget", "Waste", "Procurement"],
         ),
         Fixture(
             id="G03",

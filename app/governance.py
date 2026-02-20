@@ -98,10 +98,10 @@ def compute_risk_score(decision: Decision) -> float:
 
     # Severity mapping
     severity_weights = {
-        "critical": 3.0,
-        "high": 2.0,
-        "medium": 1.0,
-        "low": 0.5
+        "critical": 8.0,  # Single critical risk = 8/10 (narcotics, patient safety, legal violations)
+        "high": 3.0,      # High severity = 3/10
+        "medium": 1.5,    # Medium severity = 1.5/10
+        "low": 0.5        # Low severity = 0.5/10
     }
 
     total_score = 0.0
