@@ -79,7 +79,8 @@ class LLMClient:
   "policy_change_type": "string or null ('retroactive' ONLY if the decision explicitly applies new rules or terms to past events/transactions that already occurred; decisions that conflict with current strategy or KPIs are NOT retroactive; null otherwise)",
   "strategic_impact": "string or null (one of: 'low', 'medium', 'high', 'critical' — assess based on scope, cost, and organizational impact)",
   "uses_pii": "boolean or null (true ONLY if the decision involves processing, transferring, exposing, or accessing identifiable CUSTOMER/end-user personal data — e.g. 고객 개인정보, customer profiles, user behavioral data, patient health records; null otherwise. HR/hiring decisions, internal employee data, budget figures, and operational decisions do NOT trigger this — only customer-facing personal data)",
-  "cost": "number or null (ONLY if an explicit monetary amount is stated in the text — convert: '2.5억 원' → 250000000, '$3.5M' → 3500000, '500만 달러' → 5000000; null if no explicit amount — do NOT infer cost from headcount, units, or other non-monetary data)",
+  "cost": "number or null (explicit amount stated in text → convert: '2.5억 원' → 250000000, '$3.5M' → 3500000; OR for well-known expensive equipment/assets with no stated amount → use UPPER BOUND of typical market range; null for items with variable costs)",
+  "cost_estimate_range": "string or null (when cost is inferred from domain knowledge, provide the market range in the INPUT LANGUAGE, e.g. '$1.5M-$3.5M (typical MRI equipment)' or '15억-35억 원 (일반적인 MRI 장비 시장가)'; null if cost was explicitly stated)",
   "target_market": "string or null (target market or geographic region if explicitly mentioned, e.g. '북미', 'EU', 'North America'; null otherwise)",
   "launch_date": "boolean or null (true if the decision involves a product launch, service deployment, or system release; null otherwise)",
   "involves_hiring": "boolean or null (true if the decision involves hiring new employees, expanding headcount, onboarding, or significant workforce change; null otherwise)",
@@ -109,21 +110,30 @@ This is a HARD REQUIREMENT. Do not translate, do not mix languages.
 Apply these principles to every field. They replace per-field rule lists — reason
 from the principle when you encounter a pattern not described below.
 
-1. STATED ONLY (with domain-informed exceptions)
+1. STATED ONLY (with domain-informed cost inference)
    Extract what the text explicitly says. If arriving at a value requires you to
    calculate, multiply, or assume arbitrary numbers — the answer is null or [].
 
-   EXCEPTION for cost: When the decision involves well-known expensive items with
-   established market prices (MRI equipment, CT scanners, enterprise ERP systems,
-   real estate, aircraft, etc.), infer a reasonable market cost range to enable
-   governance rules to evaluate properly. Use the MIDPOINT of the typical range.
+   EXCEPTION for cost: When the decision involves well-known expensive capital
+   equipment or assets with established market prices (medical equipment, enterprise
+   systems, vehicles), infer cost using this TWO-FIELD approach:
 
-   Examples:
-   - "MRI 장비 구매" → cost: 2500000 (typical MRI: $1.5M-$3.5M, midpoint $2.5M)
-   - "CT scanner purchase" → cost: 1500000 (typical CT: $1M-$2M)
-   - "ERP 시스템 도입" → cost: 500000 (enterprise ERP: $300K-$700K)
-   - "사무실 임대" with no amount → cost: null (rent varies wildly by location)
-   - "마케팅 캠페인" with no budget → cost: null (could be $10K or $10M)
+   a) cost (number): Set to the UPPER BOUND of the typical market range for
+      conservative governance evaluation. Rules need a single number to compare.
+
+   b) cost_estimate_range (string): Provide the full market range in the INPUT
+      LANGUAGE so users see the uncertainty, e.g. "$1.5M-$3.5M (typical MRI)"
+      or "15억-35억 원 (일반적인 MRI 장비)".
+
+   Examples when NO explicit cost is stated:
+   - "MRI 장비 구매" → cost: 3500000, cost_estimate_range: "$1.5M-$3.5M (typical MRI equipment)"
+   - "신규 CT scanner" → cost: 3000000, cost_estimate_range: "$1M-$3M (CT scanner market range)"
+   - "ERP 시스템 도입" → cost: 700000, cost_estimate_range: "$300K-$700K (enterprise ERP)"
+   - "사무실 임대" → cost: null, cost_estimate_range: null (too variable by location)
+   - "마케팅 캠페인" → cost: null, cost_estimate_range: null (could be $10K or $10M)
+
+   Example when explicit cost IS stated:
+   - "2.5억 원 MRI 구매" → cost: 250000000, cost_estimate_range: null (explicit, no estimation)
 
    For all other fields: extract only what is explicitly stated.
    Applies to: headcount_change (stated count, not implied), counterparty_relation,
@@ -153,10 +163,16 @@ kpis.name           The measurement text only — strip surrounding labels or
 cost                The amount that would appear on an approval form. Convert
                     Korean/English amounts to full integers (2.5억 원 → 250000000,
                     $3.5M → 3500000). For well-known expensive equipment/assets
-                    (MRI, CT scanner, ERP system, aircraft), infer the typical
-                    market cost midpoint even if no explicit amount is stated.
-                    Null for items with highly variable costs (marketing, consulting,
-                    rent) unless an explicit amount is given.
+                    (MRI, CT scanner, ERP system) with no stated amount, use the
+                    UPPER BOUND of the typical market range for conservative
+                    governance evaluation. Null for items with highly variable
+                    costs (marketing, consulting, rent) unless explicitly stated.
+
+cost_estimate_range When cost is inferred from domain knowledge (not explicitly
+                    stated), provide the full market range in the INPUT LANGUAGE
+                    (e.g. "$1.5M-$3.5M (typical MRI)" or "15억-35억 원 (일반적인
+                    MRI 장비)"). This shows users the uncertainty. Null when cost
+                    was explicitly stated in the input text.
 
 uses_pii            True only when the decision directly handles identifiable
                     customer or end-user records (profiles, behavioral data,
