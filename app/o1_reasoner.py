@@ -546,10 +546,18 @@ Output JSON:
 
         # ── 3. Decision KPIs → match to strategic goal KPIs ──────────────
         decision_kpi_names = set()
+        decision_kpi_keywords = set()  # Extract keywords for fuzzy matching
         for i, kpi in enumerate(decision_data.get("kpis", [])):
             kpi_id = kpi.get("id", f"{decision_id}_kpi_{i}")
             kpi_name = kpi.get("name", kpi.get("metric", "")).strip().lower()
             decision_kpi_names.add(kpi_name)
+
+            # Extract keywords from KPI name (e.g., "운영비 -10%" → {"운영비"})
+            # Remove numbers, percentages, and common filler words
+            keywords = [w for w in kpi_name.replace("-", " ").replace("%", " ").split()
+                       if len(w) >= 2 and not w.isdigit()]
+            decision_kpi_keywords.update(keywords)
+
             _add_node(kpi_id, "KPI", "Resource", kpi)
             _add_edge(decision_id, kpi_id, "MEASURED_BY")
 
@@ -569,12 +577,17 @@ Output JSON:
             sg_name = sg.get("name", "").lower()
             sg_desc = sg.get("description", "").lower()
 
-            # Check KPI overlap
-            sg_kpi_names = set()
+            # Check KPI overlap (keyword-based for fuzzy matching)
+            sg_kpi_keywords = set()
             for kpi in sg.get("kpis", []):
-                sg_kpi_names.add(kpi.get("name", "").strip().lower())
+                kpi_name = kpi.get("name", "").strip().lower()
+                # Extract keywords from strategic goal KPI (e.g., "운영비 절감률" → {"운영비", "절감률"})
+                keywords = [w for w in kpi_name.replace("%", " ").split()
+                           if len(w) >= 2 and not w.isdigit()]
+                sg_kpi_keywords.update(keywords)
 
-            kpi_overlap = bool(decision_kpi_names & sg_kpi_names)
+            # Match on keyword overlap instead of exact name (e.g., "운영비" in both)
+            kpi_overlap = bool(decision_kpi_keywords & sg_kpi_keywords)
 
             # Check owner overlap
             owner_overlap = sg_owner_id in matched_person_ids
