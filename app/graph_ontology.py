@@ -12,32 +12,45 @@ from enum import Enum
 
 class NodeType(str, Enum):
     """Core node types in decision governance graph."""
-    ACTOR = "Actor"           # Decision owners — people accountable for executing the decision
-    APPROVER = "Approver"     # Governance approvers — people who must authorize the decision
-    ACTION = "Action"         # Decisions, tasks, executions (what)
-    POLICY = "Policy"         # Rules, constraints, governance policies (how)
-    RISK = "Risk"             # Failure vectors, threats, concerns (why not)
-    RESOURCE = "Resource"     # Budget, systems, assets, capabilities (with what)
-    # Extended types for frontend visualization
-    GOAL = "Goal"             # Strategic goals
-    KPI = "KPI"               # Key performance indicators
-    COST = "Cost"             # Financial costs/budget
-    REGION = "Region"         # Geographic regions affected
-    DATA_TYPE = "DataType"    # Data classifications (PII, PHI, etc.)
+    # Primary node types (uppercase for consistency)
+    DECISION = "DECISION"     # Root decision node (의사결정)
+    ACTOR = "ACTOR"           # All people: approvers, owners, decision makers (승인자/책임자)
+    RULE = "RULE"             # Governance rules R1-R8 (규칙)
+    GOAL_STRATEGIC = "GOAL_STRATEGIC"  # Company strategic goals G1-G3 (전략 목표)
+    RISK = "RISK"             # Identified risks (리스크)
+    KPI = "KPI"               # Key performance indicators (KPI)
+    COST = "COST"             # Financial costs (비용)
+    REGION = "REGION"         # Geographic regions (지역)
+    # Optional/legacy types (keeping for backward compatibility, will be removed)
+    GOAL = "Goal"             # LLM-extracted decision goals (목표) - consider removing
+    RESOURCE = "Resource"     # Budget, systems, assets (자원)
+    DATA_TYPE = "DataType"    # Data classifications (데이터 유형)
 
 
 class EdgePredicate(str, Enum):
     """Edge predicates defining relationships in governance graph."""
-    OWNS = "OWNS"                           # Actor owns Action/Resource
-    REQUIRES_APPROVAL_BY = "REQUIRES_APPROVAL_BY"  # Action requires approval by Actor
-    GOVERNED_BY = "GOVERNED_BY"             # Action governed by Policy
-    TRIGGERS = "TRIGGERS"                   # Action triggers Policy/Risk
-    IMPACTS = "IMPACTS"                     # Action impacts Resource/Actor
-    MITIGATES = "MITIGATES"                 # Action mitigates Risk
-    # Extended predicates for ontology triples visualization
+    # Core governance predicates
+    OWNS = "OWNS"                           # Actor owns Decision/Resource
+    REQUIRES_APPROVAL_BY = "REQUIRES_APPROVAL_BY"  # Decision/Rule requires approval by Actor
+    REQUIRES_REVIEW_BY = "REQUIRES_REVIEW_BY"      # Decision requires review by Actor
+    TRIGGERS = "TRIGGERS"                   # Legacy: Decision triggers Risk (deprecated, use GENERATES_RISK)
+    TRIGGERS_RULE = "TRIGGERS_RULE"         # Decision triggers Rule (more specific than TRIGGERS)
+    GENERATES_RISK = "GENERATES_RISK"       # Rule generates Risk (replaces Decision → TRIGGERS → Risk)
+    IMPACTS = "IMPACTS"                     # Decision impacts Resource/Actor
+    MITIGATES = "MITIGATES"                 # Decision mitigates Risk
+    HAS_RISK = "HAS_RISK"                   # Decision has Risk (alternative to TRIGGERS for risks)
+    # Strategic alignment predicates
+    SUPPORTS = "SUPPORTS"                   # Decision supports Strategic Goal
+    CONFLICTS_WITH = "CONFLICTS_WITH"       # Decision conflicts with Strategic Goal
+    MEASURED_BY = "MEASURED_BY"             # Strategic Goal measured by KPI
+    # Financial governance predicates
+    HAS_COST = "HAS_COST"                   # Decision has Cost
+    EXCEEDS_THRESHOLD = "EXCEEDS_THRESHOLD" # Cost exceeds Rule threshold
+    # Approval hierarchy predicates
+    ESCALATES_TO = "ESCALATES_TO"           # Approver escalates to higher authority
+    # Extended predicates for ontology triples
     HAS_GOAL = "HAS_GOAL"                   # Decision has goal
     HAS_KPI = "HAS_KPI"                     # Decision has KPI
-    HAS_COST = "HAS_COST"                   # Decision has cost
     AFFECTS_REGION = "AFFECTS_REGION"       # Decision affects region
     USES_DATA = "USES_DATA"                 # Decision uses data type
 
@@ -117,7 +130,7 @@ def create_action_node(
     risk_score: Optional[float] = None,
     strategic_impact: Optional[str] = None
 ) -> Node:
-    """Create an Action node (decision, task)."""
+    """Create a Decision node (root of decision graph)."""
     properties = {}
     if risk_score is not None:
         properties["risk_score"] = risk_score
@@ -126,8 +139,50 @@ def create_action_node(
 
     return Node(
         id=action_id,
-        type=NodeType.ACTION,
+        type=NodeType.DECISION,
         label=statement,
+        properties=properties
+    )
+
+
+def create_strategic_goal_node(
+    goal_id: str,
+    name: str,
+    priority: Optional[str] = None,
+    owner_id: Optional[str] = None
+) -> Node:
+    """Create a Strategic Goal node (G1, G2, G3)."""
+    properties = {"name": name}
+    if priority:
+        properties["priority"] = priority
+    if owner_id:
+        properties["owner_id"] = owner_id
+
+    return Node(
+        id=goal_id,
+        type=NodeType.GOAL_STRATEGIC,
+        label=name,
+        properties=properties
+    )
+
+
+def create_rule_node(
+    rule_id: str,
+    name: str,
+    rule_type: Optional[str] = None,
+    description: Optional[str] = None
+) -> Node:
+    """Create a Rule node (R1-R8)."""
+    properties = {"name": name}
+    if rule_type:
+        properties["type"] = rule_type
+    if description:
+        properties["description"] = description
+
+    return Node(
+        id=rule_id,
+        type=NodeType.RULE,
+        label=f"{rule_id}: {name}",
         properties=properties
     )
 
