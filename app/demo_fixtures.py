@@ -48,31 +48,10 @@ _FIXTURES_BY_COMPANY: dict[str, list[Fixture]] = {
         Fixture(
             id="C02",
             company_id="nexus_dynamics",
-            title="특수관계인 거래 체결",
-            text="사외이사 친인척 운영 기업(Zephyr Tech)과 파트너십 체결. 이사회 연결 관계 감지됨. 이해충돌 검토 필요.",
-            tags=["Compliance", "Ethics", "Related Party"],
-        ),
-        Fixture(
-            id="C03",
-            company_id="nexus_dynamics",
-            title="비인가 외부 SaaS 도입 시도",
-            text="보안 검토 없는 외부 AI CRM 도입 시도. 고객 개인정보 노출 위험. IT 거버넌스 정책 Sec-04 위반.",
-            tags=["IT Security", "PII", "Compliance"],
-        ),
-        Fixture(
-            id="C04",
-            company_id="nexus_dynamics",
             title="전략 목표 불일치 R&D 채용",
             text="비용 절감 기조 하에서의 R&D 인력 20명 급격한 채용. Q1 KPI(운영비 -10%)와 충돌. 전략적 재조정 필요.",
             tags=["HR", "Strategic", "Cost"],
         ),
-        Fixture(
-            id="C05",
-            company_id="nexus_dynamics",
-            title="한도 초과 접대비 승인 요청",
-            text="인당 50만 원 상당의 고액 고객 접대비 승인 요청. 뇌물방지 및 윤리강령 위반 위험. 기준 한도는 20만 원.",
-            tags=["Compliance", "Ethics", "Expense"],
-        )
     ],
     "mayo_central": [
         Fixture(
@@ -85,37 +64,9 @@ _FIXTURES_BY_COMPANY: dict[str, list[Fixture]] = {
         Fixture(
             id="H02",
             company_id="mayo_central",
-            title="오프라벨 고위험 약물 처방 승인",
-            text="임상 가이드라인에 등재되지 않은 용도로 고위험 약물(오프라벨) 처방 승인 요청. 의료심의위원회(IRB) 승인 경로 확인 필요.",
-            tags=["Clinical", "Compliance", "IRB"],
-        ),
-        Fixture(
-            id="H03",
-            company_id="mayo_central",
-            title="수술실 로봇 장비 점검 미이행",
-            text="정기 점검 기한이 도과한 수술실 로봇 장비를 사용한 수술 예약 강행. Safety Protocol Sec-12 위반. 환자 안전 리스크 임계치 초과.",
-            tags=["Safety", "Equipment", "Compliance"],
-        ),
-        Fixture(
-            id="H04",
-            company_id="mayo_central",
-            title="임상시험 이해충돌 연구책임자 선정",
-            text="주요 기부 제약사가 후원하는 임상 시험에 병원 고위 관계자를 연구 책임자로 선정. Anti-Bribery 및 연구 윤리 규정 충돌 탐지. 외부 윤리 위원회 통보 대상.",
-            tags=["Ethics", "Research", "Conflict of Interest"],
-        ),
-        Fixture(
-            id="H05",
-            company_id="mayo_central",
             title="원격진료 데이터 외부 클라우드 전송",
             text="원격 진료 영상 데이터를 승인되지 않은 외부 퍼블릭 클라우드로 전송 시도. Local Data Residency 정책 위반. 폐쇄망 운영 원칙 준수 여부 확인.",
             tags=["Security", "Telemedicine", "Data Residency"],
-        ),
-        Fixture(
-            id="H07",
-            company_id="mayo_central",
-            title="마약류 재고-시스템 기록 불일치",
-            text="마약류 의약품의 실제 재고와 시스템 기록 간의 불일치 발생. Narcotics Control Act 위반. 즉시 자동 감사 모드 및 사법기관 보고 준비.",
-            tags=["Pharmacy", "Audit", "Regulatory"],
         ),
     ],
     "delaware_gsa": [
@@ -127,28 +78,14 @@ _FIXTURES_BY_COMPANY: dict[str, list[Fixture]] = {
             tags=["Procurement", "Compliance", "Sole Source"],
         ),
         Fixture(
-            id="G03",
+            id="G02",
             company_id="delaware_gsa",
             title="로비스트 연계 업체 이해충돌 계약",
             text="최근 주지사 캠페인에 고액을 후원한 로비스트가 소속된 컨설팅사와 계약 추진. State Ethics Act 2024 위반 리스크. 정치적 유착 가능성 및 이해상충 탐지.",
             tags=["Ethics", "Conflict of Interest", "Lobbyist"],
         ),
         Fixture(
-            id="G05",
-            company_id="delaware_gsa",
-            title="긴급 재난 예산 용도 외 전용",
-            text="재난 선포가 되지 않은 지역의 도로 정비 사업에 긴급 재난 대응 예산 전용 시도. 예산 용도 외 전용(Misappropriation) 리스크. 긴급성 요건 미충족에 따른 차단.",
-            tags=["Budget", "Emergency", "Misappropriation"],
-        ),
-        Fixture(
-            id="G06",
-            company_id="delaware_gsa",
-            title="환경영향평가 미승인 입찰 공고",
-            text="환경 영향 평가 보고서가 최종 승인되지 않은 상태에서 대규모 교량 건설 입찰 공고. Environmental Policy Act 위반. 절차적 결격 사유로 인한 입찰 무효화 가능성.",
-            tags=["Environment", "Compliance", "Infrastructure"],
-        ),
-        Fixture(
-            id="G10",
+            id="G03",
             company_id="delaware_gsa",
             title="납세 기록 등 민감 데이터 공개 개방",
             text="주민의 납세 기록 등 민감 정보가 포함된 원시 데이터를 공공 데이터 포털에 개방 시도. 국가 보안 및 개인정보 보호법 위반. 데이터 익명화 검증 단계 강제 호출.",
