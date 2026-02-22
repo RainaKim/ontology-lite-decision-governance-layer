@@ -39,41 +39,41 @@ class LLMClient:
             Exception: If OpenAI API call fails
         """
         schema_description = """
-{
+{{
   "decision_statement": "string (10-1000 chars, clear executable action)",
   "goals": [
-    {
+    {{
       "description": "string (3-500 chars)",
       "metric": "string or null"
-    }
+    }}
   ],
   "kpis": [
-    {
+    {{
       "name": "string (3-200 chars)",
       "target": "string or null",
       "measurement_frequency": "string or null"
-    }
+    }}
   ],
   "risks": [
-    {
+    {{
       "description": "string (3-500 chars)",
       "severity": "string or null (Low/Medium/High/Critical)",
       "mitigation": "string or null"
-    }
+    }}
   ],
   "owners": [
-    {
+    {{
       "name": "string (2-200 chars)",
       "role": "string or null",
       "responsibility": "string or null"
-    }
+    }}
   ],
   "required_approvals": ["string"],
   "assumptions": [
-    {
+    {{
       "description": "string (3-500 chars)",
       "criticality": "string or null"
-    }
+    }}
   ],
   "counterparty_relation": "string or null ('related_party' ONLY if the decision involves a financial transaction or contract with subsidiaries, affiliates, parent company, major shareholders, or board members; null otherwise)",
   "policy_change_type": "string or null ('retroactive' ONLY if the decision explicitly applies new rules or terms to past events/transactions that already occurred; decisions that conflict with current strategy or KPIs are NOT retroactive; null otherwise)",
@@ -87,7 +87,7 @@ class LLMClient:
   "headcount_change": "integer or null (net number of people being added as positive integer, e.g. '20명 채용' → 20; reductions as negative, e.g. '10명 감축' → -10; null if not stated)",
   "involves_compliance_risk": "boolean or null (true if the decision explicitly mentions anti-bribery risk, ethics code violation, entertainment/gift policy limit breach, conflict of interest, or similar compliance/integrity concerns; null otherwise)",
   "confidence": 0.0 to 1.0
-}
+}}
 """
 
         system_prompt = f"""You are a decision extraction system for enterprise governance.
@@ -159,6 +159,41 @@ from the principle when you encounter a pattern not described below.
    If no owner is mentioned, use empty array [].
    Graph reasoning will infer appropriate owner from company personnel later.
 
+── CRITICAL: BUDGET CONSTRAINT DETECTION ───────────────────────────────
+
+When the text mentions BOTH a requested/required amount AND an available/
+remaining budget, you MUST compare them and extract a risk if they conflict:
+
+Examples that MUST generate risks:
+- "광고비 2.5억 원 요청. 잔여 예산 5,000만 원"
+  → Requested: 250M, Available: 50M → 5x overrun
+  → risks: [{{
+      "description": "예산 초과 위험: 요청 금액(2.5억 원)이 잔여 예산(5,000만 원)을 5배 초과",
+      "severity": "High",
+      "mitigation": "추가 예산 승인 필요 또는 요청 금액 조정"
+    }}]
+
+- "Project needs $500K. Department budget has $100K remaining."
+  → risks: [{{
+      "description": "Budget overrun risk: Requested amount ($500K) exceeds remaining budget ($100K) by 5x",
+      "severity": "High",
+      "mitigation": "Secure additional budget approval or reduce scope"
+    }}]
+
+- "10명 채용 필요. 승인된 인원은 3명"
+  → risks: [{{
+      "description": "인력 예산 초과: 요청 인원(10명)이 승인 인원(3명)을 초과",
+      "severity": "High",
+      "mitigation": "추가 인력 승인 필요"
+    }}]
+
+Severity guidelines for budget overruns:
+- 3x+ overrun → High severity
+- 2x-3x overrun → Medium severity
+- <2x overrun → Medium severity
+
+This is MANDATORY - do not skip risk extraction when budget constraints are violated.
+
 ── FIELD NOTES ─────────────────────────────────────────────────────────────
 
 decision_statement  One clear, executable sentence describing the action.
@@ -222,13 +257,21 @@ risks.severity      Assess actual impact if risk materializes:
                              threat (patient death/injury, clinical protocol violations,
                              major compliance breach, company bankruptcy)
                     High = severe but recoverable damage (reputation harm, major
-                           financial loss, regulatory penalty)
+                           financial loss, regulatory penalty, significant budget overruns)
                     Medium = moderate recoverable impact (delays, minor losses)
                     Low = minimal impact (process inefficiency, minor cost)
 
                     HEALTHCARE: Clinical protocol violations (Emergency Care Protocol,
                     Patient Safety Protocol) = CRITICAL severity. Quality standard
                     violations = HIGH severity.
+
+                    BUDGET CONSTRAINTS: When the text mentions both a requested amount
+                    AND available/remaining budget, compare them:
+                    - Requested > Available → Extract as HIGH severity risk
+                    - Example: "2.5억 원 요청, 잔여 예산 5,000만 원" → requested 250M,
+                      available 50M → 5x overrun → HIGH severity risk
+                    - Description: "예산 초과 위험: 요청 금액(X)이 잔여 예산(Y)을 Z배 초과"
+                    - Mitigation: "추가 예산 승인 필요" or "요청 금액 조정"
 
 ── OUTPUT RULES ────────────────────────────────────────────────────────────
 

@@ -87,33 +87,54 @@ def load_rules(rules_path: str = None, company_id: str = None) -> dict:
 
 def compute_risk_score(decision: Decision) -> float:
     """
-    Compute risk score from decision risks if not already set.
-    Simple heuristic: count risks and weight by severity.
+    Compute risk score (0–10) combining individual risk items with structural signals.
+
+    Two layers:
+    1. Individual risks (LLM-extracted): weighted by severity
+    2. Structural signals: strategic_impact and compliance flags
+       These ensure the numeric score stays consistent with qualitative judgements —
+       e.g. a HIPAA violation with strategic_impact=critical should score ≥ 7 (HIGH_RISK),
+       not 3 (one extracted high-severity risk item) while the UI labels it "매우 높음".
+
+    Structural bonus calibration:
+      strategic_impact=critical  → +3.5  (serious strategic exposure)
+      strategic_impact=high      → +1.5
+      involves_compliance_risk   → +2.5  (regulatory/legal breach risk)
+      uses_pii                   → +1.0  (data exposure risk)
     """
     if decision.risk_score is not None:
         return decision.risk_score
 
-    if not decision.risks:
-        return 0.0
-
-    # Severity mapping
+    # --- Layer 1: individual risk items ---
     severity_weights = {
-        "critical": 8.0,  # Single critical risk = 8/10 (narcotics, patient safety, legal violations)
-        "high": 3.0,      # High severity = 3/10
-        "medium": 1.5,    # Medium severity = 1.5/10
-        "low": 0.5        # Low severity = 0.5/10
+        "critical": 8.0,
+        "high": 3.0,
+        "medium": 1.5,
+        "low": 0.5,
     }
 
     total_score = 0.0
-    for risk in decision.risks:
+    for risk in (decision.risks or []):
         severity = (risk.severity or "medium").lower()
-        weight = severity_weights.get(severity, 1.0)
-        total_score += weight
+        total_score += severity_weights.get(severity, 1.0)
 
-    # Normalize to 0-10 scale (cap at 10)
-    # Assume 5+ critical risks = max risk
-    normalized = min(total_score, 10.0)
-    return round(normalized, 1)
+    # --- Layer 2: structural signals ---
+    strategic_impact_bonus = {
+        "critical": 3.5,
+        "high": 1.5,
+        "medium": 0.0,
+        "low": 0.0,
+    }
+    if decision.strategic_impact:
+        total_score += strategic_impact_bonus.get(decision.strategic_impact.value, 0.0)
+
+    if getattr(decision, "involves_compliance_risk", False):
+        total_score += 2.5
+
+    if getattr(decision, "uses_pii", False):
+        total_score += 1.0
+
+    return round(min(total_score, 10.0), 1)
 
 
 def get_approver_level(approver_id: str, rules_data: dict) -> int:
@@ -238,6 +259,12 @@ def select_approval_chain(decision: Decision, rules_data: dict, company_context:
     """
     Select approval chain based on rule matching.
     Returns (approval_chain, triggered_rules).
+
+    Note: triggered_rules now includes ALL evaluated rules with status field:
+    - TRIGGERED: rule condition met, action taken
+    - PASSED: rule evaluated but condition not met
+    - UNSATISFIED: rule requires something (e.g. goal mapping) that's missing
+    - INACTIVE: rule is active=false
     """
     rules = rules_data.get("governance_rules", [])
     triggered_rules = []
@@ -246,19 +273,42 @@ def select_approval_chain(decision: Decision, rules_data: dict, company_context:
 
     # Evaluate all rules (can trigger multiple)
     for rule in rules:
+        rule_id = rule.get("rule_id", "")
+
+        # Handle inactive rules
         if not rule.get("active", True):
+            triggered_rules.append({
+                "rule_id": rule_id,
+                "name": rule.get("name", ""),
+                "description": rule.get("description", ""),
+                "rule_type": rule.get("type", "unknown"),
+                "status": "INACTIVE",
+                "visible_in_graph": False,
+                "reason": "Rule is not active"
+            })
             continue
 
         # Check if rule is triggered
         triggered, _ = evaluate_company_rule(rule, decision, company_context)
 
         if triggered:
-            logger.info(f"Rule {rule['rule_id']} ({rule['name']}) TRIGGERED")
+            logger.info(f"Rule {rule_id} ({rule['name']}) TRIGGERED")
+
+            # Determine if this is a graph-visible rule
+            consequence = rule.get("consequence", {})
+            action = consequence.get("action", "")
+            visible_in_graph = action in ["require_approval", "require_review", "block", "require_goal_mapping", "escalate"]
+
             triggered_rules.append({
-                "rule_id": rule["rule_id"],
-                "name": rule["name"],
-                "description": rule["description"],
-                "rule_type": rule.get("type", "unknown")
+                "rule_id": rule_id,
+                "name": rule.get("name", ""),
+                "description": rule.get("description", ""),
+                "rule_type": rule.get("type", "unknown"),
+                "status": "TRIGGERED",
+                "visible_in_graph": visible_in_graph,
+                "reason": f"Rule triggered: {action}",
+                "condition": rule.get("condition"),
+                "consequence": consequence
             })
 
             # Extract approval requirements
@@ -295,6 +345,45 @@ def select_approval_chain(decision: Decision, rules_data: dict, company_context:
             # but does NOT add an approver. The rule is tracked in triggered_rules
             # and raises a STRATEGIC_CRITICAL flag via detect_flags.
             # CEO approval only comes from R3 (strategic_impact == critical) or R5 (cost > 1B).
+
+        else:
+            # Rule not triggered - check if it's UNSATISFIED (violation)
+            consequence = rule.get("consequence", {})
+            action = consequence.get("action", "")
+
+            # UNSATISFIED: require_goal_mapping but no KPIs/goals provided
+            if action == "require_goal_mapping":
+                has_kpis = len(decision.kpis) > 0 if hasattr(decision, 'kpis') and decision.kpis else False
+                has_goals = len(decision.goals) > 0 if hasattr(decision, 'goals') and decision.goals else False
+
+                if not has_kpis and not has_goals:
+                    # This is a violation - add to triggered_rules
+                    triggered_rules.append({
+                        "rule_id": rule_id,
+                        "name": rule.get("name", ""),
+                        "description": rule.get("description", ""),
+                        "rule_type": rule.get("type", "unknown"),
+                        "status": "UNSATISFIED",
+                        "visible_in_graph": True,
+                        "reason": f"Rule requires goal/KPI mapping but none provided"
+                    })
+
+            # UNSATISFIED: require_approval but no owner assigned
+            elif action in ["require_approval", "require_review"]:
+                has_owners = len(decision.owners) > 0 if hasattr(decision, 'owners') and decision.owners else False
+                if not has_owners and rule.get("requires_owner", False):
+                    # This is a violation - add to triggered_rules
+                    triggered_rules.append({
+                        "rule_id": rule_id,
+                        "name": rule.get("name", ""),
+                        "description": rule.get("description", ""),
+                        "rule_type": rule.get("type", "unknown"),
+                        "status": "UNSATISFIED",
+                        "visible_in_graph": True,
+                        "reason": f"Rule requires owner assignment but none provided"
+                    })
+
+            # PASSED rules are NOT added to triggered_rules (filtered out)
 
     return approval_steps, triggered_rules
 
@@ -390,14 +479,31 @@ def detect_flags(decision: Decision, company_context: dict, computed_risk_score:
 
     rule_types = [rule.get('rule_type') or rule.get('type') for rule in triggered_rules]
 
-    if 'privacy' in rule_types:
+    # PRIVACY_REVIEW_REQUIRED: raised for explicit 'privacy' rules OR compliance rules
+    # that protect personal/health data (HIPAA, GDPR, PII).
+    # R2 in healthcare is typed 'compliance' (not 'privacy') because it is a broad
+    # regulatory-compliance rule, but its subject matter is data privacy — so we
+    # check the rule description/name for privacy-relevant vocabulary.
+    _PRIVACY_KEYWORDS = {'pii', 'hipaa', 'gdpr', 'privacy', '프라이버시', '개인정보', 'phi', 'anonymi'}
+    def _is_privacy_relevant(rule: dict) -> bool:
+        rt = (rule.get('rule_type') or rule.get('type') or '').lower()
+        if rt == 'privacy':
+            return True
+        if rt == 'compliance':
+            text = (rule.get('name', '') + ' ' + rule.get('description', '')).lower()
+            return any(kw in text for kw in _PRIVACY_KEYWORDS)
+        return False
+
+    if any(_is_privacy_relevant(r) for r in triggered_rules):
         flags.append(GovernanceFlag.PRIVACY_REVIEW_REQUIRED)
 
     if 'financial' in rule_types:
         flags.append(GovernanceFlag.FINANCIAL_THRESHOLD_EXCEEDED)
 
     if 'strategic' in rule_types:
-        flags.append(GovernanceFlag.STRATEGIC_CRITICAL)
+        # Only add if not already present (avoid duplicates)
+        if GovernanceFlag.STRATEGIC_CRITICAL not in flags:
+            flags.append(GovernanceFlag.STRATEGIC_CRITICAL)
 
     # GOVERNANCE_COVERAGE_GAP: no rules matched but decision has meaningful content.
     # Signals that the governance framework may not cover this decision type.
@@ -411,7 +517,8 @@ def detect_flags(decision: Decision, company_context: dict, computed_risk_score:
         if has_content and decision.confidence > 0.3:
             flags.append(GovernanceFlag.GOVERNANCE_COVERAGE_GAP)
 
-    return flags
+    # Remove duplicates
+    return list(dict.fromkeys(flags))
 
 
 def evaluate_governance(decision: Decision, company_context: dict = None, use_o1: bool = True, company_id: str = None) -> GovernanceResult:

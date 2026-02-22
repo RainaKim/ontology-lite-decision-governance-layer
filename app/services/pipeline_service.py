@@ -116,6 +116,7 @@ async def run_pipeline(
                 decision=decision_dict,
                 governance=gov_for_graph,
                 decision_id=decision_id,
+                company_context=company_data or {},
             )
             logger.info(f"[{decision_id}] Graph: built {len(decision_graph.nodes)} nodes, {len(decision_graph.edges)} edges")
             graph_payload = {

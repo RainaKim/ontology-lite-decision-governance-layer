@@ -74,15 +74,126 @@ _FLAG_MESSAGES = {
 }
 
 
-def _normalize_flags(raw_flags: list[str], inferred_owner: bool = False) -> list[NormalizedFlag]:
+# Each flag only looks at the rule types that are its root cause.
+# This prevents governance flags and strategic flags from showing the same goals
+# when they are triggered by fundamentally different rules.
+_FLAG_RELEVANT_RULE_TYPES: dict[str, set[str]] = {
+    "HIGH_RISK":                   {"compliance", "privacy"},          # risk score driven by compliance violations
+    "PRIVACY_REVIEW_REQUIRED":     {"compliance", "privacy"},
+    "STRATEGIC_CRITICAL":          {"strategic"},                       # strategic rules only
+    "STRATEGIC_MISALIGNMENT":      {"strategic"},
+    "FINANCIAL_THRESHOLD_EXCEEDED":{"financial", "capital_expenditure"},
+    # default (not in map) → use ALL triggered rule types
+}
+
+# Rule-type → broad keyword hints to ensure goals are found even when
+# rule descriptions don't explicitly repeat the goal's vocabulary
+_TYPE_HINT_KEYWORDS: dict[str, set[str]] = {
+    "compliance": {"규제", "준수", "COMPLIANCE", "HIPAA", "GDPR", "프라이버시", "데이터", "개인정보"},
+    "privacy":    {"프라이버시", "PII", "PHI", "데이터", "개인정보", "규제"},
+    "financial":  {"비용", "예산", "효율", "절감", "COST", "BUDGET"},
+    "strategic":  {"안전", "SAFETY", "환자", "PATIENT", "전략", "STRATEGIC", "임상"},
+}
+
+
+def _compute_affected_goals(
+    flag_code: str,
+    triggered_rules: list[dict],
+    company_goals: list[dict],
+) -> list[dict]:
+    """
+    Identify which strategic goals are at risk for a given flag.
+
+    Strategy: match goals against the *type-hint vocabulary* of the rule types
+    that caused this flag — NOT against the raw rule description text.
+
+    Rule description text is avoided because it shares incidental vocabulary
+    (e.g. "환자" appears in both a compliance rule and a patient-safety goal)
+    that would create misleading cross-category goal attribution.
+
+    Example for this HIPAA scenario:
+      HIGH_RISK (compliance rule R2) → hint vocab {규제, HIPAA, 데이터, …}
+        → G2 "규제 및 데이터 준수" matches; G1 "환자 안전" does NOT
+      STRATEGIC_CRITICAL (strategic rules R3/R4) → hint vocab {안전, 환자, 임상, …}
+        → G1 "환자 안전 우수성" matches; G2 also matches via "임상"
+
+    Returns a deduplicated list of {goal_id, name, priority} dicts.
+    """
+    if not triggered_rules or not company_goals:
+        return []
+
+    flag_upper = flag_code.upper()
+
+    # Flags that do not benefit from goal annotation
+    skip_flags = {"MISSING_OWNER", "MISSING_RISK_ASSESSMENT", "CRITICAL_CONFLICT", "GOVERNANCE_COVERAGE_GAP"}
+    if flag_upper in skip_flags:
+        return []
+
+    # Collect which rule types were actually triggered, filtered by this flag's scope
+    relevant_type_filter = _FLAG_RELEVANT_RULE_TYPES.get(flag_upper)  # None → accept all
+    active_rule_types: set[str] = set()
+    for r in triggered_rules:
+        rt = (r.get("rule_type") or r.get("type", "")).lower()
+        if relevant_type_filter is None or rt in relevant_type_filter:
+            active_rule_types.add(rt)
+
+    if not active_rule_types:
+        return []
+
+    # Build the matching vocabulary from type hints only (not rule description text)
+    hint_vocab: set[str] = set()
+    for rt in active_rule_types:
+        hint_vocab |= _TYPE_HINT_KEYWORDS.get(rt, set())
+
+    if not hint_vocab:
+        return []
+
+    # Build keyword set for a goal (name + description + KPI names)
+    def _goal_keywords(goal: dict) -> set:
+        parts = [goal.get("name", ""), goal.get("description", "")]
+        for kpi in goal.get("kpis", []):
+            parts.append(kpi.get("name", "") if isinstance(kpi, dict) else str(kpi))
+        return set(w.upper() for part in parts for w in part.replace("-", " ").split() if len(w) >= 2)
+
+    affected = []
+    for goal in company_goals:
+        goal_id = goal.get("goal_id", "")
+        if not goal_id:
+            continue
+        if _goal_keywords(goal) & hint_vocab:
+            affected.append({
+                "goal_id": goal_id,
+                "name": goal.get("name", ""),
+                "priority": goal.get("priority"),
+            })
+
+    return affected
+
+
+def _normalize_flags(
+    raw_flags: list[str],
+    inferred_owner: bool = False,
+    triggered_rules: list[dict] = None,
+    company_goals: list[dict] = None,
+) -> list[NormalizedFlag]:
     """
     Transform raw string flags to structured NormalizedFlag objects.
-    Suppress MISSING_OWNER if inferred_owner is True.
+
+    - Suppresses MISSING_OWNER if inferred_owner is True.
+    - Deduplicates flags (engine may emit duplicates in edge cases).
+    - Annotates STRATEGIC_CRITICAL / PRIVACY_REVIEW_REQUIRED / HIGH_RISK flags
+      with the list of strategic goals they put at risk.
     """
     normalized = []
+    seen_codes: set[str] = set()  # deduplication
+
     for flag in raw_flags:
         if flag.upper() == "MISSING_OWNER" and inferred_owner:
-            continue  # suppress this flag
+            continue
+        if flag in seen_codes:
+            continue  # drop duplicate
+        seen_codes.add(flag)
+
         flag_upper = flag.upper()
 
         # Determine category
@@ -102,11 +213,19 @@ def _normalize_flags(raw_flags: list[str], inferred_owner: bool = False) -> list
         # Get message
         message = _FLAG_MESSAGES.get(flag, f"Governance flag: {flag}")
 
+        # Compute affected strategic goals for strategic/compliance/risk flags
+        affected_goals = _compute_affected_goals(
+            flag_code=flag,
+            triggered_rules=triggered_rules or [],
+            company_goals=company_goals or [],
+        )
+
         normalized.append(NormalizedFlag(
             code=flag,
             category=category,
             severity=severity,
             message=message,
+            affected_goals=affected_goals,
         ))
 
     return normalized
@@ -380,7 +499,13 @@ def build_console_payload(record: DecisionRecord) -> ConsolePayloadResponse:
                 inferred_owner = True
             elif owners:
                 inferred_owner = False
-        normalized_flags = _normalize_flags(raw_flags, inferred_owner=inferred_owner)
+        company_goals = (company_raw_data or {}).get("strategic_goals", [])
+        normalized_flags = _normalize_flags(
+            raw_flags,
+            inferred_owner=inferred_owner,
+            triggered_rules=raw_triggered,
+            company_goals=company_goals,
+        )
 
         normalized_triggered, normalized_all = _normalize_rules(raw_triggered, record.company_id)
         normalized_chain = _normalize_approval_chain(raw_chain, raw_triggered, company_raw_data)

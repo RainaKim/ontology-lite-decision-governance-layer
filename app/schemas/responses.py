@@ -146,7 +146,7 @@ class NormalizedFlag(BaseModel):
     Structured flag — transformed from raw engine string flags.
 
     Engine emits: ["HIGH_FINANCIAL_RISK", "BOARD_APPROVAL_REQUIRED"]
-    API emits:    [{ code, category, severity, message }, ...]
+    API emits:    [{ code, category, severity, message, affected_goals }, ...]
 
     Transformation logic lives in the router/response-assembly layer.
     """
@@ -154,6 +154,10 @@ class NormalizedFlag(BaseModel):
     category: FlagCategory
     severity: FlagSeverity
     message: str
+    affected_goals: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Strategic goals affected by this flag (goal_id, name, priority)"
+    )
 
 
 class NormalizedRule(BaseModel):

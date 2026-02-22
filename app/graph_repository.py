@@ -273,23 +273,8 @@ class InMemoryGraphRepository(BaseGraphRepository):
             await self.add_edge(edge)
             edges.append(edge)
 
-        # 3. Create Goal nodes
-        for idx, goal in enumerate(decision.get("goals", [])):
-            goal_id = f"{decision_id}_goal_{idx}"
-            goal_desc = goal.get("description", "") if isinstance(goal, dict) else str(goal)
-            goal_node = Node(
-                id=goal_id,
-                type=NodeType.GOAL,
-                label=f"G{idx+1}: {goal_desc[:50]}",
-                properties={"description": goal_desc, "metric": goal.get("metric") if isinstance(goal, dict) else None}
-            )
-            await self.add_node(goal_node)
-            nodes.append(goal_node)
-
-            # Edge: Decision -[HAS_GOAL]-> Goal
-            edge = create_edge(decision_id, goal_id, EdgePredicate.HAS_GOAL)
-            await self.add_edge(edge)
-            edges.append(edge)
+        # 3. LLM extracted goals removed - use company strategic goals (G1/G2/G3) instead
+        # Strategic goals are added in graph_enrichment.py with SUPPORTS/CONFLICTS_WITH edges
 
         # 4. Create KPI nodes
         for idx, kpi in enumerate(decision.get("kpis", [])):
@@ -305,8 +290,8 @@ class InMemoryGraphRepository(BaseGraphRepository):
             await self.add_node(kpi_node)
             nodes.append(kpi_node)
 
-            # Edge: Decision -[HAS_KPI]-> KPI
-            edge = create_edge(decision_id, kpi_id, EdgePredicate.HAS_KPI)
+            # Edge: Decision -[MEASURED_BY]-> KPI
+            edge = create_edge(decision_id, kpi_id, EdgePredicate.MEASURED_BY)
             await self.add_edge(edge)
             edges.append(edge)
 
@@ -363,6 +348,8 @@ class InMemoryGraphRepository(BaseGraphRepository):
             edges.append(edge)
 
         # 8. Create Risk nodes
+        # Risk nodes are created here, but edges are created in graph_enrichment
+        # to connect them to the Rules that generate them (Rule → GENERATES_RISK → Risk)
         for idx, risk in enumerate(decision.get("risks", [])):
             risk_id = f"{decision_id}_risk_{idx}"
             risk_node = create_risk_node(
@@ -374,24 +361,42 @@ class InMemoryGraphRepository(BaseGraphRepository):
             await self.add_node(risk_node)
             nodes.append(risk_node)
 
-            # Edge: Action -[TRIGGERS]-> Risk
-            edge = create_edge(decision_id, risk_id, EdgePredicate.TRIGGERS)
-            await self.add_edge(edge)
-            edges.append(edge)
+            # Decision → Risk edge removed - risks now connected through rules
+            # Rule → GENERATES_RISK → Risk edges added in graph_enrichment
 
-        # 9. Create Approver nodes for approval chain (distinct from Actor/owner nodes)
+        # 9a. Create RULE nodes first (before approvers) so we can connect approvers to rules
+        # RULE nodes must exist before we create Rule → REQUIRES_APPROVAL_BY → Approver edges
+        if company_context:
+            from app.graph_enrichment import add_governance_rules
+
+            rule_nodes, rule_edges = await add_governance_rules(
+                decision_id=decision_id,
+                decision=decision,
+                governance=governance,
+                company_context=company_context,
+                add_node_fn=self.add_node,
+                add_edge_fn=self.add_edge
+            )
+            nodes.extend(rule_nodes)
+            edges.extend(rule_edges)
+
+        # 9b. Create Approver nodes for approval chain (distinct from Actor/owner nodes)
+        # IMPORTANT: Connect approvers to the RULE that triggered them, not directly to Decision
+        # This creates semantic chains: Decision → TRIGGERS → Rule → REQUIRES_APPROVAL_BY → Approver
         for idx, step in enumerate(governance.get("approval_chain", [])):
             approver_id = f"{decision_id}_approver_{step.get('level')}_{idx}"
             rule_action = step.get("rule_action", "require_approval")
             auth_label = "ESCALATION" if rule_action == "require_review" else "REQUIRED"
+            source_rule_id = step.get("source_rule_id")
+
             approver_node = Node(
                 id=approver_id,
-                type=NodeType.APPROVER,
+                type=NodeType.ACTOR,  # Changed from APPROVER to ACTOR
                 label=step.get("role", ""),
                 properties={
                     "role": step.get("role", ""),
                     "auth_type": auth_label,
-                    "source_rule_id": step.get("source_rule_id"),
+                    "source_rule_id": source_rule_id,
                     "rationale": step.get("rationale"),
                     "required": step.get("required", True),
                 }
@@ -402,35 +407,86 @@ class InMemoryGraphRepository(BaseGraphRepository):
                 await self.add_node(approver_node)
                 nodes.append(approver_node)
 
-            # Edge: Action -[REQUIRES_APPROVAL_BY]-> Approver
-            edge = create_edge(
-                decision_id,
-                approver_id,
-                EdgePredicate.REQUIRES_APPROVAL_BY,
-                required=step.get("required", True),
-                rationale=step.get("rationale")
-            )
-            await self.add_edge(edge)
-            edges.append(edge)
-
-        # 10. Create Policy nodes from triggered rules
-        for rule in governance.get("triggered_rules", []):
-            policy_id = f"policy_{rule.get('rule_id')}"
-
-            # Avoid duplicates (policies are shared across decisions)
-            if policy_id not in self._nodes:
-                policy_node = create_policy_node(
-                    policy_id=policy_id,
-                    name=rule.get("name", ""),
-                    description=rule.get("description")
+            # Edge: Rule -[REQUIRES_APPROVAL_BY]-> Approver (NOT Decision -> Approver)
+            # This shows the causal chain: the RULE requires approval, not just the decision
+            if source_rule_id:
+                rule_node_id = f"rule_{source_rule_id}"
+                edge = create_edge(
+                    rule_node_id,
+                    approver_id,
+                    EdgePredicate.REQUIRES_APPROVAL_BY,
+                    required=step.get("required", True),
+                    rationale=step.get("rationale")
                 )
-                await self.add_node(policy_node)
-                nodes.append(policy_node)
+                await self.add_edge(edge)
+                edges.append(edge)
 
-            # Edge: Action -[GOVERNED_BY]-> Policy
-            edge = create_edge(decision_id, policy_id, EdgePredicate.GOVERNED_BY)
-            await self.add_edge(edge)
-            edges.append(edge)
+        # 10. POLICY nodes removed - consolidated with RULE nodes
+        # Policy and Rule were duplicates. Now using only RULE nodes.
+
+        # 11. Add Strategic Goals and Alignment Edges (Ontology Enhancement)
+        if company_context:
+            from app.graph_enrichment import (
+                add_strategic_goals,
+                add_cost_threshold_edges,
+                add_approval_hierarchy_edges,
+                add_cost_goal_edges,
+                add_rule_risk_edges
+            )
+
+            # Decision → SUPPORTS → Goal (for KPI-aligned goals)
+            sg_nodes, sg_edges = await add_strategic_goals(
+                decision_id=decision_id,
+                decision=decision,
+                company_context=company_context,
+                add_node_fn=self.add_node,
+                add_edge_fn=self.add_edge
+            )
+            nodes.extend(sg_nodes)
+            edges.extend(sg_edges)
+
+            # NOTE: Rule nodes (R1-R8) are created earlier in step 9a
+            # This ensures they exist before we create approver edges
+
+            # Add cost threshold violation edges
+            cost_node_id = f"{decision_id}_cost" if self._extract_cost_and_currency(decision)[0] else None
+            threshold_edges = await add_cost_threshold_edges(
+                decision_id=decision_id,
+                decision=decision,
+                governance=governance,
+                cost_node_id=cost_node_id,
+                company_context=company_context,
+                add_edge_fn=self.add_edge
+            )
+            edges.extend(threshold_edges)
+
+            # Add Cost → CONFLICTS_WITH → Goal → GENERATES_RISK → Risk chains
+            cost_goal_nodes, cost_goal_edges = await add_cost_goal_edges(
+                decision_id=decision_id,
+                decision=decision,
+                company_context=company_context,
+                cost_node_id=cost_node_id,
+                add_node_fn=self.add_node,
+                add_edge_fn=self.add_edge
+            )
+            nodes.extend(cost_goal_nodes)
+            edges.extend(cost_goal_edges)
+
+            # Add Rule → GENERATES_RISK → Risk edges (for financial/compliance risks)
+            rule_risk_nodes, rule_risk_edges = await add_rule_risk_edges(
+                decision_id=decision_id,
+                decision=decision,
+                governance=governance,
+                add_node_fn=self.add_node,
+                add_edge_fn=self.add_edge
+            )
+            nodes.extend(rule_risk_nodes)
+            edges.extend(rule_risk_edges)
+
+            # ESCALATES_TO edges removed
+            # Multiple approvers in approval_chain are parallel (from different rules),
+            # not hierarchical. Each approver is independently required.
+            # Example: R1 → CFO, R7 → HR Manager (parallel, not CFO → HR Manager)
 
         return DecisionGraph(
             decision_id=decision_id,
@@ -438,7 +494,8 @@ class InMemoryGraphRepository(BaseGraphRepository):
             edges=edges,
             metadata={
                 "node_count": len(nodes),
-                "edge_count": len(edges)
+                "edge_count": len(edges),
+                "ontology_version": "2.0"
             }
         )
 
