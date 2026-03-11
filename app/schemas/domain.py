@@ -47,6 +47,7 @@ class Risk(BaseModel):
     description_en: Optional[str] = Field(None, description="English translation of description; always in English regardless of input language")
     severity: Optional[str] = Field(None, description="Low/Medium/High/Critical")
     mitigation: Optional[str] = Field(None, description="How to address this risk")
+    risk_type: Optional[str] = Field(None, description="Structured risk category: 'budget_overrun' | 'compliance' | 'operational' | 'strategic' | 'other'")
 
 
 class Owner(BaseModel):
