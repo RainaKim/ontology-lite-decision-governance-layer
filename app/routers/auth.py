@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -197,4 +197,6 @@ def update_me(
         department_name=body.department_name,
         company_id=body.company_id,
     )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="User not found")
     return build_user_response(updated, db)
