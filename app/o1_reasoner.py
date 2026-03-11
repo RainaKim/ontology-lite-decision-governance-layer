@@ -1,7 +1,7 @@
 """
-o1 Reasoning Layer - Deep reasoning for ontology and governance.
+Nova Reasoning Layer - Deep reasoning for ontology and governance.
 
-Uses OpenAI o1 model for:
+Uses Amazon Nova on Bedrock for:
 - Ontology reasoning (goal mapping, ownership validation)
 - Governance reasoning (rule conflicts, approval chain optimization)
 """
@@ -9,27 +9,26 @@ Uses OpenAI o1 model for:
 import json
 import logging
 from typing import Optional, Dict, List
-from openai import OpenAI
+
+from app.bedrock_client import BedrockClient, _DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
 
 
 class O1Reasoner:
     """
-    OpenAI o1 reasoning client for complex multi-step reasoning tasks.
-
-    Uses o1-mini for fast reasoning or o1-preview for deeper analysis.
+    Amazon Nova reasoning client for complex multi-step reasoning tasks.
     """
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "o4-mini"):
+    def __init__(self, api_key: Optional[str] = None, model: str = _DEFAULT_MODEL):
         """
-        Initialize o1 reasoner.
+        Initialize Nova reasoner.
 
         Args:
-            api_key: OpenAI API key (if None, will use OPENAI_API_KEY env var)
-            model: o1 model to use (o1-mini or o1-preview)
+            api_key: Unused (kept for API compatibility). BedrockClient reads BEDROCK_API_KEY.
+            model: Bedrock model ID to use (default: amazon.nova-2-lite)
         """
-        self.client = OpenAI(api_key=api_key)
+        self.client = BedrockClient(model_id=model)
         self.model = model
         logger.info(f"Initialized O1Reasoner with model: {model}")
 
@@ -82,14 +81,9 @@ Output your reasoning as JSON with this structure:
 Be rigorous. Only map goals with genuine alignment. Low scores for weak connections."""
 
         try:
-            logger.info(f"Calling o1 for goal alignment reasoning")
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            reasoning_text = response.choices[0].message.content
-            logger.info(f"Received o1 reasoning ({len(reasoning_text)} chars)")
+            logger.info(f"Calling Nova for goal alignment reasoning")
+            reasoning_text = self.client.invoke(prompt)
+            logger.info(f"Received Nova reasoning ({len(reasoning_text)} chars)")
 
             # Parse JSON from response
             # o1 might include markdown code blocks, so extract JSON
@@ -153,14 +147,9 @@ Output JSON:
 }}"""
 
         try:
-            logger.info(f"Calling o1 for ownership validation reasoning")
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            reasoning_text = response.choices[0].message.content
-            logger.info(f"Received o1 ownership reasoning ({len(reasoning_text)} chars)")
+            logger.info(f"Calling Nova for ownership validation reasoning")
+            reasoning_text = self.client.invoke(prompt)
+            logger.info(f"Received Nova ownership reasoning ({len(reasoning_text)} chars)")
 
             json_start = reasoning_text.find('{')
             json_end = reasoning_text.rfind('}') + 1
@@ -237,14 +226,9 @@ Output JSON:
 }}"""
 
         try:
-            logger.info(f"Calling o1 for governance conflict reasoning")
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            reasoning_text = response.choices[0].message.content
-            logger.info(f"Received o1 governance reasoning ({len(reasoning_text)} chars)")
+            logger.info(f"Calling Nova for governance conflict reasoning")
+            reasoning_text = self.client.invoke(prompt)
+            logger.info(f"Received Nova governance reasoning ({len(reasoning_text)} chars)")
 
             json_start = reasoning_text.find('{')
             json_end = reasoning_text.rfind('}') + 1
@@ -310,14 +294,9 @@ Output JSON:
 }}"""
 
         try:
-            logger.info(f"Calling o1 for constraint violation reasoning")
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            reasoning_text = response.choices[0].message.content
-            logger.info(f"Received o1 constraint reasoning ({len(reasoning_text)} chars)")
+            logger.info(f"Calling Nova for constraint violation reasoning")
+            reasoning_text = self.client.invoke(prompt)
+            logger.info(f"Received Nova constraint reasoning ({len(reasoning_text)} chars)")
 
             json_start = reasoning_text.find('{')
             json_end = reasoning_text.rfind('}') + 1
@@ -338,7 +317,8 @@ Output JSON:
         decision_id: str,
         decision_data: Dict,
         company_data: Dict,
-        graph_context: Optional[Dict] = None
+        graph_context: Optional[Dict] = None,
+        lang: str = "ko",
     ) -> Dict:
         """
         Extract relevant subgraph, then use o1 to find logical contradictions.
@@ -363,22 +343,17 @@ Output JSON:
         )
 
         # Step 2: Build structured prompt from subgraph
-        prompt = self._build_contradiction_prompt(decision_id, subgraph)
+        prompt = self._build_contradiction_prompt(decision_id, subgraph, lang=lang)
 
         # Step 3: Call o1
         try:
             logger.info(
-                f"Calling o1 for graph contradiction analysis "
+                f"Calling Nova for graph contradiction analysis "
                 f"(decision={decision_id}, nodes={len(subgraph['nodes'])}, "
                 f"edges={len(subgraph['edges'])})"
             )
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            reasoning_text = response.choices[0].message.content
-            logger.info(f"Received o1 graph reasoning ({len(reasoning_text)} chars)")
+            reasoning_text = self.client.invoke(prompt)
+            logger.info(f"Received Nova graph reasoning ({len(reasoning_text)} chars)")
 
             # Extract JSON from response
             json_start = reasoning_text.find('{')
@@ -717,7 +692,7 @@ Output JSON:
 
             _add_edge(source, target, str(predicate), edge_props)
 
-    def _build_contradiction_prompt(self, decision_id: str, subgraph: Dict) -> str:
+    def _build_contradiction_prompt(self, decision_id: str, subgraph: Dict, lang: str = "ko") -> str:
         """
         Build a structured prompt from the extracted subgraph.
 
@@ -747,6 +722,13 @@ Output JSON:
             if e.get("properties"):
                 edges_section += f"  | {json.dumps(e['properties'])}"
             edges_section += "\n"
+
+        if lang == "en":
+            next_actions_lang = "English"
+            next_actions_example = '"Adjust budget below $50K — or submit a CFO approval request with cost-benefit analysis attached (Capital Expenditure Rule R1 applies at this amount)"'
+        else:
+            next_actions_lang = "Korean"
+            next_actions_example = '"예산을 5,000만 원 미만으로 조정하거나 — 또는 CFO 승인 요청서와 비용 편익 분석을 첨부하세요 (자본적 지출 승인 규정 R1 적용)"'
 
         return f"""You are a decision governance expert analyzing a decision subgraph for logical contradictions and structural issues.
 
@@ -826,7 +808,7 @@ ANALYSIS TASKS:
    - Missing critical relationships
    - Approval chain inconsistencies
 
-7. **NEXT ACTIONS** (Korean language required)
+7. **NEXT ACTIONS** (output language: {next_actions_lang})
    Based on the subgraph — specifically the triggered Policy nodes (governance rules with
    their actual conditions and thresholds), the approval hierarchy from Actor/Approver nodes,
    and any missing elements — generate a prioritized list of concrete actions the decision
@@ -835,11 +817,11 @@ ANALYSIS TASKS:
    Guidelines:
    - Each action must be specific and actionable, not generic
    - Where a governance rule sets a financial threshold, name it explicitly
-     (e.g. "예산을 X원 미만으로 조정하거나 — 또는 CFO 승인 요청서와 비용 편익 분석을 첨부하세요")
+     (e.g. {next_actions_example})
    - Where an approver is required, specify what document/evidence to prepare
    - If a compliance risk must be resolved first, say what to prepare
    - If owner is missing, suggest which role based on the decision domain
-   - Output in Korean only
+   - Output in {next_actions_lang} only
 
 Output JSON:
 {{
@@ -900,8 +882,8 @@ Output JSON:
     }}
   ],
   "next_actions": [
-    "Korean string: concrete step toward approval — e.g. 'CFO 승인을 받으세요 — 2.5억 원 규모로 자본적 지출 승인 규정(R1)이 적용됩니다. 비용 편익 분석 및 예산 근거를 첨부하거나, 예산을 5,000만 원 이하로 조정하세요'",
-    "Korean string: next step..."
+    "{next_actions_lang} string: concrete step toward approval",
+    "{next_actions_lang} string: next step..."
   ],
   "graph_health_score": 0.0-1.0,
   "confidence": 0.0-1.0,

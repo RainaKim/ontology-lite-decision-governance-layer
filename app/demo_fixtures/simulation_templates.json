@@ -1,0 +1,92 @@
+{
+  "templates": [
+    {
+      "templateId": "reduce_to_remaining_budget",
+      "issueType": "financial",
+      "titleKo": "잔여 예산 내 조정",
+      "titleEn": "Adjust to Remaining Budget",
+      "descriptionKo": "요청 금액을 부서 잔여 예산 수준으로 낮춰 예산 초과 리스크를 해소합니다",
+      "descriptionEn": "Reduce requested amount to remaining departmental budget to eliminate overspend risk",
+      "patchStrategy": "set_cost_to_remaining_budget",
+      "priority": 1,
+      "applicabilityConditions": ["cost_exceeds_remaining_budget"]
+    },
+    {
+      "templateId": "reduce_to_high_threshold",
+      "issueType": "financial",
+      "titleKo": "승인 기준 이하로 예산 조정",
+      "titleEn": "Reduce to Approval Threshold",
+      "descriptionKo": "요청 금액을 상위 승인 기준 이하로 낮춰 승인 부담을 줄입니다",
+      "descriptionEn": "Reduce requested amount below the upper approval threshold to lower approval burden",
+      "patchStrategy": "set_cost_to_high_threshold",
+      "priority": 2,
+      "applicabilityConditions": ["cost_exceeds_high_threshold"]
+    },
+    {
+      "templateId": "phased_rollout",
+      "issueType": "financial",
+      "titleKo": "단계적 실행으로 전환",
+      "titleEn": "Convert to Phased Rollout",
+      "descriptionKo": "초기 단계 비용만 집행하고 나머지는 성과 검증 후 추진합니다",
+      "descriptionEn": "Execute only initial phase cost; defer remainder pending performance validation",
+      "patchStrategy": "reduce_cost_by_half",
+      "priority": 3,
+      "applicabilityConditions": ["cost_is_large"]
+    },
+    {
+      "templateId": "apply_anonymization",
+      "issueType": "compliance",
+      "titleKo": "개인정보 익명화 적용",
+      "titleEn": "Apply Data Anonymization",
+      "descriptionKo": "개인식별정보(PII)를 익명화하여 개인정보 보호 리스크를 해소합니다",
+      "descriptionEn": "Anonymize personally identifiable information to eliminate privacy risk",
+      "patchStrategy": "remove_pii_usage",
+      "priority": 1,
+      "applicabilityConditions": ["uses_pii"]
+    },
+    {
+      "templateId": "add_compliance_review",
+      "issueType": "compliance",
+      "titleKo": "준법 검토 절차 의무화",
+      "titleEn": "Mandate Compliance Review",
+      "descriptionKo": "준법감시인 사전 검토를 의무화하여 컴플라이언스 리스크를 관리합니다",
+      "descriptionEn": "Mandate prior compliance officer review to manage compliance risk",
+      "patchStrategy": "clear_compliance_flag",
+      "priority": 2,
+      "applicabilityConditions": ["involves_compliance_risk"]
+    },
+    {
+      "templateId": "add_goal_mapping",
+      "issueType": "strategic",
+      "titleKo": "전략 목표 명시적 연계",
+      "titleEn": "Add Strategic Goal Mapping",
+      "descriptionKo": "의사결정을 명시적 전략 목표와 연계하여 전략적 정합성을 높입니다",
+      "descriptionEn": "Explicitly link decision to strategic goals to improve strategic alignment",
+      "patchStrategy": "inject_goal_alignment",
+      "priority": 1,
+      "applicabilityConditions": ["no_goals_mapped"]
+    },
+    {
+      "templateId": "reduce_strategic_conflict",
+      "issueType": "strategic",
+      "titleKo": "규모 축소로 전략 충돌 완화",
+      "titleEn": "Scale Down to Reduce Strategic Conflict",
+      "descriptionKo": "예산 규모를 줄여 전략 목표와의 충돌 강도를 낮춥니다",
+      "descriptionEn": "Reduce budget scale to lower the intensity of strategic goal conflict",
+      "patchStrategy": "reduce_cost_by_half",
+      "priority": 2,
+      "applicabilityConditions": ["cost_is_large", "strategic_conflict_detected"]
+    },
+    {
+      "templateId": "defer_hiring",
+      "issueType": "strategic",
+      "titleKo": "채용 연기로 전략 충돌 해소",
+      "titleEn": "Defer Hiring to Resolve Strategic Conflict",
+      "descriptionKo": "채용 계획을 다음 분기로 연기하여 비용 안정화 목표와의 충돌을 해소합니다",
+      "descriptionEn": "Defer the hiring plan to next quarter to resolve conflict with the cost stability goal",
+      "patchStrategy": "defer_hiring",
+      "priority": 2,
+      "applicabilityConditions": ["involves_hiring"]
+    }
+  ]
+}

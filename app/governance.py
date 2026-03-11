@@ -71,16 +71,21 @@ class GovernanceResult:
         }
 
 
-def load_rules(rules_path: str = None, company_id: str = None) -> dict:
-    """Load governance rules from JSON file, selecting by company_id."""
+_COMPANY_RULES_FILES: dict[str, dict[str, str]] = {
+    "nexus_dynamics":     {"ko": "mock_company.json",              "en": "mock_company_en.json"},
+    "mayo_central":       {"ko": "mock_company_healthcare.json",   "en": "mock_company_healthcare_en.json"},
+    "sool_sool_icecream": {"ko": "sool_sool_icecream_company.json","en": "sool_sool_icecream_company_en.json"},
+}
+_DEFAULT_RULES_FILE = "mock_company.json"
+
+
+def load_rules(rules_path: str = None, company_id: str = None, lang: str = "ko") -> dict:
+    """Load governance rules from JSON file, selecting by company_id and lang."""
     if rules_path is None:
-        if company_id == "mayo_central":
-            rules_path = Path(__file__).parent.parent / "mock_company_healthcare.json"
-        elif company_id == "delaware_gsa":
-            rules_path = Path(__file__).parent.parent / "mock_company_public.json"
-        else:
-            rules_path = Path(__file__).parent.parent / "mock_company.json"
-    print("current loaded rules!!!!!!!!!!!!!!!!!!!!!: ", rules_path)
+        lang_key = lang if lang in ("ko", "en") else "ko"
+        files = _COMPANY_RULES_FILES.get(company_id, {})
+        filename = files.get(lang_key) or _DEFAULT_RULES_FILE
+        rules_path = Path(__file__).parent.parent / filename
     with open(rules_path, 'r') as f:
         return json.load(f)
 
@@ -521,7 +526,7 @@ def detect_flags(decision: Decision, company_context: dict, computed_risk_score:
     return list(dict.fromkeys(flags))
 
 
-def evaluate_governance(decision: Decision, company_context: dict = None, use_o1: bool = True, company_id: str = None) -> GovernanceResult:
+def evaluate_governance(decision: Decision, company_context: dict = None, use_o1: bool = True, company_id: str = None, lang: str = "ko") -> GovernanceResult:
     """
     Main governance evaluation function with o1 reasoning.
 
@@ -537,8 +542,8 @@ def evaluate_governance(decision: Decision, company_context: dict = None, use_o1
     if company_context is None:
         company_context = {}
 
-    # Load rules for correct company
-    rules_data = load_rules(company_id=company_id)
+    # Load rules for correct company and language
+    rules_data = load_rules(company_id=company_id, lang=lang)
 
     # Compute risk score if not present
     computed_risk_score = compute_risk_score(decision)

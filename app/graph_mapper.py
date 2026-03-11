@@ -90,6 +90,8 @@ def build_graph_from_decision(
             "properties": {
                 "name": owner.name,
                 "role": owner.role or "Unknown",
+                "name_en": owner.name_en,
+                "role_en": owner.role_en,
                 "responsibility": owner.responsibility,
                 "actor_type": "owner"
             }

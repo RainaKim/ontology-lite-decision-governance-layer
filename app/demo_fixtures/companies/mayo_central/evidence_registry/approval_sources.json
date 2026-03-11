@@ -1,0 +1,97 @@
+{
+  "companyId": "mayo_central",
+  "version": "1.0.0",
+  "approvalSources": [
+    {
+      "roleKey": "HOSPITAL_ADMINISTRATOR",
+      "roleNameKo": "병원장",
+      "roleNameEn": "Hospital Administrator",
+      "sourceType": "org_chart",
+      "documentNameKo": "Mayo Central Hospital 조직 권한 매트릭스 v3.2",
+      "documentNameEn": "Mayo Central Hospital Organizational Authority Matrix v3.2",
+      "level": 4,
+      "authoritySummaryKo": "Mayo Central Hospital의 최고 의사결정 권한자입니다. 전략적으로 중대한 의사결정, 5억원 초과 대규모 투자, 이사회 보고 의무 사안의 최종 승인 권한을 보유합니다. 예산 승인 한도에 상한 없음.",
+      "authoritySummaryEn": "The highest decision-making authority of Mayo Central Hospital. Holds final approval authority for critically strategic decisions, large investments exceeding KRW 500M, and matters requiring mandatory board reporting. No upper limit on budget approval authority.",
+      "citationKo": "조직 권한 매트릭스 v3.2, §1: '병원장은 병원의 모든 의사결정에 대한 최종 승인 권한을 가지며, 이사회에 직접 보고할 책임이 있다.'",
+      "citationEn": "Organizational Authority Matrix v3.2, §1: 'The Hospital Administrator holds final approval authority over all hospital decisions and is directly accountable to the board of directors.'"
+    },
+    {
+      "roleKey": "MEDICAL_DIRECTOR",
+      "roleNameKo": "의료원장",
+      "roleNameEn": "Medical Director",
+      "sourceType": "org_chart",
+      "documentNameKo": "Mayo Central Hospital 조직 권한 매트릭스 v3.2",
+      "documentNameEn": "Mayo Central Hospital Organizational Authority Matrix v3.2",
+      "level": 3,
+      "authoritySummaryKo": "임상 의사결정의 최고 권한자입니다. 환자 안전에 중대한 영향을 미치는 의사결정, 전략적 중요도 '중대(critical)'로 분류된 임상·운영 의사결정의 최종 승인 권한을 보유합니다. 단독 예산 승인 한도: 5억원.",
+      "authoritySummaryEn": "Highest authority for clinical decisions. Holds final approval authority for decisions with critical impact on patient safety and clinical/operational decisions classified as 'critical' strategic importance. Single-signatory budget approval limit: KRW 500M.",
+      "citationKo": "조직 권한 매트릭스 v3.2, §2.1: '의료원장은 환자 안전에 중대한 영향을 미치는 모든 의사결정에 대한 최종 승인 권한을 가지며, 임상 위험 평가서를 첨부받아 검토하여야 한다.'",
+      "citationEn": "Organizational Authority Matrix v3.2, §2.1: 'The Medical Director holds final approval authority over all decisions with critical impact on patient safety and must review them with an attached clinical risk assessment.'"
+    },
+    {
+      "roleKey": "COMPLIANCE_OFFICER",
+      "roleNameKo": "준법감시인",
+      "roleNameEn": "Compliance Officer",
+      "sourceType": "org_chart",
+      "documentNameKo": "Mayo Central Hospital 조직 권한 매트릭스 v3.2",
+      "documentNameEn": "Mayo Central Hospital Organizational Authority Matrix v3.2",
+      "level": 3,
+      "authoritySummaryKo": "규제 준수 및 환자 정보 보호의 최고 권한자입니다. HIPAA·GDPR 준수 위험을 수반하는 의사결정, 환자 PII/PHI 처리 의사결정에 대한 독립적 검토 권한을 보유합니다. 규제 위반 소지가 있는 의사결정에 대한 집행 보류 요청 권한을 포함합니다. 예산 승인 한도 없음(비재무 권한).",
+      "authoritySummaryEn": "Highest authority for regulatory compliance and patient information protection. Holds independent review authority for decisions carrying HIPAA/GDPR compliance risk and decisions involving patient PII/PHI processing. Includes authority to request execution holds on decisions with potential regulatory violations. No budget approval limit (non-financial authority).",
+      "citationKo": "조직 권한 매트릭스 v3.2, §2.2: '준법감시인은 환자 데이터 처리 및 규제 준수 리스크를 수반하는 의사결정에 대한 독립적 검토 권한을 가지며, 위반 소지가 있는 의사결정에 대해 집행 보류를 요청할 수 있다.'",
+      "citationEn": "Organizational Authority Matrix v3.2, §2.2: 'The Compliance Officer holds independent review authority over decisions involving patient data processing and compliance risk, and may request execution holds on decisions with potential violation exposure.'"
+    },
+    {
+      "roleKey": "CFO",
+      "roleNameKo": "최고재무책임자",
+      "roleNameEn": "Chief Financial Officer",
+      "sourceType": "org_chart",
+      "documentNameKo": "Mayo Central Hospital 조직 권한 매트릭스 v3.2",
+      "documentNameEn": "Mayo Central Hospital Organizational Authority Matrix v3.2",
+      "level": 3,
+      "authoritySummaryKo": "재무 의사결정의 최고 권한자입니다. 1억원 초과 의료 장비 구매, 5억원 미만 단일 투자, 분기 예산 계획 수립 및 G3(운영 및 재무 효율화) 목표 관리의 최종 책임자입니다. 단독 예산 승인 한도: 5억원.",
+      "authoritySummaryEn": "Highest authority for financial decisions. Holds final responsibility for medical equipment purchases over KRW 100M, single investments under KRW 500M, quarterly budget planning, and managing the G3 (Operational and Financial Efficiency) goal. Single-signatory budget approval limit: KRW 500M.",
+      "citationKo": "조직 권한 매트릭스 v3.2, §2.3: 'CFO는 1억원 이상 5억원 이하 지출의 단독 승인 권한 및 5억원 미만 투자의 최종 승인 권한을 가진다.'",
+      "citationEn": "Organizational Authority Matrix v3.2, §2.3: 'The CFO holds sole approval authority for expenditures between KRW 100M and 500M, and final approval authority for investments under KRW 500M.'"
+    },
+    {
+      "roleKey": "INFORMATION_SECURITY_OFFICER",
+      "roleNameKo": "정보보호책임자",
+      "roleNameEn": "Information Security Officer",
+      "sourceType": "org_chart",
+      "documentNameKo": "Mayo Central Hospital 조직 권한 매트릭스 v3.2",
+      "documentNameEn": "Mayo Central Hospital Organizational Authority Matrix v3.2",
+      "level": 2,
+      "authoritySummaryKo": "병원 정보시스템 보안 및 환자 데이터 보호의 전문 검토 권한자입니다. 전자 의무기록(EMR) 시스템 변경, 외부 데이터 전송, 클라우드 연동 의사결정에 대한 보안 검토 및 사전 승인 권한을 보유합니다. 단독 예산 승인 한도: 5천만원.",
+      "authoritySummaryEn": "Specialized review authority for hospital information system security and patient data protection. Holds security review and prior approval authority for electronic medical record (EMR) system changes, external data transmission, and cloud integration decisions. Single-signatory budget approval limit: KRW 50M.",
+      "citationKo": "조직 권한 매트릭스 v3.2, §3.1: '정보보호책임자는 환자 데이터 처리 시스템 변경 및 외부 데이터 연동을 수반하는 의사결정에 대한 보안 검토 권한을 보유하며, 보안 기준 미달 시 반려 권한을 가진다.'",
+      "citationEn": "Organizational Authority Matrix v3.2, §3.1: 'The Information Security Officer holds security review authority for decisions involving patient data processing system changes and external data integration, and has the authority to reject decisions that do not meet security standards.'"
+    },
+    {
+      "roleKey": "IRB_CHAIR",
+      "roleNameKo": "임상시험심의위원장",
+      "roleNameEn": "IRB Chair",
+      "sourceType": "org_chart",
+      "documentNameKo": "Mayo Central Hospital 조직 권한 매트릭스 v3.2",
+      "documentNameEn": "Mayo Central Hospital Organizational Authority Matrix v3.2",
+      "level": 2,
+      "authoritySummaryKo": "임상시험 및 연구윤리 검토의 독립적 권한자입니다. 환자를 대상으로 하는 모든 임상 연구, 2차 데이터 활용 연구, 관찰 연구 계획에 대한 IRB 심의 권한을 보유합니다. 연구 목적 환자 데이터 접근 승인의 최종 책임자입니다.",
+      "authoritySummaryEn": "Independent authority for clinical trial and research ethics review. Holds IRB deliberation authority for all clinical research involving patients, secondary data utilization research, and observational study plans. Holds final responsibility for approving patient data access for research purposes.",
+      "citationKo": "조직 권한 매트릭스 v3.2, §3.2: '임상시험심의위원장은 환자를 대상으로 한 모든 연구 계획에 대한 IRB 심의 권한을 가지며, 승인되지 않은 연구 목적 데이터 접근에 대해 즉시 중단을 요청할 수 있다.'",
+      "citationEn": "Organizational Authority Matrix v3.2, §3.2: 'The IRB Chair holds deliberation authority over all research plans involving patients and may immediately request a halt to unapproved research data access.'"
+    },
+    {
+      "roleKey": "FINANCE_TEAM_LEAD",
+      "roleNameKo": "재무팀장",
+      "roleNameEn": "Finance Team Lead",
+      "sourceType": "org_chart",
+      "documentNameKo": "Mayo Central Hospital 조직 권한 매트릭스 v3.2",
+      "documentNameEn": "Mayo Central Hospital Organizational Authority Matrix v3.2",
+      "level": 1,
+      "authoritySummaryKo": "진료과·부서 단위 재무 지출의 1차 검토 및 소액 지출 단독 승인 권한자입니다. 5천만원 이하 지출의 단독 승인, 예산 적합성 및 G3 목표 부합 여부 검토를 수행합니다. 단독 예산 승인 한도: 5천만원.",
+      "authoritySummaryEn": "First-level review and sole approval authority for departmental financial expenditures. Sole approval for expenditures up to KRW 50M, with responsibility for budget suitability and G3 goal alignment review. Single-signatory budget approval limit: KRW 50M.",
+      "citationKo": "조직 권한 매트릭스 v3.2, §4.1: '재무팀장은 5천만원 이하 지출에 대한 단독 승인 권한을 보유하며, 초과 시 CFO에게 상신한다.'",
+      "citationEn": "Organizational Authority Matrix v3.2, §4.1: 'The Finance Team Lead holds sole approval authority for expenditures up to KRW 50M; amounts exceeding this must be escalated to the CFO.'"
+    }
+  ]
+}

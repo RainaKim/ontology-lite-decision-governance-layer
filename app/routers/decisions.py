@@ -12,10 +12,16 @@ import json
 import logging
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+from app.repositories import user_repository
+from app.services import auth_service
 
 from app.schemas.requests import CreateDecisionRequest
+from app.services.rbac_service import require_any, require_manager_up
 from app.schemas.responses import (
     CreateDecisionResponse,
     ConsolePayloadResponse,
@@ -40,6 +46,7 @@ router = APIRouter(
 async def submit_decision(
     request: CreateDecisionRequest,
     background_tasks: BackgroundTasks,
+    current_user: object = Depends(require_manager_up),
 ):
     """
     POST /v1/decisions — Submit a decision for async governance evaluation.
@@ -49,11 +56,19 @@ async def submit_decision(
     Fetch /v1/decisions/{id} after stream completes for full payload.
     """
     # Validate company exists (using contract-compliant IDs)
-    if not company_service.get_company_v1(request.company_id):
+    if not company_service.get_company_v1(request.company_id, lang=request.lang):
         raise HTTPException(
             status_code=422,
             detail=f"Unknown company_id '{request.company_id}'. "
-                   f"Valid: nexus_dynamics, mayo_central, delaware_gsa",
+                   f"Valid: nexus_dynamics, mayo_central",
+        )
+
+    # Enforce tenant isolation: non-admins may only submit under their own company.
+    from app.services.rbac_service import UserRole
+    if current_user.role != UserRole.ADMIN and current_user.company_id != request.company_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot submit decisions for a different company.",
         )
 
     # Create record (persist flags so pipeline can read them)
@@ -62,6 +77,10 @@ async def submit_decision(
         input_text=request.input_text,
         use_o1_governance=request.use_o1_governance,
         use_o1_graph=request.use_o1_graph,
+        lang=request.lang,
+        agent_name=request.agent_name,
+        agent_name_en=request.agent_name_en,
+        workspace_decision_id=request.workspace_decision_id,
     )
 
     # Import here to avoid circular imports
@@ -89,7 +108,13 @@ async def submit_decision(
 
 
 @router.get("/decisions/{decision_id}/stream")
-async def stream_decision_status(decision_id: str, request: Request):
+async def stream_decision_status(
+    decision_id: str,
+    request: Request,
+    token: str = Query(..., description="Bearer token (EventSource cannot set headers)"),
+    lang: str = Query(default="ko", description="Language for labels: 'ko' or 'en'"),
+    db: Session = Depends(get_db),
+):
     """
     GET /v1/decisions/{decision_id}/stream — SSE stream for real-time pipeline progress.
 
@@ -100,6 +125,17 @@ async def stream_decision_status(decision_id: str, request: Request):
 
     Connection stays open until complete or error.
     """
+    # Validate token (EventSource cannot send Authorization header)
+    try:
+        payload = auth_service.decode_token(token)
+        user_id = payload.get("sub")
+        if not user_id or not user_repository.get_by_id(db, user_id):
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     record = decision_store.get(decision_id)
     if not record:
         raise HTTPException(status_code=404, detail=f"Decision '{decision_id}' not found")
@@ -190,7 +226,11 @@ async def stream_decision_status(decision_id: str, request: Request):
 
 
 @router.get("/decisions/{decision_id}", response_model=ConsolePayloadResponse)
-async def get_decision(decision_id: str):
+async def get_decision(
+    decision_id: str,
+    lang: str = Query(default=None, description="Language override: 'ko' or 'en'"),
+    _: object = Depends(require_any),
+):
     """
     GET /v1/decisions/{decision_id} — Full console payload.
 
@@ -201,4 +241,4 @@ async def get_decision(decision_id: str):
     if not record:
         raise HTTPException(status_code=404, detail=f"Decision '{decision_id}' not found")
 
-    return build_console_payload(record)
+    return build_console_payload(record, lang=lang)

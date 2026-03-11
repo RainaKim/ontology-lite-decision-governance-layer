@@ -5,6 +5,8 @@ These are the only models routers should accept from HTTP clients.
 Business logic uses domain models from app/schemas/domain.py.
 """
 
+from typing import Literal, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -21,7 +23,7 @@ class CreateDecisionRequest(BaseModel):
         ...,
         description=(
             "Governance context to evaluate against. "
-            "Must be one of: nexus_dynamics, mayo_central, delaware_gsa"
+            "Must be one of: nexus_dynamics, mayo_central"
         ),
         examples=["nexus_dynamics"],
     )
@@ -50,5 +52,33 @@ class CreateDecisionRequest(BaseModel):
         description=(
             "Use OpenAI o1 for graph reasoning. Requires OPENAI_API_KEY. "
             "Falls back to deterministic subgraph analysis if key is missing."
+        ),
+    )
+
+    lang: Literal["ko", "en"] = Field(
+        default="ko",
+        description="Language for company context and response labels. 'ko' (default) or 'en'.",
+    )
+
+    agent_name: str = Field(
+        default="AI Agent",
+        max_length=200,
+        description="Name of the AI agent that proposed this decision.",
+        examples=["마케팅 AI Agent"],
+    )
+
+    agent_name_en: str = Field(
+        default="AI Agent",
+        max_length=200,
+        description="English name of the AI agent that proposed this decision.",
+        examples=["Marketing AI Agent"],
+    )
+
+    workspace_decision_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "DB decision ID from GET /v1/workspace/decisions. "
+            "When provided, the pipeline writes analysis results (risk_level, confidence, "
+            "contract_value, affected_count) back to that workspace record on completion."
         ),
     )

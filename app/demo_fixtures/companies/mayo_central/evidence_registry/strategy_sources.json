@@ -1,0 +1,96 @@
+{
+  "companyId": "mayo_central",
+  "version": "1.0.0",
+  "strategySources": [
+    {
+      "goalId": "G1",
+      "sourceType": "strategy_document",
+      "documentNameKo": "2025 환자 안전 우수성 전략 계획서",
+      "documentNameEn": "2025 Patient Safety Excellence Strategic Plan",
+      "ownerRole": "의료원장",
+      "ownerDepartment": "임상관리",
+      "summaryKo": "분기당 예방 가능한 이상사건 0건 및 임상 프로토콜 준수율 99.5%를 목표로 합니다. 고위험 임상 구역 모니터링 강화, 의료진 안전 교육 의무화, 사고 예방 체계 고도화를 3대 실행 과제로 설정합니다.",
+      "summaryEn": "Targets zero preventable adverse events per quarter and a 99.5% clinical protocol compliance rate. Strengthening high-risk clinical zone monitoring, mandatory safety training for medical staff, and advancing the incident prevention system are the three key execution priorities.",
+      "targetSummaryKo": "예방 가능한 이상사건 0건/분기 및 프로토콜 준수율 99.5% (2025년 전 분기 기준)",
+      "targetSummaryEn": "Zero preventable adverse events per quarter and 99.5% protocol compliance rate maintained across all quarters of 2025",
+      "kpis": [
+        {
+          "kpiId": "K1",
+          "nameKo": "예방 가능한 이상사건",
+          "nameEn": "Preventable Adverse Events",
+          "targetKo": "0건/분기",
+          "targetEn": "0 per quarter"
+        },
+        {
+          "kpiId": "K2",
+          "nameKo": "프로토콜 준수율",
+          "nameEn": "Protocol Compliance Rate",
+          "targetKo": "99.5%",
+          "targetEn": "99.5%"
+        }
+      ],
+      "citationKo": "2025 환자 안전 우수성 전략 계획서, §1.1: '환자 안전은 Mayo Central의 최우선 전략 목표이며, 임상적 영향을 수반하는 모든 의사결정은 G1 목표 달성에 미치는 위험을 사전 평가받아야 한다.'",
+      "citationEn": "2025 Patient Safety Excellence Strategic Plan, §1.1: 'Patient safety is Mayo Central's top strategic priority; all decisions with clinical implications must be assessed in advance for risk to G1 goal achievement.'"
+    },
+    {
+      "goalId": "G2",
+      "sourceType": "strategy_document",
+      "documentNameKo": "2025 규제 준수 및 데이터 거버넌스 전략 로드맵",
+      "documentNameEn": "2025 Regulatory Compliance and Data Governance Strategy Roadmap",
+      "ownerRole": "준법감시인",
+      "ownerDepartment": "준법/개인정보",
+      "summaryKo": "HIPAA, GDPR 및 임상 거버넌스 프레임워크의 완전 준수를 목표로 합니다. 중대 규제 위반 0건 및 무단 환자 정보 공개 0건 유지가 핵심 지표입니다. 정기 규정 준수 감사, 개인정보 영향평가(PIA) 의무화, 임직원 HIPAA 교육 강화를 실행 축으로 설정합니다.",
+      "summaryEn": "Targets full compliance with HIPAA, GDPR, and clinical governance frameworks. Zero critical regulatory violations and zero unauthorized patient data disclosures are the core indicators. Regular compliance audits, mandatory Privacy Impact Assessments (PIA), and enhanced HIPAA training for staff are the execution pillars.",
+      "targetSummaryKo": "중대 규제 위반 0건 및 무단 환자 정보 공개 0건 (2025년 전 분기 기준)",
+      "targetSummaryEn": "Zero critical regulatory violations and zero unauthorized patient data disclosures maintained across all quarters of 2025",
+      "kpis": [
+        {
+          "kpiId": "K3",
+          "nameKo": "규제 위반 건수",
+          "nameEn": "Regulatory Violation Count",
+          "targetKo": "중대 위반 0건",
+          "targetEn": "Zero critical violations"
+        },
+        {
+          "kpiId": "K4",
+          "nameKo": "데이터 프라이버시 사고",
+          "nameEn": "Data Privacy Incidents",
+          "targetKo": "무단 공개 0건",
+          "targetEn": "Zero unauthorized disclosures"
+        }
+      ],
+      "citationKo": "2025 규제 준수 및 데이터 거버넌스 전략 로드맵, §2.1: '환자 데이터 처리를 수반하는 모든 의사결정은 반드시 준법감시팀의 사전 검토를 받아 G2 목표 달성에 위협이 되지 않도록 관리한다.'",
+      "citationEn": "2025 Regulatory Compliance and Data Governance Strategy Roadmap, §2.1: 'All decisions involving patient data processing must undergo prior review by the Compliance Office to ensure they do not threaten achievement of G2.'"
+    },
+    {
+      "goalId": "G3",
+      "sourceType": "strategy_document",
+      "documentNameKo": "2025 운영 및 재무 효율화 실행 계획서",
+      "documentNameEn": "2025 Operational and Financial Efficiency Execution Plan",
+      "ownerRole": "최고재무책임자",
+      "ownerDepartment": "재무",
+      "summaryKo": "자원 공유 및 프로세스 개선을 통해 환자당 비용을 전년 대비 12% 절감하고, 장비 활용률 85%를 달성하는 것을 목표로 합니다. 매 분기 CFO 주관 재무 검토 회의에서 진행 현황을 점검합니다.",
+      "summaryEn": "Targets a 12% YoY reduction in cost per patient through resource sharing and process improvement, and an equipment utilization rate of 85%. Progress is reviewed quarterly in CFO-led financial review meetings.",
+      "targetSummaryKo": "환자당 비용 전년 대비 12% 절감, 장비 활용률 85% 달성",
+      "targetSummaryEn": "12% YoY cost-per-patient reduction and 85% equipment utilization rate",
+      "kpis": [
+        {
+          "kpiId": "K5",
+          "nameKo": "환자당 비용",
+          "nameEn": "Cost per Patient",
+          "targetKo": "전년 대비 12% 절감",
+          "targetEn": "12% reduction YoY"
+        },
+        {
+          "kpiId": "K6",
+          "nameKo": "장비 활용률",
+          "nameEn": "Equipment Utilization Rate",
+          "targetKo": "85%",
+          "targetEn": "85%"
+        }
+      ],
+      "citationKo": "2025 운영 및 재무 효율화 실행 계획서, §3.2: '비용 절감 목표와 충돌하거나 예산 초과가 예상되는 의사결정은 CFO 검토를 통해 G3 목표 달성 영향도를 사전 평가하여야 한다.'",
+      "citationEn": "2025 Operational and Financial Efficiency Execution Plan, §3.2: 'Decisions that conflict with cost reduction targets or are expected to exceed budget must be assessed in advance by the CFO for impact on G3 goal achievement.'"
+    }
+  ]
+}

@@ -16,6 +16,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from app.schemas.external_signals import ExternalSignalsPayload  # noqa: F401 — re-exported
+
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -60,6 +62,7 @@ class CompanySummaryResponse(BaseModel):
     """Compact company representation — embedded in console payload and list endpoint."""
     id: str
     name: str
+    name_en: Optional[str] = None
     industry: str
     size: str
     governance_framework: str
@@ -175,6 +178,11 @@ class NormalizedRule(BaseModel):
     status: RuleStatus
     severity: str
     consequence: dict[str, Any] = Field(default_factory=dict)
+    # Internal evidence registry source for this rule (additive, optional)
+    evidence: Optional[list[dict[str, Any]]] = Field(
+        default=None,
+        description="Internal policy evidence from evidence registry (additive)"
+    )
 
 
 class NormalizedApprovalStep(BaseModel):
@@ -191,6 +199,72 @@ class NormalizedApprovalStep(BaseModel):
     reason: Optional[str] = None
     source_rule_id: Optional[str] = Field(None, description="Rule ID that triggered this approval requirement")
     auth_type: str = Field(default="REQUIRED", description="REQUIRED (require_approval) | ESCALATION (require_review)")
+    sequential_order: Optional[int] = Field(
+        default=None,
+        description=(
+            "1-based position within a sequential approval chain. "
+            "None = parallel (no ordering constraint). "
+            "Set when the source rule has requires_sequential: true."
+        ),
+    )
+    # Org-chart authority evidence from evidence registry (additive, optional)
+    evidence: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Approval authority evidence from internal org-chart registry (additive)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Decision context — left-panel-safe, fact-like extracted entities only.
+# Judgment-like items (risks, governance rules, approvals) must NOT appear here.
+# ---------------------------------------------------------------------------
+
+
+class DecisionContextEntity(BaseModel):
+    """A single fact-like extracted item for left-panel display."""
+    key: str = Field(description="Machine-readable key, e.g. 'department', 'cost'")
+    label: str = Field(description="Human-readable label in display language")
+    value: str = Field(description="Display value as a string")
+    category: Optional[str] = Field(
+        default=None,
+        description=(
+            "Fact category: action | department | cost | headcount | "
+            "region | timeline | channel | product | strategic_impact"
+        ),
+    )
+    kind: Optional[str] = Field(
+        default=None,
+        description="'fact' | 'context' | 'judgment' — used to filter left-panel-safe items",
+    )
+    confidence: Optional[float] = Field(
+        default=None,
+        description="LLM confidence 0.0–1.0 for this extraction",
+        ge=0.0,
+        le=1.0,
+    )
+
+
+class DecisionSourcePayload(BaseModel):
+    """Who or what proposed this decision."""
+    type: str = Field(default="AI_AGENT", description="AI_AGENT | HUMAN | SYSTEM")
+    label: str = Field(default="AI Agent", description="Display name of the proposing agent")
+
+
+class DecisionContextPayload(BaseModel):
+    """
+    Left-panel-safe payload: proposal text + source + fact-like entities only.
+
+    Intentionally excludes: risks, governance warnings, triggered rules,
+    approval requirements, strategic-conflict conclusions.
+
+    proposal    = Korean version (always populated when available)
+    proposal_en = English version (always populated when available)
+    Frontend picks the appropriate field based on display language.
+    """
+    proposal: str = ""
+    proposal_en: Optional[str] = None
+    source: DecisionSourcePayload = Field(default_factory=DecisionSourcePayload)
+    entities: list[DecisionContextEntity] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +317,8 @@ class GraphNode(BaseModel):
     """A node in the knowledge graph."""
     id: str
     type: str  # e.g., "Decision", "Goal", "KPI", "Risk", "Owner", "Cost", "Region", "DataType"
-    label: str  # Human-readable label
+    label: str  # Human-readable label (language of the input)
+    label_en: Optional[str] = None  # English label for Actor nodes when input is non-English
     properties: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -299,6 +374,121 @@ class ExtractionMetadata(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Risk Scoring payload
+# ---------------------------------------------------------------------------
+
+
+class RiskEvidenceResponse(BaseModel):
+    """
+    Audit pointer to the datum that drove the score.
+
+    UI-display contract:
+      label  — Korean human-readable description shown in "근거 보기"
+      source — Korean provenance badge: "규칙 엔진" | "그래프" | "입력 텍스트" | "회사 정책"
+    Internal fields (type/ref) kept for backward compatibility.
+    """
+    type: str = Field(description="field | rule | graph_edge | note")
+    ref: dict[str, Any] = Field(default_factory=dict)
+    # NEW optional UI-friendly fields (additive)
+    label: Optional[str] = None
+    source: Optional[str] = None
+    confidence: Optional[float] = None
+    note: Optional[str] = None
+
+
+class RiskSignalResponse(BaseModel):
+    """
+    A single quantified signal contributing to a risk dimension.
+
+    signals[0] is always the SUMMARY signal (id="SUMMARY", Korean 핵심 근거).
+    signals[1..] are detail signals, max 3.
+    """
+    id: str
+    label: str
+    value: float
+    unit: Optional[str] = None
+    # NEW optional UI-friendly fields (additive)
+    severity: Optional[str] = Field(default=None, description="LOW | MEDIUM | HIGH | CRITICAL")
+    evidence: list[RiskEvidenceResponse] = Field(default_factory=list)
+
+
+class RiskDimensionResponse(BaseModel):
+    """One risk dimension — e.g. Financial Risk."""
+    id: str
+    label: str
+    score: int = Field(ge=0, le=100)
+    band: str = Field(description="LOW | MEDIUM | HIGH | CRITICAL")
+    signals: list[RiskSignalResponse] = Field(default_factory=list)
+    evidence: list[RiskEvidenceResponse] = Field(default_factory=list)
+    kpi_impact_estimate: Optional[dict[str, Any]] = None
+
+
+class RiskAggregateResponse(BaseModel):
+    """Weighted aggregate across all dimensions."""
+    score: int = Field(ge=0, le=100)
+    band: str = Field(description="LOW | MEDIUM | HIGH | CRITICAL")
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class RiskScoringPayload(BaseModel):
+    """
+    Full risk scoring output — available when status is 'complete'.
+    Shape is stable: dimensions[] can grow without breaking existing consumers.
+    """
+    aggregate: RiskAggregateResponse
+    dimensions: list[RiskDimensionResponse] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Risk Response Simulation schemas (additive)
+# ---------------------------------------------------------------------------
+
+
+class SimulationDeltaResponse(BaseModel):
+    """Score delta between baseline and a simulated scenario."""
+    aggregateRiskScoreDelta: Optional[int] = None
+    financialRiskDelta: Optional[int] = None
+    complianceRiskDelta: Optional[int] = None
+    strategicRiskDelta: Optional[int] = None
+
+
+class SimulationOutcomeResponse(BaseModel):
+    """Governance + risk outcome for baseline or a simulated scenario."""
+    aggregateRiskScore: int
+    band: str  # LOW | MEDIUM | HIGH | CRITICAL
+    status: str
+    requiredApprovals: list[str] = Field(default_factory=list)
+    requiredApprovalsEn: list[str] = Field(default_factory=list)
+    triggeredRuleIds: list[str] = Field(default_factory=list)
+
+
+class SimulationScenarioResponse(BaseModel):
+    """One remediation scenario with its deterministically computed outcome."""
+    scenarioId: str
+    templateId: str
+    titleKo: str
+    titleEn: Optional[str] = None
+    changeSummaryKo: str
+    changeSummaryEn: Optional[str] = None
+    issueTypes: list[str] = Field(default_factory=list)
+    expectedOutcome: SimulationOutcomeResponse
+    delta: SimulationDeltaResponse
+    resolvedIssues: list[str] = Field(default_factory=list)
+    resolvedIssuesEn: list[str] = Field(default_factory=list)
+    remainingIssues: list[str] = Field(default_factory=list)
+    remainingIssuesEn: list[str] = Field(default_factory=list)
+    confidence: Optional[float] = None
+    isRecommended: bool = False
+
+
+class RiskResponseSimulationPayload(BaseModel):
+    """Full simulation payload — baseline vs. 2-3 remediation scenarios."""
+    baseline: SimulationOutcomeResponse
+    scenarios: list[SimulationScenarioResponse] = Field(default_factory=list)
+    generatedAt: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
 # Full console payload — LOCKED SHAPE
 # ---------------------------------------------------------------------------
 
@@ -316,6 +506,10 @@ class ConsolePayloadResponse(BaseModel):
 
     decision_id: str
     status: DecisionStatus
+
+    # Agent that proposed this decision (captured at submission time)
+    agent_name: str = "AI Agent"
+    agent_name_en: str = "AI Agent"
 
     # Company context snapshot (captured at submission time)
     company: CompanySummaryResponse
@@ -340,3 +534,25 @@ class ConsolePayloadResponse(BaseModel):
 
     # Extraction metadata (available after step 1)
     extraction_metadata: Optional[ExtractionMetadata] = None
+
+    # Risk scoring (available when status is complete)
+    risk_scoring: Optional[RiskScoringPayload] = None
+
+    # Internal evidence registry output — assembled from registry JSONs (additive, optional)
+    # Shape: { policyEvidence: [...], strategyEvidence: [...], financialEvidence: [...], approvalEvidence: [...] }
+    governance_evidence: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Structured internal evidence from company registry (additive)"
+    )
+
+    # Risk response simulation — baseline vs. remediation scenarios (additive, optional)
+    risk_response_simulation: Optional[RiskResponseSimulationPayload] = None
+
+    # Left-panel-safe context: fact-like extracted entities only (additive, optional)
+    # Judgment items (risks, rules, approvals) are intentionally excluded here.
+    decision_context: Optional[DecisionContextPayload] = None
+
+    # External signals — supplementary market / regulatory / operational context.
+    # Additive only. NEVER modifies internal governance decisions or evidence.
+    # Separation from governance_evidence is enforced: these are external sources only.
+    external_signals: Optional[ExternalSignalsPayload] = None
