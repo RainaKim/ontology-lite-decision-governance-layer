@@ -361,6 +361,7 @@ class InMemoryGraphRepository(BaseGraphRepository):
                 severity=risk.get("severity"),
                 mitigation=risk.get("mitigation")
             )
+            risk_node.properties["source"] = "llm"
             if risk.get("description_en"):
                 risk_node.properties["description_en"] = risk["description_en"]
             await self.add_node(risk_node)
@@ -542,13 +543,13 @@ class InMemoryGraphRepository(BaseGraphRepository):
             # Example: R1 → CFO, R7 → HR Manager (parallel, not CFO → HR Manager)
 
         # Remove dangling LLM-extracted risk nodes (no incoming edges).
-        # These are _risk_{idx} nodes that were not connected via any rule because
-        # structural enrichment already covers the same conflict via goal edges.
+        # Structural enrichment may already cover the same conflict via goal edges,
+        # leaving these nodes unconnected. Match on type + source property, not ID prefix.
         _edge_targets = {e.to_node for e in edges}
-        _llm_risk_pattern = f"{decision_id}_risk_"
         nodes = [
             n for n in nodes
-            if not n.id.startswith(_llm_risk_pattern) or n.id in _edge_targets
+            if not (n.type == NodeType.RISK and n.properties.get("source") == "llm")
+            or n.id in _edge_targets
         ]
 
         return DecisionGraph(

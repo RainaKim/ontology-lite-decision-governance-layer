@@ -46,7 +46,7 @@ router = APIRouter(
 async def submit_decision(
     request: CreateDecisionRequest,
     background_tasks: BackgroundTasks,
-    _: object = Depends(require_manager_up),
+    current_user: object = Depends(require_manager_up),
 ):
     """
     POST /v1/decisions — Submit a decision for async governance evaluation.
@@ -61,6 +61,14 @@ async def submit_decision(
             status_code=422,
             detail=f"Unknown company_id '{request.company_id}'. "
                    f"Valid: nexus_dynamics, mayo_central",
+        )
+
+    # Enforce tenant isolation: non-admins may only submit under their own company.
+    from app.services.rbac_service import UserRole
+    if current_user.role != UserRole.ADMIN and current_user.company_id != request.company_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot submit decisions for a different company.",
         )
 
     # Create record (persist flags so pipeline can read them)

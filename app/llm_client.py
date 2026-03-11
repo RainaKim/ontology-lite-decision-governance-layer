@@ -59,7 +59,8 @@ class LLMClient:
     {{
       "description": "string (3-500 chars)",
       "severity": "string or null (Low/Medium/High/Critical)",
-      "mitigation": "string or null"
+      "mitigation": "string or null",
+      "risk_type": "string or null (budget_overrun | compliance | operational | strategic | other)"
     }}
   ],
   "owners": [

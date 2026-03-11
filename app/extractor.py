@@ -34,13 +34,14 @@ def _inject_budget_risk(decision: "Decision") -> "Decision":
     if decision.cost is None or decision.remaining_budget is None:
         return decision
 
-    # Remove LLM-generated budget risks to avoid duplicates
-    # (simple dedup only — not semantic classification)
+    # Remove LLM-generated budget risks to avoid duplicates.
+    # Prefer structured risk_type; fall back to keyword matching for older LLM responses that predate the field.
     _BUDGET_MARKERS = ("예산 초과", "budget overrun", "잔여 예산", "remaining budget")
-    filtered = [
-        r for r in (decision.risks or [])
-        if not any(m.lower() in (r.description or "").lower() for m in _BUDGET_MARKERS)
-    ]
+    def _is_budget_risk(r) -> bool:
+        if r.risk_type is not None:
+            return r.risk_type == "budget_overrun"
+        return any(m.lower() in (r.description or "").lower() for m in _BUDGET_MARKERS)
+    filtered = [r for r in (decision.risks or []) if not _is_budget_risk(r)]
 
     if decision.cost > decision.remaining_budget:
         from app.schemas.domain import Risk
