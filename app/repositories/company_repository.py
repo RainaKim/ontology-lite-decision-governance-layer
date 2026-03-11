@@ -23,6 +23,16 @@ def get_by_domain(db: Session, domain: str) -> Optional[Company]:
     return db.query(Company).filter(Company.domain_url == domain).first()
 
 
+def list_all(db: Session) -> list[Company]:
+    """Return all active companies ordered by company_name."""
+    return (
+        db.query(Company)
+        .filter(Company.status == "ACTIVE")
+        .order_by(Company.company_name)
+        .all()
+    )
+
+
 def create(
     db: Session,
     company_name: str,

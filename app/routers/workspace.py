@@ -105,6 +105,18 @@ def create_workspace_decision(
     from app.main import extractor, graph_repo
     from app.repositories import decision_store
     from app.services.pipeline_service import run_pipeline
+    from app.services import company_service as _cs
+
+    if not current_user.company_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No company selected. Update your profile with a valid company_id first.",
+        )
+    if not _cs.get_company_v1(current_user.company_id, lang=request.lang):
+        raise HTTPException(
+            status_code=400,
+            detail=f"company_id '{current_user.company_id}' has no governance context.",
+        )
 
     # 1. Persist workspace record
     ws_record = decision_repository.create(
