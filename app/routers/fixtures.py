@@ -19,7 +19,7 @@ router = APIRouter(
 async def list_fixtures(
     company_id: str = Query(
         ...,
-        description="Company ID to fetch fixtures for (nexus_dynamics, mayo_central, delaware_gsa)",
+        description="Company ID to fetch fixtures for (nexus_dynamics, mayo_central)",
     ),
 ):
     """
@@ -29,7 +29,7 @@ async def list_fixtures(
     Frontend should randomly pick from the returned list.
 
     Query params:
-        company_id: nexus_dynamics | mayo_central | delaware_gsa (required)
+        company_id: nexus_dynamics | mayo_central (required)
 
     Returns:
         List of Fixture objects with id, company_id, title, text, tags.

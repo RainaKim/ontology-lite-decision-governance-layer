@@ -69,29 +69,6 @@ _FIXTURES_BY_COMPANY: dict[str, list[Fixture]] = {
             tags=["Security", "Telemedicine", "Data Residency"],
         ),
     ],
-    "delaware_gsa": [
-        Fixture(
-            id="G01",
-            company_id="delaware_gsa",
-            title="경쟁 입찰 없는 수의계약 시도",
-            text="긴급성 사유가 불분명한 상태에서 특정 IT 업체와 500만 달러 규모의 단일 응찰 수의계약 시도. 공공 조달법상 경쟁 입찰 원칙 위반 가능성. 수의계약 타당성 보고서(Justification) 누락 확인.",
-            tags=["Procurement", "Compliance", "Sole Source"],
-        ),
-        Fixture(
-            id="G02",
-            company_id="delaware_gsa",
-            title="로비스트 연계 업체 이해충돌 계약",
-            text="최근 주지사 캠페인에 고액을 후원한 로비스트가 소속된 컨설팅사와 계약 추진. State Ethics Act 2024 위반 리스크. 정치적 유착 가능성 및 이해상충 탐지.",
-            tags=["Ethics", "Conflict of Interest", "Lobbyist"],
-        ),
-        Fixture(
-            id="G03",
-            company_id="delaware_gsa",
-            title="납세 기록 등 민감 데이터 공개 개방",
-            text="주민의 납세 기록 등 민감 정보가 포함된 원시 데이터를 공공 데이터 포털에 개방 시도. 국가 보안 및 개인정보 보호법 위반. 데이터 익명화 검증 단계 강제 호출.",
-            tags=["Data", "Privacy", "Security"],
-        ),
-    ],
 }
 
 
@@ -100,7 +77,7 @@ def get_fixtures(company_id: str) -> list[Fixture] | None:
     Get demo fixtures for a company.
 
     Args:
-        company_id: nexus_dynamics | mayo_central | delaware_gsa
+        company_id: nexus_dynamics | mayo_central
 
     Returns:
         List of Fixture objects, or None if company_id not found.

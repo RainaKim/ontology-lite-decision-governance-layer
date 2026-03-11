@@ -1,0 +1,76 @@
+{
+  "companyId": "nexus_dynamics",
+  "companyName": "Nexus Dynamics",
+  "industry": "corporate_finance_technology",
+  "size": "1200+",
+  "regions": ["South Korea (HQ)", "North America", "Europe", "Southeast Asia"],
+  "signalCategories": [
+    "market_benchmark",
+    "strategic_benchmark",
+    "regulatory_guidance",
+    "trend_signal",
+    "compliance_signal"
+  ],
+  "preferredSourceTypes": [
+    "regulatory",
+    "market_research",
+    "industry_report",
+    "analyst_report",
+    "government"
+  ],
+  "searchThemes": {
+    "default": [
+      "enterprise capital expenditure ROI benchmark Korea",
+      "corporate finance governance regulation 2025",
+      "global expansion strategy benchmark technology sector"
+    ],
+    "decisionTypes": {
+      "financial_procurement": [
+        "enterprise capital expenditure approval benchmark Korea",
+        "unbudgeted IT investment governance threshold",
+        "CFO approval workflow large-scale procurement"
+      ],
+      "privacy_compliance": [
+        "GDPR enforcement update Europe enterprise 2025",
+        "Korea Personal Information Protection Act PIPL amendment",
+        "CISO data privacy technology company compliance"
+      ],
+      "strategic_benchmark": [
+        "Korea enterprise M&A activity 2025",
+        "global market entry strategy benchmark technology",
+        "new market revenue $50M ARR technology sector"
+      ],
+      "regulatory_compliance": [
+        "Korea Financial Services Commission governance regulation",
+        "anti-bribery compliance Korea corporate zero tolerance",
+        "related-party transaction review regulatory requirement"
+      ],
+      "risk_financial": [
+        "unbudgeted technology spend governance consequence",
+        "CFO board-level approval capital investment benchmark"
+      ],
+      "labor_hiring": [
+        "Korea headcount change organizational restructuring governance",
+        "HR review 10+ employee hiring technology company Korea"
+      ]
+    }
+  },
+  "governanceRuleAlignment": {
+    "R1": "financial_procurement",
+    "R2": "regulatory_compliance",
+    "R3": "strategic_benchmark",
+    "R4": "strategic_benchmark",
+    "R5": "financial_procurement",
+    "R6": "privacy_compliance",
+    "R7": "labor_hiring",
+    "R8": "labor_hiring"
+  },
+  "strategicGoalAlignment": {
+    "G1": "strategic_benchmark",
+    "G2": "regulatory_compliance",
+    "G3": "financial_procurement"
+  },
+  "fallbackSourceRegistry": "nexus_dynamics_sources.json",
+  "signalEmphasis": ["market_benchmark", "regulatory_guidance"],
+  "notes": "Nexus Dynamics is a Korean-headquartered enterprise technology company in the corporate finance sector, with operations in North America, Europe, and Southeast Asia. External signals should emphasize capital expenditure benchmarks (R1 threshold: 50M KRW), GDPR and Korea PIPL compliance (R6: CISO review), M&A / global expansion market signals (G1: 25% revenue growth), and Korean financial regulatory guidance (G2: zero compliance violations). ESG and related-party transaction compliance are key governance triggers (R2)."
+}

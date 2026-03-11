@@ -14,7 +14,11 @@ def build_decision_pack(
     decision: dict,
     governance: dict,
     company: dict = None,
-    graph_insights: dict = None
+    graph_insights: dict = None,
+    lang: str = "ko",
+    risk_scoring: Optional[dict] = None,
+    external_signals: Optional[dict] = None,
+    decision_context: Optional[dict] = None,
 ) -> dict:
     """
     Build a Decision Pack from decision and governance evaluation results.
@@ -64,7 +68,7 @@ def build_decision_pack(
             flags.append("STRATEGIC_MISALIGNMENT")
 
     # Detect missing items
-    missing_items = _detect_missing_items(decision, governance, flags)
+    missing_items = _detect_missing_items(decision, governance, flags, risk_scoring=risk_scoring)
 
     # Determine risk level and governance status
     risk_level, governance_status = _determine_risk_and_status(
@@ -83,7 +87,7 @@ def build_decision_pack(
         recommended_next_actions = o1_next_actions
     else:
         recommended_next_actions = _generate_next_actions(
-            missing_items, approval_chain, flags, governance_status, triggered_rules, decision
+            missing_items, approval_chain, flags, governance_status, triggered_rules, decision, lang
         )
 
     # Extract rationales from triggered rules and approval chain
@@ -92,14 +96,19 @@ def build_decision_pack(
     # Map strategic goals with conflict/alignment indicators
     strategic_goals_mapped = _map_strategic_goals(company, graph_insights)
 
-    # Build title
-    title = _generate_title(decision_statement, strategic_impact)
+    # Build title — prefer decision proposal (already LLM-generated) over raw statement
+    _proposal = (decision_context or {}).get("proposal") or ""
+    _proposal_en = (decision_context or {}).get("proposal_en") or ""
+    title = _proposal if _proposal else _generate_title(decision_statement, strategic_impact)
+    title_en = _proposal_en if _proposal_en else _generate_title(decision_statement, strategic_impact)
 
     # Assemble Decision Pack
     decision_pack = {
         "title": title,
+        "title_en": title_en,
         "summary": {
             "decision_statement": decision_statement,
+            "decision_statement_en": title_en if title_en else None,
             "human_approval_required": requires_human_review,
             "risk_level": risk_level,
             "governance_status": governance_status,
@@ -187,6 +196,10 @@ def build_decision_pack(
             "confidence": graph_insights.get("graph_analysis", {}).get("confidence", 0.0)
         }
 
+    # Add external context if available — supplementary benchmarks only
+    if external_signals:
+        decision_pack["external_context"] = _build_external_context(external_signals, lang)
+
     # Add conclusion_reason — one-sentence human-readable "why"
     decision_pack["summary"]["conclusion_reason"] = _summarize_conclusion(
         governance_status, risk_level, flags, triggered_rules,
@@ -194,6 +207,44 @@ def build_decision_pack(
     )
 
     return decision_pack
+
+
+def _build_external_context(external_signals: dict, lang: str = "ko") -> dict:
+    """
+    Format external signals into a decision pack section.
+
+    External signals are supplementary benchmarks — they never affect
+    governance verdicts, risk scores, or approval chain requirements.
+    They provide reviewers with market, regulatory, and operational context.
+    """
+    en = lang == "en"
+
+    def _format_signal(sig: dict) -> dict:
+        source = sig.get("source", {})
+        return {
+            "title": sig.get("titleEn") if en else sig.get("titleKo", sig.get("titleEn", "")),
+            "summary": sig.get("summaryEn") if en else sig.get("summaryKo", sig.get("summaryEn", "")),
+            "decisionRelevance": sig.get("decisionRelevanceEn") if en else sig.get("decisionRelevanceKo", sig.get("decisionRelevanceEn", "")),
+            "confidence": sig.get("confidence"),
+            "source": {
+                "sourceId": source.get("sourceId"),
+                "label": source.get("sourceLabel"),
+                "type": source.get("sourceType"),
+                "recency": source.get("recency"),
+            },
+        }
+
+    return {
+        "note": (
+            "External signals are supplementary benchmarks — they do not modify governance verdicts."
+            if en else
+            "외부 신호는 보완적 벤치마크입니다 — 거버넌스 심의 결과에 영향을 주지 않습니다."
+        ),
+        "generatedAt": external_signals.get("generatedAt"),
+        "market": [_format_signal(s) for s in external_signals.get("marketSignals", [])],
+        "regulatory": [_format_signal(s) for s in external_signals.get("regulatorySignals", [])],
+        "operational": [_format_signal(s) for s in external_signals.get("operationalSignals", [])],
+    }
 
 
 def _summarize_conclusion(
@@ -345,7 +396,7 @@ def _map_strategic_goals(company: dict, graph_insights: dict = None) -> list[dic
     return mapped_goals
 
 
-def _detect_missing_items(decision: dict, governance: dict, flags: list[str]) -> list[str]:
+def _detect_missing_items(decision: dict, governance: dict, flags: list[str], risk_scoring: Optional[dict] = None) -> list[str]:
     """
     Detect missing required items in the decision.
 
@@ -374,8 +425,11 @@ def _detect_missing_items(decision: dict, governance: dict, flags: list[str]) ->
         if not decision.get("goals"):
             missing.append("Missing goals")
 
-    # Risks are always expected when the decision has substantive content
-    if not decision.get("risks"):
+    # Risks are always expected when the decision has substantive content.
+    # Suppress when the quantified risk scoring service has already computed dimensions —
+    # that constitutes a full risk assessment even if the LLM didn't extract free-text risks.
+    has_scored_dimensions = bool(risk_scoring and risk_scoring.get("dimensions"))
+    if not decision.get("risks") and not has_scored_dimensions:
         missing.append("Missing risk")
 
     # Check for missing approvals flag
@@ -427,7 +481,8 @@ def _generate_next_actions(
     flags: list[str],
     governance_status: str,
     triggered_rules: list[dict],
-    decision: dict = None
+    decision: dict = None,
+    lang: str = "ko",
 ) -> list[str]:
     """
     Generate context-aware recommended next actions.
@@ -451,6 +506,21 @@ def _generate_next_actions(
     # Build rule_id → rule metadata map for type/name lookup
     rule_map = {r.get("rule_id", ""): r for r in triggered_rules}
 
+    en = lang == "en"
+
+    # Detect compliance/privacy-focused decisions — KPI and goal actions are irrelevant
+    _compliance_flags = {"PRIVACY_REVIEW_REQUIRED", "COMPLIANCE_VIOLATION", "HIGH_RISK"}
+    _rule_types = {
+        (r.get("type") or r.get("rule_type", ""))
+        for r in triggered_rules
+    }
+    is_compliance_focused = (
+        bool(set(flags) & _compliance_flags)
+        or bool(_rule_types & {"compliance", "privacy"})
+        or decision.get("uses_pii") is True
+        or decision.get("involves_compliance_risk") is True
+    )
+
     # 1. Per-approval-chain step: derive "approvable path" guidance
     for step in approval_chain:
         role = step.get("role", "")
@@ -459,25 +529,49 @@ def _generate_next_actions(
         rule_action = step.get("rule_action", "require_approval")
 
         rule = rule_map.get(rule_id, {})
-        rule_type = rule.get("type", "")
+        rule_type = rule.get("type") or rule.get("rule_type", "")
 
         if rule_action == "require_review":
-            add(_build_review_guidance(role, rule_type, rationale, decision))
+            add(_build_review_guidance(role, rule_type, rationale, decision, lang))
         else:
-            add(_build_approval_guidance(role, rule_type, rationale, decision))
+            add(_build_approval_guidance(role, rule_type, rationale, decision, lang))
 
     # 2. Missing item actions — with "OR" alternatives where applicable
     if "Missing owner" in missing_items:
-        add("의사결정 실행 책임자를 지정하세요 — 담당 팀장 또는 프로젝트 리더를 명시하거나, 의사결정문에 실행 주체를 추가하세요")
+        add(
+            "Assign a decision owner — specify the responsible team lead or project leader in the decision statement"
+            if en else
+            "의사결정 실행 책임자를 지정하세요 — 담당 팀장 또는 프로젝트 리더를 명시하거나, 의사결정문에 실행 주체를 추가하세요"
+        )
 
-    if "Missing KPI" in missing_items:
-        add("측정 가능한 KPI를 정의하세요 — 목표 수치, 달성 시점, 측정 주기를 포함하거나, 기존 전략 목표(G1/G2/G3)의 KPI와 연계하세요")
+    if "Missing KPI" in missing_items and not is_compliance_focused:
+        add(
+            "Define measurable KPIs — include target values, deadlines, and measurement frequency, or link to existing strategic goal KPIs (G1/G2/G3)"
+            if en else
+            "측정 가능한 KPI를 정의하세요 — 목표 수치, 달성 시점, 측정 주기를 포함하거나, 기존 전략 목표(G1/G2/G3)의 KPI와 연계하세요"
+        )
 
     if "Missing risk" in missing_items:
-        add("리스크 평가를 추가하세요 — 주요 실패 요인과 완화 방안을 1개 이상 명시하거나, 리스크가 없다고 판단되면 그 근거를 기술하세요")
+        add(
+            "Add a risk assessment — identify at least one key failure factor with mitigation, or document why no risks apply"
+            if en else
+            "리스크 평가를 추가하세요 — 주요 실패 요인과 완화 방안을 1개 이상 명시하거나, 리스크가 없다고 판단되면 그 근거를 기술하세요"
+        )
 
-    if "Missing goals" in missing_items:
-        add("조직 목표를 연결하세요 — 글로벌 매출 확대(G1), 규제 준수(G2), 운영비 효율화(G3) 중 하나 이상과 연결하세요")
+    # Compliance-specific actions when KPI/goal items are suppressed
+    if is_compliance_focused and ("Missing KPI" in missing_items or "Missing goals" in missing_items):
+        add(
+            "Document remediation steps — specify concrete corrective actions, responsible parties, and a resolution timeline"
+            if en else
+            "시정 조치를 문서화하세요 — 구체적인 개선 방안, 책임자, 해결 일정을 명시하세요"
+        )
+
+    if "Missing goals" in missing_items and not is_compliance_focused:
+        add(
+            "Link to a strategic goal — connect to Global Revenue Growth (G1), Regulatory Compliance (G2), or Operational Efficiency (G3)"
+            if en else
+            "조직 목표를 연결하세요 — 글로벌 매출 확대(G1), 규제 준수(G2), 운영비 효율화(G3) 중 하나 이상과 연결하세요"
+        )
 
     # 3. GOVERNANCE_COVERAGE_GAP — use decision content for context-aware guidance
     if "GOVERNANCE_COVERAGE_GAP" in flags:
@@ -487,121 +581,216 @@ def _generate_next_actions(
             first_risk_desc = risks[0].get("description", "")
             snippet = first_risk_desc[:60] + "..." if len(first_risk_desc) > 60 else first_risk_desc
             add(
+                f"No governance policy matched — manually review the risk '{snippet}' or request the governance team to add a policy for this decision type"
+                if en else
                 f"적용 가능한 거버넌스 규정이 없습니다 — '{snippet}' 리스크를 고려하여 "
                 f"수동 검토를 진행하거나 거버넌스팀에 해당 의사결정 유형에 대한 규정 추가를 요청하세요"
             )
         else:
-            snippet = decision_stmt[:50] if decision_stmt else "이 의사결정"
+            snippet = decision_stmt[:50] if decision_stmt else ("this decision" if en else "이 의사결정")
             add(
+                f"No governance policy matched — consider adding a policy for decisions like '{snippet}', or request a manual review from compliance"
+                if en else
                 f"적용 가능한 거버넌스 규정이 없습니다 — '{snippet}' 유형의 의사결정에 대한 "
                 f"거버넌스 규정 추가를 검토하거나, 준법감시인에게 수동 검토를 요청하세요"
             )
 
     # 4. Other flag-specific guidance
     if "CRITICAL_CONFLICT" in flags:
-        add("의사결정 내 상충 항목을 해소하세요 — 목표, KPI, 리스크 간 모순 내용을 수정한 후 재제출하세요")
+        add(
+            "Resolve conflicting items — fix contradictions between goals, KPIs, and risks, then resubmit"
+            if en else
+            "의사결정 내 상충 항목을 해소하세요 — 목표, KPI, 리스크 간 모순 내용을 수정한 후 재제출하세요"
+        )
 
     # 5. Blocked with no actions yet — escalation fallback
     if governance_status == "blocked" and not actions:
-        add("차단 원인 해소 전 진행 불가 — 위 항목들을 해결한 후 거버넌스 검토팀에 재제출하세요")
+        add(
+            "Cannot proceed until blockers are resolved — address the items above and resubmit to the governance review team"
+            if en else
+            "차단 원인 해소 전 진행 불가 — 위 항목들을 해결한 후 거버넌스 검토팀에 재제출하세요"
+        )
 
     # 6. Needs review with no actions yet — reviewer assignment fallback
     if governance_status in ("needs_review", "review_required") and not actions:
-        add("검토 담당자를 배정하고 의사결정 패키지를 전달하세요")
+        add(
+            "Assign a reviewer and share the decision package"
+            if en else
+            "검토 담당자를 배정하고 의사결정 패키지를 전달하세요"
+        )
 
     # 7. Compliant — confirm and proceed
     if governance_status == "compliant" and not actions:
-        add("모든 거버넌스 요건을 충족했습니다 — 최종 검토 후 실행을 진행하세요")
+        add(
+            "All governance requirements met — proceed after final review"
+            if en else
+            "모든 거버넌스 요건을 충족했습니다 — 최종 검토 후 실행을 진행하세요"
+        )
 
     return actions
 
 
-def _build_review_guidance(role: str, rule_type: str, rationale: str, decision: dict) -> str:
+_RULE_TYPE_TO_EN_ROLE = {
+    "compliance": "Compliance Officer",
+    "privacy": "Privacy Officer",
+    "financial": "CFO",
+    "strategic": "Medical Director / CEO",
+    "hr": "HR Manager",
+    "capital_expenditure": "CFO",
+}
+
+_RULE_TYPE_TO_EN_ROLE_REVIEW = {
+    "compliance": "Compliance Officer",
+    "privacy": "Privacy Officer",
+    "financial": "Finance Team Lead",
+    "hr": "HR Manager",
+}
+
+
+def _safe_role(role: str, rule_type: str, is_review: bool, en: bool) -> str:
+    """
+    Return the role label safe for use in English strings.
+
+    When `en=True` and the stored role contains non-ASCII characters
+    (i.e. it was stored in Korean), fall back to a rule-type-based
+    English label rather than embedding Korean text in an English sentence.
+    """
+    if not en:
+        return role
+    if role.isascii():
+        return role  # Already English
+    mapping = _RULE_TYPE_TO_EN_ROLE_REVIEW if is_review else _RULE_TYPE_TO_EN_ROLE
+    return mapping.get(rule_type, "the responsible approver")
+
+
+def _build_review_guidance(role: str, rule_type: str, rationale: str, decision: dict, lang: str = "ko") -> str:
     """
     Build context-aware guidance for a review-type (require_review) approval step.
-    Tells the user what to prepare and attach for this reviewer.
     """
+    en = lang == "en"
+    display_role = _safe_role(role, rule_type, is_review=True, en=en)
+
     if rule_type == "compliance":
-        if rationale:
-            return (
-                f"{role} 검토를 받으세요 — {rationale} 관련 내용을 사전에 정리하고 "
-                f"관련 문서(정책 근거, 위험 완화 방안)를 첨부하세요"
-            )
-        return f"{role} 검토를 받으세요 — 준법 리스크 관련 서류(정책 근거, 위험 완화 방안)를 첨부하세요"
+        return (
+            f"Get {display_role} review — attach compliance risk documentation (policy basis, risk mitigation)"
+            if en else
+            f"{display_role} 검토를 받으세요 — 준법 리스크 관련 서류(정책 근거, 위험 완화 방안)를 첨부하세요"
+            + (f" ({rationale})" if rationale else "")
+        )
 
     if rule_type == "hr":
         headcount = decision.get("headcount_change")
         if headcount and headcount > 0:
             return (
-                f"{role} 검토를 받으세요 — {headcount}명 채용에 대한 "
-                f"직무 기술서, 예산, 채용 일정이 포함된 인력 계획서를 첨부하세요"
+                f"Get {display_role} review — attach a staffing plan for {headcount} hires (job descriptions, budget, timeline)"
+                if en else
+                f"{display_role} 검토를 받으세요 — {headcount}명 채용에 대한 직무 기술서, 예산, 채용 일정이 포함된 인력 계획서를 첨부하세요"
             )
-        return f"{role} 검토를 받으세요 — 인력 계획서 및 채용 요건을 첨부하세요"
+        return (
+            f"Get {display_role} review — attach a staffing plan and hiring requirements"
+            if en else
+            f"{display_role} 검토를 받으세요 — 인력 계획서 및 채용 요건을 첨부하세요"
+        )
 
     if rule_type == "financial":
         cost = decision.get("cost")
         if cost:
-            cost_str = f"{int(cost):,}원"
+            cost_str = f"${int(cost):,}" if en else f"{int(cost):,}원"
             return (
-                f"{role} 검토를 받으세요 — {cost_str} 규모 지출에 대한 "
-                f"예산 근거 및 비용 편익 분석을 첨부하세요"
+                f"Get {display_role} review — attach budget justification and cost-benefit analysis for the {cost_str} expenditure"
+                if en else
+                f"{display_role} 검토를 받으세요 — {cost_str} 규모 지출에 대한 예산 근거 및 비용 편익 분석을 첨부하세요"
             )
-        return f"{role} 검토를 받으세요 — 예산 근거 및 비용 편익 분석을 첨부하세요"
+        return (
+            f"Get {display_role} review — attach budget justification and cost-benefit analysis"
+            if en else
+            f"{display_role} 검토를 받으세요 — 예산 근거 및 비용 편익 분석을 첨부하세요"
+        )
 
-    if rationale:
-        return f"{role} 검토를 받으세요 — {rationale}"
-    return f"{role} 검토를 받으세요"
+    return (
+        f"Get {display_role} review — attach supporting documentation"
+        if en else
+        f"{display_role} 검토를 받으세요" + (f" — {rationale}" if rationale else "")
+    )
 
 
-def _build_approval_guidance(role: str, rule_type: str, rationale: str, decision: dict) -> str:
+def _build_approval_guidance(role: str, rule_type: str, rationale: str, decision: dict, lang: str = "ko") -> str:
     """
     Build context-aware 'approve OR adjust' guidance for a hard approval step.
-    Where possible, offers a concrete alternative path (e.g. reduce below threshold).
     """
+    en = lang == "en"
+    display_role = _safe_role(role, rule_type, is_review=False, en=en)
     if rule_type == "financial":
         cost = decision.get("cost")
         if cost:
-            cost_str = f"{int(cost):,}원"
+            cost_str = f"${int(cost):,}" if en else f"{int(cost):,}원"
             if cost > 1_000_000_000:
                 return (
-                    f"{role} 승인을 받으세요 — {cost_str} 규모로 이사회급 승인이 필요합니다. "
+                    f"Get {display_role} approval — at {cost_str} this requires board-level sign-off. "
+                    f"Prepare sequential CFO and CEO approval documents, or reduce the budget below $1B"
+                    if en else
+                    f"{display_role} 승인을 받으세요 — {cost_str} 규모로 이사회급 승인이 필요합니다. "
                     f"CFO 및 CEO 순차 승인 문서를 준비하거나, 예산 규모를 10억 원 미만으로 조정하세요"
                 )
             elif cost > 50_000_000:
                 return (
-                    f"{role} 승인을 받으세요 — {cost_str} 규모로 CFO 승인이 필요합니다. "
+                    f"Get {display_role} approval — at {cost_str} CFO sign-off is required. "
+                    f"Submit an approval request with cost-benefit analysis and budget justification, "
+                    f"or reduce the budget below $50M"
+                    if en else
+                    f"{display_role} 승인을 받으세요 — {cost_str} 규모로 CFO 승인이 필요합니다. "
                     f"비용 편익 분석 및 예산 근거를 포함한 승인 요청서를 제출하거나, "
                     f"예산을 5,000만 원 이하로 조정하세요"
                 )
             else:
-                return f"{role} 승인을 받으세요 — {cost_str} 규모 지출에 대한 승인 요청서를 제출하세요"
-        if rationale:
-            return f"{role} 승인을 받으세요 — {rationale}. 예산 근거 및 비용 편익 분석을 첨부하세요"
-        return f"{role} 승인을 받으세요 — 예산 근거 및 비용 편익 분석을 첨부하세요"
+                return (
+                    f"Get {display_role} approval — submit an approval request for the {cost_str} expenditure"
+                    if en else
+                    f"{display_role} 승인을 받으세요 — {cost_str} 규모 지출에 대한 승인 요청서를 제출하세요"
+                )
+        return (
+            f"Get {display_role} approval — attach budget justification and cost-benefit analysis"
+            if en else
+            f"{display_role} 승인을 받으세요 — 예산 근거 및 비용 편익 분석을 첨부하세요"
+        )
 
     if rule_type == "strategic":
         strategic_impact = decision.get("strategic_impact", "")
-        if strategic_impact == "critical":
+        if str(strategic_impact) in ("critical", "StrategicImpact.CRITICAL"):
             return (
-                f"{role} 승인을 받으세요 — 전사적 전략 영향도가 '중대(critical)'로 평가되었습니다. "
+                f"Get {display_role} approval — strategic impact is rated 'critical'. "
+                f"Prepare an executive report including a strategic review and stakeholder analysis"
+                if en else
+                f"{display_role} 승인을 받으세요 — 전사적 전략 영향도가 '중대(critical)'로 평가되었습니다. "
                 f"전략 검토 보고서 및 이해관계자 분석을 포함한 경영진 보고서를 준비하세요"
             )
-        if rationale:
-            return f"{role} 승인을 받으세요 — {rationale}. 전략 정합성 검토 자료를 첨부하세요"
-        return f"{role} 승인을 받으세요 — 전략적 영향도 검토 자료를 첨부하세요"
+        return (
+            f"Get {display_role} approval — attach strategic impact review materials"
+            if en else
+            f"{display_role} 승인을 받으세요 — 전략적 영향도 검토 자료를 첨부하세요"
+        )
 
     if rule_type == "hr":
         headcount = decision.get("headcount_change")
         if headcount and headcount >= 10:
             return (
-                f"{role} 승인을 받으세요 — {headcount}명 이상 대규모 인력 변경으로 CEO 승인이 필요합니다. "
+                f"Get {display_role} approval — {headcount}+ headcount change requires CEO sign-off. "
+                f"Prepare an org change plan (staffing plan, budget, strategic rationale), or reduce to under 10"
+                if en else
+                f"{display_role} 승인을 받으세요 — {headcount}명 이상 대규모 인력 변경으로 CEO 승인이 필요합니다. "
                 f"조직 변경 계획서(인력 계획, 예산, 전략적 근거)를 준비하거나, 채용 규모를 10명 미만으로 조정하세요"
             )
-        return f"{role} 승인을 받으세요 — 인력 변경 계획서를 제출하세요"
+        return (
+            f"Get {display_role} approval — submit a headcount change plan"
+            if en else
+            f"{display_role} 승인을 받으세요 — 인력 변경 계획서를 제출하세요"
+        )
 
-    if rationale:
-        return f"{role} 승인을 받으세요 — {rationale}"
-    return f"{role} 승인을 받으세요"
+    return (
+        f"Get {display_role} approval — attach supporting documentation"
+        if en else
+        f"{display_role} 승인을 받으세요" + (f" — {rationale}" if rationale else "")
+    )
 
 
 def _extract_rationales(triggered_rules: list[dict], approval_chain: list[dict]) -> list[str]:
