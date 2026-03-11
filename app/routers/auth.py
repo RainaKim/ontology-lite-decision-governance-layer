@@ -190,6 +190,13 @@ def update_me(
     """
     from app.repositories import user_repository
 
+    if body.company_id is not None:
+        if company_repository.get_by_id(db, body.company_id) is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"company_id '{body.company_id}' does not exist",
+            )
+
     updated = user_repository.update_profile(
         db,
         user_id=current_user.id,
