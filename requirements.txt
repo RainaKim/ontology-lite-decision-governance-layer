@@ -15,6 +15,7 @@ python-dotenv==1.0.0
 # Database (auth feature)
 sqlalchemy>=2.0.0
 alembic>=1.13.0
+psycopg2-binary>=2.9.0
 
 # Auth
 bcrypt>=4.0.0
