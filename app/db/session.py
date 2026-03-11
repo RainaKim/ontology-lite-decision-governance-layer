@@ -30,6 +30,10 @@ DATABASE_URL: str = os.environ.get(
     "sqlite:///./dev.db",  # dev/local fallback
 )
 
+# Render gives "postgres://" but SQLAlchemy requires "postgresql://"
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 # SQLite requires check_same_thread=False for multi-threaded use (FastAPI).
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
