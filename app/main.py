@@ -15,7 +15,7 @@ from app.llm_client import LLMClient
 from app.extractor import DecisionExtractor
 from app.graph_repository import InMemoryGraphRepository
 from app.services import company_service
-from app.routers import companies_router, decisions_router, fixtures_router
+from app.routers import auth_router, companies_router, decisions_router, fixtures_router, sso_router, workspace_router
 
 # Load environment variables from .env file
 load_dotenv()
@@ -88,6 +88,9 @@ app.add_middleware(
 app.include_router(companies_router)
 app.include_router(decisions_router)
 app.include_router(fixtures_router)
+app.include_router(auth_router)   # /v1/auth/signup, /v1/auth/login, /v1/me
+app.include_router(sso_router)    # /v1/auth/sso/google/*, /v1/auth/sso/azure/*
+app.include_router(workspace_router)  # /v1/workspace/metrics, /v1/workspace/decisions
 
 
 # ── Root-level endpoints (no /v1 prefix) ─────────────────────────────────────

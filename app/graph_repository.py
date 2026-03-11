@@ -317,11 +317,14 @@ class InMemoryGraphRepository(BaseGraphRepository):
         region = self._extract_region(decision)
         if region:
             region_id = f"{decision_id}_region"
+            # Store name_en when region is already ASCII (extracted from English text).
+            # Korean regions (e.g. "북미") have name_en=None — normalizer will handle display.
+            region_en = region if region.isascii() else None
             region_node = Node(
                 id=region_id,
                 type=NodeType.REGION,
                 label=region,
-                properties={"name": region}
+                properties={"name": region, "name_en": region_en}
             )
             await self.add_node(region_node)
             nodes.append(region_node)
@@ -358,6 +361,8 @@ class InMemoryGraphRepository(BaseGraphRepository):
                 severity=risk.get("severity"),
                 mitigation=risk.get("mitigation")
             )
+            if risk.get("description_en"):
+                risk_node.properties["description_en"] = risk["description_en"]
             await self.add_node(risk_node)
             nodes.append(risk_node)
 
@@ -381,45 +386,84 @@ class InMemoryGraphRepository(BaseGraphRepository):
             edges.extend(rule_edges)
 
         # 9b. Create Approver nodes for approval chain (distinct from Actor/owner nodes)
-        # IMPORTANT: Connect approvers to the RULE that triggered them, not directly to Decision
-        # This creates semantic chains: Decision → TRIGGERS → Rule → REQUIRES_APPROVAL_BY → Approver
-        for idx, step in enumerate(governance.get("approval_chain", [])):
-            approver_id = f"{decision_id}_approver_{step.get('level')}_{idx}"
-            rule_action = step.get("rule_action", "require_approval")
-            auth_label = "ESCALATION" if rule_action == "require_review" else "REQUIRED"
-            source_rule_id = step.get("source_rule_id")
+        #
+        # Parallel rule  (default):  Rule → Approver-A
+        #                             Rule → Approver-B
+        #
+        # Sequential rule (requires_sequential=true):
+        #                             Rule → Approver-1 → Approver-2
+        #   Only the first approver connects from the Rule; each subsequent approver
+        #   connects from the previous one to express ordering.
 
-            approver_node = Node(
-                id=approver_id,
-                type=NodeType.ACTOR,  # Changed from APPROVER to ACTOR
-                label=step.get("role", ""),
-                properties={
-                    "role": step.get("role", ""),
-                    "auth_type": auth_label,
-                    "source_rule_id": source_rule_id,
-                    "rationale": step.get("rationale"),
-                    "required": step.get("required", True),
-                }
+        # Build rule lookup so we can check requires_sequential
+        _rule_def_lookup: dict[str, dict] = {}
+        if company_context:
+            for _r in company_context.get("governance_rules", []):
+                _rid = _r.get("rule_id")
+                if _rid:
+                    _rule_def_lookup[_rid] = _r
+
+        # Group steps by source_rule_id, preserving original order
+        from collections import defaultdict as _defaultdict
+        _steps_by_rule: dict[str, list[tuple[int, dict]]] = _defaultdict(list)
+        for _idx, _step in enumerate(governance.get("approval_chain", [])):
+            _src = _step.get("source_rule_id") or ""
+            _steps_by_rule[_src].append((_idx, _step))
+
+        for _src_rule_id, _step_list in _steps_by_rule.items():
+            _rule_def = _rule_def_lookup.get(_src_rule_id, {})
+            _is_sequential = (
+                _rule_def.get("consequence", {}).get("requires_sequential", False)
+                and len(_step_list) > 1
             )
 
-            # Check if already exists before adding
-            if approver_id not in self._nodes:
-                await self.add_node(approver_node)
-                nodes.append(approver_node)
+            _prev_approver_id = None
+            for _list_idx, (_idx, step) in enumerate(_step_list):
+                approver_id = f"{decision_id}_approver_{step.get('level')}_{_idx}"
+                rule_action = step.get("rule_action", "require_approval")
+                auth_label = "ESCALATION" if rule_action == "require_review" else "REQUIRED"
+                source_rule_id = step.get("source_rule_id")
 
-            # Edge: Rule -[REQUIRES_APPROVAL_BY]-> Approver (NOT Decision -> Approver)
-            # This shows the causal chain: the RULE requires approval, not just the decision
-            if source_rule_id:
-                rule_node_id = f"rule_{source_rule_id}"
-                edge = create_edge(
-                    rule_node_id,
-                    approver_id,
-                    EdgePredicate.REQUIRES_APPROVAL_BY,
-                    required=step.get("required", True),
-                    rationale=step.get("rationale")
+                approver_node = Node(
+                    id=approver_id,
+                    type=NodeType.ACTOR,
+                    label=step.get("role", ""),
+                    properties={
+                        "role": step.get("role", ""),
+                        "auth_type": auth_label,
+                        "source_rule_id": source_rule_id,
+                        "rationale": step.get("rationale"),
+                        "required": step.get("required", True),
+                        "sequential_order": _list_idx + 1 if _is_sequential else None,
+                    }
                 )
-                await self.add_edge(edge)
-                edges.append(edge)
+
+                if approver_id not in self._nodes:
+                    await self.add_node(approver_node)
+                    nodes.append(approver_node)
+
+                # Determine edge source:
+                # - First step (or parallel): edge comes from the Rule node
+                # - Subsequent sequential steps: edge comes from the previous approver
+                if _is_sequential and _prev_approver_id is not None:
+                    edge_source = _prev_approver_id
+                elif source_rule_id:
+                    edge_source = f"rule_{source_rule_id}"
+                else:
+                    edge_source = None
+
+                if edge_source:
+                    edge = create_edge(
+                        edge_source,
+                        approver_id,
+                        EdgePredicate.REQUIRES_APPROVAL_BY,
+                        required=step.get("required", True),
+                        rationale=step.get("rationale")
+                    )
+                    await self.add_edge(edge)
+                    edges.append(edge)
+
+                _prev_approver_id = approver_id
 
         # 10. POLICY nodes removed - consolidated with RULE nodes
         # Policy and Rule were duplicates. Now using only RULE nodes.
@@ -472,13 +516,22 @@ class InMemoryGraphRepository(BaseGraphRepository):
             nodes.extend(cost_goal_nodes)
             edges.extend(cost_goal_edges)
 
+            # Detect whether strategic goal conflicts were structurally represented.
+            # If so, pass the flag to add_rule_risk_edges so it skips default-fallback
+            # connections for LLM-extracted risks that merely restate the same conflict.
+            _has_structural_conflicts = any(
+                "_goal_conflict_risk_" in n.id or "_strategic_conflict_risk_" in n.id
+                for n in nodes
+            )
+
             # Add Rule → GENERATES_RISK → Risk edges (for financial/compliance risks)
             rule_risk_nodes, rule_risk_edges = await add_rule_risk_edges(
                 decision_id=decision_id,
                 decision=decision,
                 governance=governance,
                 add_node_fn=self.add_node,
-                add_edge_fn=self.add_edge
+                add_edge_fn=self.add_edge,
+                has_structural_conflicts=_has_structural_conflicts,
             )
             nodes.extend(rule_risk_nodes)
             edges.extend(rule_risk_edges)
@@ -487,6 +540,16 @@ class InMemoryGraphRepository(BaseGraphRepository):
             # Multiple approvers in approval_chain are parallel (from different rules),
             # not hierarchical. Each approver is independently required.
             # Example: R1 → CFO, R7 → HR Manager (parallel, not CFO → HR Manager)
+
+        # Remove dangling LLM-extracted risk nodes (no incoming edges).
+        # These are _risk_{idx} nodes that were not connected via any rule because
+        # structural enrichment already covers the same conflict via goal edges.
+        _edge_targets = {e.to_node for e in edges}
+        _llm_risk_pattern = f"{decision_id}_risk_"
+        nodes = [
+            n for n in nodes
+            if not n.id.startswith(_llm_risk_pattern) or n.id in _edge_targets
+        ]
 
         return DecisionGraph(
             decision_id=decision_id,

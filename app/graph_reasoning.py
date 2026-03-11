@@ -22,7 +22,8 @@ async def analyze_decision_graph_with_o1(
     repository: BaseGraphRepository,
     decision_data: dict = None,
     company_data: dict = None,
-    use_o1: bool = True
+    use_o1: bool = True,
+    lang: str = "ko",
 ) -> dict:
     """
     Use o1 to analyze decision graph for contradictions and insights.
@@ -63,7 +64,8 @@ async def analyze_decision_graph_with_o1(
                 decision_data=decision_data or {},
                 company_data=company_data or {},
                 graph_context=graph_context,
-                governance=governance
+                governance=governance,
+                lang=lang,
             )
         except Exception as e:
             # Fallback to deterministic analysis if o1 fails
@@ -175,7 +177,8 @@ async def _reason_about_graph_with_o1(
     decision_data: dict,
     company_data: dict,
     graph_context: dict,
-    governance: dict
+    governance: dict,
+    lang: str = "ko",
 ) -> dict:
     """
     Use o1 to reason about graph structure and find contradictions.
@@ -205,7 +208,8 @@ async def _reason_about_graph_with_o1(
             decision_id=decision_id,
             decision_data=decision_data,
             company_data=company_data,
-            graph_context=_normalize_graph_context(graph_context)
+            graph_context=_normalize_graph_context(graph_context),
+            lang=lang,
         )
     )
 

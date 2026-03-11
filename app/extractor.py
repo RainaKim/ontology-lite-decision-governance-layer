@@ -23,6 +23,45 @@ from app.governance import evaluate_governance
 logger = logging.getLogger(__name__)
 
 
+def _inject_budget_risk(decision: "Decision") -> "Decision":
+    """
+    Replace any LLM-generated budget overrun risk with a deterministically
+    computed one derived from decision.cost and decision.remaining_budget.
+
+    Ensures the description, numbers, and severity are always accurate —
+    never dependent on the LLM's formatting or arithmetic.
+    """
+    if decision.cost is None or decision.remaining_budget is None:
+        return decision
+
+    # Remove LLM-generated budget risks to avoid duplicates
+    # (simple dedup only — not semantic classification)
+    _BUDGET_MARKERS = ("예산 초과", "budget overrun", "잔여 예산", "remaining budget")
+    filtered = [
+        r for r in (decision.risks or [])
+        if not any(m.lower() in (r.description or "").lower() for m in _BUDGET_MARKERS)
+    ]
+
+    if decision.cost > decision.remaining_budget:
+        from app.schemas.domain import Risk
+        ratio = decision.cost / decision.remaining_budget
+        severity = "High" if ratio >= 3 else "Medium"
+        description = (
+            f"예산 초과: 요청 금액({int(decision.cost):,}원)이 "
+            f"잔여 예산({int(decision.remaining_budget):,}원)의 {ratio:.1f}배"
+        )
+        description_en = (
+            f"Budget overrun: requested {int(decision.cost):,} KRW is "
+            f"{ratio:.1f}× the remaining budget ({int(decision.remaining_budget):,} KRW)"
+        )
+        mitigation = "추가 예산 승인 필요 또는 요청 금액 조정"
+        decision.risks = [Risk(description=description, description_en=description_en, severity=severity, mitigation=mitigation)] + filtered
+    else:
+        decision.risks = filtered
+
+    return decision
+
+
 class DecisionExtractor:
     """
     Handles decision extraction with robust error handling.
@@ -89,6 +128,9 @@ class DecisionExtractor:
                 # Step 3: Validate with Pydantic
                 decision = Decision(**parsed_json)
                 logger.info(f"[{request_id}] Successfully validated Decision object (confidence={decision.confidence})")
+
+                # Step 3b: Deterministic budget risk injection
+                decision = _inject_budget_risk(decision)
 
                 # Step 4: Deterministic governance evaluation
                 logger.info(f"[{request_id}] Running deterministic governance evaluation")

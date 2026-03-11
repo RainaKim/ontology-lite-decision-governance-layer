@@ -1,0 +1,42 @@
+{
+  "companyId": "sool_sool_icecream",
+  "version": "1.0.0",
+  "legalSources": [
+    {
+      "sourceId": "LEGAL_EMPLOYMENT_COMPLIANCE",
+      "sourceType": "legal_guideline",
+      "documentNameKo": "채용 관련 고용 법규 준수 가이드라인",
+      "documentNameEn": "Employment Law Compliance Guidelines for Hiring",
+      "ownerRole": "운영 매니저",
+      "summaryKo": "신규 채용 시 준수해야 하는 고용 법규 요건을 정리한 내부 가이드라인입니다. 근로 계약서 작성, 최저 임금 준수, 4대 보험 가입 절차, 채용 공고 법적 기재 사항(직종·근무 조건·급여 범위 명시)을 포함합니다. 채용 공고 게시 전 법무팀 또는 운영 매니저 검토가 권고됩니다.",
+      "summaryEn": "Internal guidelines summarizing employment law requirements that must be met when making new hires. Covers employment contract preparation, minimum wage compliance, mandatory social insurance enrollment procedures, and legally required job posting disclosures (job title, working conditions, salary range). Review by legal counsel or the Operations Manager is recommended prior to posting any job listing.",
+      "constants": {
+        "review_required_before_posting": true,
+        "reviewer_role": "OPERATIONS_MANAGER",
+        "mandatory_disclosures": ["직종/job title", "근무 조건/working conditions", "급여 범위/salary range"],
+        "note": "채용 공고 게시 전 운영 매니저 검토 필수 / Operations Manager review required before posting job listing"
+      },
+      "citationTemplateKo": "채용 법규 준수 가이드라인에 따라, 채용 공고 게시 전 {{reviewer_role}} 검토가 필수이며, 공고에는 직종·근무 조건·급여 범위가 명시되어야 합니다.",
+      "citationTemplateEn": "Per the employment law compliance guidelines, {{reviewer_role}} review is required before posting a job listing, and the posting must disclose job title, working conditions, and salary range.",
+      "tags": ["legal", "hr", "compliance"]
+    },
+    {
+      "sourceId": "LEGAL_JOB_POSTING_REQUIREMENTS",
+      "sourceType": "legal_guideline",
+      "documentNameKo": "채용 공고 플랫폼별 등록 요건 및 주의사항",
+      "documentNameEn": "Job Posting Platform Requirements and Compliance Notes",
+      "ownerRole": "운영 매니저",
+      "summaryKo": "LinkedIn 등 외부 채용 플랫폼에 채용 공고를 게시할 때 필요한 플랫폼 정책 준수 사항과 회사 내부 승인 절차를 안내하는 문서입니다. 외부 공개 채용 공고는 급여 범위, 근무지, 고용 형태(정규직/계약직)를 명시해야 하며, CEO 또는 운영 매니저 승인 후 게시해야 합니다.",
+      "summaryEn": "Document providing guidance on platform policy compliance requirements and internal approval procedures for posting job listings on external platforms such as LinkedIn. External job postings must disclose salary range, work location, and employment type (full-time/contract), and must be approved by the CEO or Operations Manager before publication.",
+      "constants": {
+        "approval_required": true,
+        "approver_roles": ["CEO", "OPERATIONS_MANAGER"],
+        "required_fields": ["salary_range", "work_location", "employment_type"],
+        "note": "외부 채용 공고 게시 전 CEO 또는 운영 매니저 승인 필수 / CEO or Operations Manager approval required before posting external job listing"
+      },
+      "citationTemplateKo": "채용 공고 플랫폼 요건에 따라, 외부 채용 공고 게시 시 {{approver_roles}} 승인이 필요하며, 급여 범위·근무지·고용 형태를 공고에 명시해야 합니다.",
+      "citationTemplateEn": "Per the job posting platform requirements, external job postings require approval from {{approver_roles}} and must include salary range, work location, and employment type.",
+      "tags": ["legal", "hr", "compliance"]
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "companyId": "mayo_central",
+  "version": "1.1.0",
+  "sources": [
+    {
+      "sourceId": "MAYO_EXT_001",
+      "companyId": "mayo_central",
+      "category": "regulatory_guidance",
+      "title": "HHS Office for Civil Rights: 2025 HIPAA Enforcement Priorities and Civil Monetary Penalty Highlights",
+      "sourceLabel": "HHS OCR 2025",
+      "sourceType": "regulatory_guideline",
+      "domainHint": "hhs.gov",
+      "summaryText": "HHS OCR imposed $52M in HIPAA settlements in 2025; Compliance Officer accountability is required for all decisions involving PHI processing, transfer, or secondary use.",
+      "recency": "2025",
+      "relevanceHintEn": "Any decision involving patient data access, system integration, or PHI flow requires documented Compliance Officer review to meet HIPAA enforcement standards.",
+      "relevanceHintKo": "환자 데이터 접근, 시스템 통합, 또는 PHI 흐름을 포함하는 모든 결정은 HIPAA 집행 기준을 충족하기 위해 컴플라이언스 오피서의 검토가 문서화되어야 합니다.",
+      "relevanceTags": ["privacy_compliance", "regulatory_compliance", "risk_compliance", "risk_privacy"]
+    },
+    {
+      "sourceId": "MAYO_EXT_002",
+      "companyId": "mayo_central",
+      "category": "compliance_signal",
+      "title": "NIST Cybersecurity Framework (CSF 2.0) Healthcare Implementation Guide 2025",
+      "sourceLabel": "NIST 2025",
+      "sourceType": "regulatory_guideline",
+      "domainHint": "nist.gov",
+      "summaryText": "NIST CSF 2.0 requires multi-factor authentication for all PHI-adjacent system access and mandatory supply chain risk assessment for medical device and health IT vendors.",
+      "recency": "2025",
+      "relevanceHintEn": "Decisions involving new systems or vendors with PHI access must include supply chain risk assessment and MFA requirement verification under CSF 2.0.",
+      "relevanceHintKo": "PHI에 접근하는 새로운 시스템 또는 공급업체와 관련된 결정은 CSF 2.0에 따라 공급망 위험 평가 및 MFA 요건 검토를 포함해야 합니다.",
+      "relevanceTags": ["privacy_compliance", "regulatory_compliance", "risk_compliance", "risk_privacy"]
+    },
+    {
+      "sourceId": "MAYO_EXT_003",
+      "companyId": "mayo_central",
+      "category": "regulatory_guidance",
+      "title": "CMS: EHR Certification, Interoperability, and Information Blocking Standards Update Q4 2025",
+      "sourceLabel": "CMS Q4 2025",
+      "sourceType": "regulatory_guideline",
+      "domainHint": "cms.gov",
+      "summaryText": "CMS requires HL7 FHIR R4-compliant interoperability by Q1 2026; hospitals failing certification risk exclusion from Medicare and Medicaid reimbursement programs.",
+      "recency": "2025",
+      "relevanceHintEn": "Clinical technology or data integration decisions must be assessed for information blocking compliance to protect Medicare and Medicaid reimbursement eligibility.",
+      "relevanceHintKo": "임상 기술 또는 데이터 통합 결정은 메디케어 및 메디케이드 상환 자격을 보호하기 위해 정보 차단 규정 준수 여부를 검토해야 합니다.",
+      "relevanceTags": ["regulatory_compliance", "financial_procurement", "strategic_benchmark"]
+    },
+    {
+      "sourceId": "MAYO_EXT_004",
+      "companyId": "mayo_central",
+      "category": "trend_signal",
+      "title": "American Hospital Association: U.S. Hospital AI and Technology Adoption Benchmark Report 2025",
+      "sourceLabel": "AHA 2025",
+      "sourceType": "industry_benchmark",
+      "domainHint": "aha.org",
+      "summaryText": "78% of U.S. hospitals are accelerating AI investments; those with pre-established HIPAA compliance workflows deploy in 9 months vs. 18 months without governance frameworks.",
+      "recency": "2025",
+      "relevanceHintEn": "Establishing governance review processes before deployment significantly reduces time-to-production and compliance risk for this technology decision.",
+      "relevanceHintKo": "배포 전 거버넌스 검토 프로세스를 수립하면 이 기술 결정의 생산 전환 시간과 컴플라이언스 위험이 크게 줄어듭니다.",
+      "relevanceTags": ["strategic_benchmark", "regulatory_compliance", "risk_compliance"]
+    },
+    {
+      "sourceId": "MAYO_EXT_005",
+      "companyId": "mayo_central",
+      "category": "compliance_signal",
+      "title": "HHS OCR: Updated PHI Breach Notification Compliance and Documentation Requirements 2025",
+      "sourceLabel": "HHS OCR Guidance 2025",
+      "sourceType": "regulatory_guideline",
+      "domainHint": "hhs.gov",
+      "summaryText": "Impermissible PHI disclosure — even without confirmed patient harm — triggers mandatory 60-day breach notification; penalties reach $1.9M per violation category.",
+      "recency": "2025",
+      "relevanceHintEn": "Without documented risk analysis and access controls in place before this decision, any subsequent PHI exposure would trigger immediate notification obligations.",
+      "relevanceHintKo": "이 결정 전에 문서화된 위험 분석 및 접근 통제가 없으면, 이후 PHI 노출 시 즉각적인 통지 의무가 발생합니다.",
+      "relevanceTags": ["privacy_compliance", "regulatory_compliance", "risk_privacy"]
+    }
+  ]
+}

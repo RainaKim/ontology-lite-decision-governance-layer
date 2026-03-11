@@ -169,6 +169,7 @@
     {
       "goal_id": "G1",
       "name": "글로벌 매출 확대",
+      "category": "revenue_growth",
       "description": "2025년 신규 시장 진출 및 M&A 활동을 통해 연결 매출 25% 성장 달성",
       "owner_id": "ceo_001",
       "kpis": [
@@ -180,6 +181,7 @@
     {
       "goal_id": "G2",
       "name": "규제 및 윤리 준수",
+      "category": "regulatory_compliance",
       "description": "모든 관할권에서 중대 준법 위반 제로 달성",
       "owner_id": "cco_001",
       "kpis": [
@@ -191,6 +193,7 @@
     {
       "goal_id": "G3",
       "name": "운영비용 효율화",
+      "category": "cost_efficiency",
       "description": "벤더 합리화 및 프로세스 자동화를 통해 운영비용 10% 절감",
       "owner_id": "cfo_001",
       "kpis": [
