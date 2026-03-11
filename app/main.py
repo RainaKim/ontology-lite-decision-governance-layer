@@ -6,7 +6,7 @@ All public API routes are mounted under /v1 prefix via routers.
 
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
@@ -82,6 +82,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Global exception handler ─────────────────────────────────────────────────
+# Converts unhandled exceptions to JSON 500 responses that flow through
+# CORSMiddleware. Without this, ServerErrorMiddleware returns a plain 500
+# that bypasses CORSMiddleware — causing the browser to report a CORS error
+# instead of the real server error.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
 
 # ── Mount v1 routers ─────────────────────────────────────────────────────────
 # All routes are under /v1 prefix (defined in each router)
