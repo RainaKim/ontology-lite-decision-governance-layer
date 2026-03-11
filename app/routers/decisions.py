@@ -57,10 +57,11 @@ async def submit_decision(
     """
     # Validate company exists (using contract-compliant IDs)
     if not company_service.get_company_v1(request.company_id, lang=request.lang):
+        valid_ids = sorted(company_service.list_companies_v1(lang="en"), key=lambda c: c.id)
+        valid_str = ", ".join(c.id for c in valid_ids)
         raise HTTPException(
             status_code=422,
-            detail=f"Unknown company_id '{request.company_id}'. "
-                   f"Valid: nexus_dynamics, mayo_central",
+            detail=f"Unknown company_id '{request.company_id}'. Valid: {valid_str}",
         )
 
     # Enforce tenant isolation: non-admins may only submit under their own company.
