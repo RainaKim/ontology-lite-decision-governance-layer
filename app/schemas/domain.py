@@ -44,6 +44,7 @@ class KPI(BaseModel):
 class Risk(BaseModel):
     """Potential failure vector or constraint."""
     description: str = Field(..., min_length=3, max_length=500)
+    description_en: Optional[str] = Field(None, description="English translation of description; always in English regardless of input language")
     severity: Optional[str] = Field(None, description="Low/Medium/High/Critical")
     mitigation: Optional[str] = Field(None, description="How to address this risk")
 
@@ -52,6 +53,8 @@ class Owner(BaseModel):
     """Accountable individual or role."""
     name: str = Field(..., min_length=2, max_length=200)
     role: Optional[str] = Field(None, description="Job title or functional role")
+    name_en: Optional[str] = Field(None, description="English transliteration or translation of name; null if already English")
+    role_en: Optional[str] = Field(None, description="English translation of role title; null if already English")
     responsibility: Optional[str] = Field(None, description="Specific accountability")
 
 
@@ -160,6 +163,14 @@ class Decision(BaseModel):
     involves_compliance_risk: Optional[bool] = Field(
         None,
         description="true if the decision explicitly involves anti-bribery risk, ethics code violation, entertainment/gift policy breach, or similar compliance/integrity concerns; null otherwise"
+    )
+    remaining_budget: Optional[float] = Field(
+        None,
+        description="Available/remaining departmental budget in full numeric form (e.g. 50000000 for 5,000만 원, 100000 for $100K); null if not stated in the input text"
+    )
+    department: Optional[str] = Field(
+        None,
+        description="The organizational department or business unit requesting or owning this decision (e.g. '마케팅팀', 'Marketing', 'R&D'); null if not stated"
     )
     headcount_change: Optional[int] = Field(
         None,

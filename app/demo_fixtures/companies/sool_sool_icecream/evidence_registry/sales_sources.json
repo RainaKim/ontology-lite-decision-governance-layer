@@ -1,0 +1,42 @@
+{
+  "companyId": "sool_sool_icecream",
+  "version": "1.0.0",
+  "salesSources": [
+    {
+      "sourceId": "SALES_REVENUE_PROJECTION",
+      "sourceType": "sales_report",
+      "documentNameKo": "매출 예측 및 채널별 판매 현황 보고서",
+      "documentNameEn": "Revenue Projection and Sales Channel Performance Report",
+      "ownerRole": "마케팅 리드",
+      "summaryKo": "현재 판매 채널(매장·온라인) 기반 향후 3개월 매출 예측과 최근 성장 추세를 기록한 보고서입니다. SNS 기반 판매 예측의 신뢰도와 채널별 기여도를 포함합니다. 재고 주문 수량의 적정성을 판단하거나 신규 인력 필요 여부를 평가할 때 기준 자료로 활용됩니다.",
+      "summaryEn": "Report recording 3-month forward revenue projections based on current sales channels (store and online) and recent growth trends. Includes reliability assessment of SNS-based sales forecasts and channel contribution breakdown. Used as the reference for assessing the appropriateness of inventory order quantities or evaluating the need for additional headcount.",
+      "constants": {
+        "monthly_revenue_growth_rate_pct": 5,
+        "qoq_revenue_growth_pct": 12,
+        "growth_trend": "decelerating",
+        "sns_forecast_reliability": "medium",
+        "note": "월 매출 성장률 최근 3개월 평균 5%로 둔화 중. SNS 판매 예측 신뢰도 '보통' — 프로모션 효과 제거 후 실수요 재추정 필요 / Monthly growth decelerating to avg 5% over last 3 months. SNS forecast reliability rated medium — demand must be re-estimated after removing promotional uplift."
+      },
+      "citationTemplateKo": "매출 예측 보고서 기준, 최근 3개월 월 평균 성장률 {{monthly_revenue_growth_rate_pct}}% (성장 추세: {{growth_trend}}). SNS 기반 예측 신뢰도: {{sns_forecast_reliability}}.",
+      "citationTemplateEn": "Per the revenue projection report, average monthly growth rate over the last 3 months: {{monthly_revenue_growth_rate_pct}}% (trend: {{growth_trend}}). SNS-based forecast reliability: {{sns_forecast_reliability}}."
+    },
+    {
+      "sourceId": "SALES_PROMOTION_PLAN",
+      "sourceType": "marketing_plan",
+      "documentNameKo": "프로모션 계획서 (현행 및 차기)",
+      "documentNameEn": "Promotion Plan (Current and Next)",
+      "ownerRole": "마케팅 리드",
+      "summaryKo": "현재 진행 중인 SNS 프로모션의 종료 일정과 차기 프로모션 계획을 기록한 문서입니다. 프로모션 종료 후 수요 감소 가능성을 재고 주문 수량 결정에 반영하는 데 사용됩니다.",
+      "summaryEn": "Document recording the end date of the current SNS promotion and next promotion plans. Used to reflect the potential demand decline after promotion ends when determining inventory order quantities.",
+      "constants": {
+        "current_promotion_active": true,
+        "current_promotion_end_date": "2026-03-31",
+        "next_promotion_planned": false,
+        "post_promotion_demand_drop_est_pct": 30,
+        "note": "현재 프로모션 종료(2026-03-31) 후 수요 약 30% 감소 예상. 차기 프로모션 미확정 / Demand expected to drop ~30% after current promotion ends (2026-03-31). No next promotion confirmed."
+      },
+      "citationTemplateKo": "프로모션 계획서 기준, 현재 SNS 프로모션 종료일 {{current_promotion_end_date}}, 종료 후 예상 수요 감소율 약 {{post_promotion_demand_drop_est_pct}}%. 차기 프로모션 계획 여부: {{next_promotion_planned}}.",
+      "citationTemplateEn": "Per the promotion plan, current SNS promotion end date: {{current_promotion_end_date}}. Estimated post-promotion demand drop: ~{{post_promotion_demand_drop_est_pct}}%. Next promotion confirmed: {{next_promotion_planned}}."
+    }
+  ]
+}

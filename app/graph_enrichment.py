@@ -15,20 +15,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-_COMPLIANCE_GOAL_KEYWORDS = {
-    "규제", "준수", "HIPAA", "GDPR", "데이터", "프라이버시", "개인정보",
-    "compliance", "regulatory", "privacy", "PHI", "PII"
-}
-
-
-def _is_compliance_related_goal(goal: dict) -> bool:
-    """Return True if a strategic goal is about regulatory/data compliance."""
-    text = (
-        goal.get("name", "") + " " +
-        goal.get("description", "") + " " +
-        " ".join(k.get("name", "") if isinstance(k, dict) else str(k) for k in goal.get("kpis", []))
-    ).upper()
-    return any(kw.upper() in text for kw in _COMPLIANCE_GOAL_KEYWORDS)
+# Goal categories that encode the ontological type of a strategic goal.
+# These are structural config values set in company JSON — NOT semantic keyword classifiers.
+_COMPLIANCE_GOAL_CATEGORIES = {"regulatory_compliance", "data_privacy", "compliance"}
+_COST_STABILITY_CATEGORIES = {"cost_stability", "cost_efficiency", "cost_reduction"}
+_REVENUE_GROWTH_CATEGORIES = {"revenue_growth", "revenue", "growth"}
 
 
 async def add_strategic_goals(
@@ -56,15 +47,18 @@ async def add_strategic_goals(
     if not strategic_goals:
         return nodes, edges
 
-    # Detect compliance violation: decision is trying to bypass data/privacy controls
-    # LLM sets involves_compliance_risk=True when the decision text contains signals like
-    # "unauthorized", "no anonymization", "HIPAA violation", "미인가", "비식별화 미확인"
+    # LLM-extracted boolean signals — NOT keyword tables.
+    # These are structured outputs from the extractor, used here as classifiers.
     decision_violates_compliance = (
         decision.get("involves_compliance_risk") is True and
         decision.get("uses_pii") is True
     )
+    involves_hiring = decision.get("involves_hiring") is True
+    # Revenue-growth support signal: hiring is explicitly justified by strategic growth
+    # when strategic_impact is medium or higher (not null/low).
+    has_strategic_rationale = decision.get("strategic_impact") not in (None, "low", "none")
 
-    # Extract decision KPI keywords for SUPPORTS matching
+    # Extract decision KPI keywords for SUPPORTS matching (fallback for uncategorised goals)
     decision_kpi_keywords = set()
     for kpi in decision.get("kpis", []):
         kpi_name = kpi.get("name", "") if isinstance(kpi, dict) else str(kpi)
@@ -78,60 +72,50 @@ async def add_strategic_goals(
             continue
 
         goal_name = goal.get("name", "")
+        goal_category = goal.get("category", "")
+        goal_node_id = f"goal_{goal_id}"
 
-        # --- CONFLICTS_WITH: compliance violation vs. compliance/regulatory goal ---
-        # Checked before KPI overlap so a violation is not silently turned into SUPPORTS
-        if decision_violates_compliance and _is_compliance_related_goal(goal):
-            goal_node = create_strategic_goal_node(
-                goal_id=f"goal_{goal_id}",
-                name=goal_name,
-                priority=goal.get("priority"),
-                owner_id=goal.get("owner_id")
-            )
-            try:
-                await add_node_fn(goal_node)
-                nodes.append(goal_node)
-            except ValueError:
-                nodes.append(goal_node)
+        edge_predicate = None
+        reasoning = None
 
-            edge = create_edge(
-                decision_id,
-                f"goal_{goal_id}",
-                EdgePredicate.CONFLICTS_WITH,
-                reasoning="컴플라이언스 위반: 미인가 PII 접근이 규제 준수 목표와 충돌"
-            )
-            await add_edge_fn(edge)
-            edges.append(edge)
-            continue  # Don't also create a SUPPORTS edge for the same goal
+        # ── Priority 1: compliance violation → CONFLICTS_WITH compliance goal ──
+        if decision_violates_compliance and goal_category in _COMPLIANCE_GOAL_CATEGORIES:
+            edge_predicate = EdgePredicate.CONFLICTS_WITH
+            reasoning = "컴플라이언스 위반: 미인가 PII 접근이 규제 준수 목표와 충돌"
 
-        # --- SUPPORTS: decision KPIs align with goal KPIs ---
-        sg_kpi_keywords = set()
-        name_keywords = [w for w in goal_name.replace("-", " ").replace("%", " ").split()
-                        if len(w) >= 2 and not w.isdigit()]
-        sg_kpi_keywords.update(name_keywords)
+        # ── Priority 2: hiring → CONFLICTS_WITH cost_stability goal ──────────
+        # Hiring increases fixed operating costs (salary, benefits) regardless of
+        # whether an explicit cost value was extracted. Category-based, not keyword.
+        elif involves_hiring and goal_category in _COST_STABILITY_CATEGORIES:
+            edge_predicate = EdgePredicate.CONFLICTS_WITH
+            reasoning = "인력 충원은 고정 운영 비용을 증가시켜 비용 안정화 목표와 충돌"
 
-        for kpi in goal.get("kpis", []):
-            kpi_name = kpi.get("name", "") if isinstance(kpi, dict) else str(kpi)
-            keywords = [w for w in kpi_name.replace("-", " ").replace("%", " ").split()
-                       if len(w) >= 2 and not w.isdigit()]
-            sg_kpi_keywords.update(keywords)
+        # ── Priority 3: hiring with strategic rationale → SUPPORTS growth goal ─
+        elif involves_hiring and has_strategic_rationale and goal_category in _REVENUE_GROWTH_CATEGORIES:
+            edge_predicate = EdgePredicate.SUPPORTS
+            reasoning = "매출 성장 근거로 인력 채용 — 매출 성장 목표와 전략적으로 정렬"
 
-        kpi_overlap = bool(decision_kpi_keywords & sg_kpi_keywords)
+        # ── Fallback: KPI keyword overlap → SUPPORTS ─────────────────────────
+        # Used for goals without a category or when none of the above signals fire.
+        else:
+            sg_kpi_keywords = set()
+            for w in goal_name.replace("-", " ").replace("%", " ").split():
+                if len(w) >= 2 and not w.isdigit():
+                    sg_kpi_keywords.add(w)
+            for kpi in goal.get("kpis", []):
+                kpi_name = kpi.get("name", "") if isinstance(kpi, dict) else str(kpi)
+                for w in kpi_name.replace("-", " ").replace("%", " ").split():
+                    if len(w) >= 2 and not w.isdigit():
+                        sg_kpi_keywords.add(w)
+            if decision_kpi_keywords & sg_kpi_keywords:
+                edge_predicate = EdgePredicate.SUPPORTS
+                reasoning = "KPI 정렬: 의사결정 KPI가 전략 목표 KPI와 일치"
 
-        # Check for cost conflict: cost-incurring decision vs. cost-reduction goal.
-        # CONFLICTS_WITH for cost goes through the Cost node (add_cost_goal_edges),
-        # not directly from Decision → Goal here. This keeps the graph structure:
-        #   Decision → HAS_COST → Cost → CONFLICTS_WITH → Goal → GENERATES_RISK → Risk
-        decision_has_cost = decision.get("cost") and isinstance(decision.get("cost"), (int, float)) and decision.get("cost") > 0
-        goal_is_cost_reduction = any(keyword in goal_name for keyword in ["비용", "효율화", "절감", "cost", "efficiency"])
-        has_cost_conflict = decision_has_cost and goal_is_cost_reduction
-
-        # Skip: no KPI overlap, and cost conflicts are routed through add_cost_goal_edges
-        if not kpi_overlap:
+        if edge_predicate is None:
             continue
 
         goal_node = create_strategic_goal_node(
-            goal_id=f"goal_{goal_id}",
+            goal_id=goal_node_id,
             name=goal_name,
             priority=goal.get("priority"),
             owner_id=goal.get("owner_id")
@@ -142,14 +126,38 @@ async def add_strategic_goals(
         except ValueError:
             nodes.append(goal_node)
 
-        edge = create_edge(
-            decision_id,
-            f"goal_{goal_id}",
-            EdgePredicate.SUPPORTS,
-            reasoning="KPI 정렬: 의사결정 KPI가 전략 목표 KPI와 일치"
-        )
+        edge = create_edge(decision_id, goal_node_id, edge_predicate, reasoning=reasoning)
         await add_edge_fn(edge)
         edges.append(edge)
+
+        # For CONFLICTS_WITH, add a Risk node so the graph shows the downstream consequence
+        if edge_predicate == EdgePredicate.CONFLICTS_WITH:
+            risk_id = f"{decision_id}_goal_conflict_risk_{goal_id}"
+            from app.graph_ontology import Node, NodeType
+            risk_node = Node(
+                id=risk_id,
+                type=NodeType.RISK,
+                label=f"전략 충돌: {goal_name}",
+                properties={
+                    "description": reasoning,
+                    "description_en": f"Strategic conflict: decision undermines '{goal_name}' goal",
+                    "severity": "medium",
+                    "source": "strategic_conflict",
+                    "goal_id": goal_id,
+                }
+            )
+            try:
+                await add_node_fn(risk_node)
+                nodes.append(risk_node)
+            except ValueError:
+                pass
+            risk_edge = create_edge(
+                goal_node_id, risk_id,
+                EdgePredicate.GENERATES_RISK,
+                reason="Strategic conflict generates downstream risk"
+            )
+            await add_edge_fn(risk_edge)
+            edges.append(risk_edge)
 
     logger.info(f"Added {len(nodes)} strategic goal nodes, {len(edges)} alignment edges")
     return nodes, edges
@@ -440,9 +448,9 @@ async def add_cost_goal_edges(
                        if len(w) >= 2 and not w.isdigit()]
             sg_kpi_keywords.update(keywords)
 
-        # Check for conflicts: cost-incurring vs. cost-reduction goal
-        goal_is_cost_reduction = any(keyword in goal_name for keyword in ["비용", "효율화", "절감", "cost", "efficiency"])
-        has_conflict = goal_is_cost_reduction and cost > 0
+        # Check for conflicts: cost-incurring decision vs. cost-stability goal.
+        # Uses goal category (structural config) — not keyword matching.
+        has_conflict = goal.get("category") in _COST_STABILITY_CATEGORIES and cost > 0
 
         # Cost only creates CONFLICTS_WITH edges (not SUPPORTS)
         # SUPPORTS edges come from Decision node
@@ -520,7 +528,8 @@ async def add_rule_risk_edges(
     decision: dict,
     governance: dict,
     add_node_fn,
-    add_edge_fn
+    add_edge_fn,
+    has_structural_conflicts: bool = False,
 ) -> tuple[list[Node], list[Edge]]:
     """
     Add Rule → GENERATES_RISK → Risk edges for LLM-extracted risks.
@@ -572,8 +581,9 @@ async def add_rule_risk_edges(
                     matched_rule_id = r.get("rule_id")
                     break
 
-        # Default: use first visible rule
-        if not matched_rule_id and visible_rules:
+        # Default: use first visible rule — but skip when structural conflict risks
+        # already exist (those default-fallback connections duplicate goal conflicts)
+        if not matched_rule_id and visible_rules and not has_structural_conflicts:
             matched_rule_id = visible_rules[0].get("rule_id")
 
         # Create Rule → GENERATES_RISK → Risk edge

@@ -1,29 +1,30 @@
 """
-LLM Client - OpenAI integration for structured decision extraction.
+LLM Client - Amazon Nova (Bedrock) integration for structured decision extraction.
 """
 
-import json
 import logging
 from typing import Optional
-from openai import OpenAI
+
+from app.bedrock_client import BedrockClient
 
 logger = logging.getLogger(__name__)
 
 
 class LLMClient:
-    """OpenAI client for structured decision extraction."""
+    """Bedrock Nova client for structured decision extraction."""
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "us.amazon.nova-2-lite-v1:0"):
         """
-        Initialize OpenAI client.
+        Initialize Bedrock client.
 
         Args:
-            api_key: OpenAI API key (if None, will use OPENAI_API_KEY env var)
-            model: Model to use for extraction (default: gpt-4o)
+            api_key: Unused — kept for call-site compatibility.
+                     Authentication uses BEDROCK_API_KEY env var via BedrockClient.
+            model: Nova model ID (default: us.amazon.nova-2-lite-v1:0)
         """
-        self.client = OpenAI(api_key=api_key)
         self.model = model
-        logger.info(f"Initialized OpenAI client with model: {model}")
+        self.client = BedrockClient(model_id=model)
+        logger.info(f"Initialized BedrockClient (Nova) with model: {model}")
 
     def extract_decision_json(self, decision_text: str) -> str:
         """
@@ -36,7 +37,7 @@ class LLMClient:
             Raw JSON string containing structured decision
 
         Raises:
-            Exception: If OpenAI API call fails
+            Exception: If Bedrock API call fails
         """
         schema_description = """
 {{
@@ -65,7 +66,9 @@ class LLMClient:
     {{
       "name": "string (2-200 chars)",
       "role": "string or null",
-      "responsibility": "string or null"
+      "responsibility": "string or null",
+      "name_en": "string or null (English transliteration/translation of name if the input is non-English; null if name is already English)",
+      "role_en": "string or null (English translation of role title if the input is non-English, e.g. '인사팀장' → 'HR Team Lead'; null if role is already English)"
     }}
   ],
   "required_approvals": ["string"],
@@ -86,6 +89,8 @@ class LLMClient:
   "involves_hiring": "boolean or null (true if the decision involves hiring new employees, expanding headcount, onboarding, or significant workforce change; null otherwise)",
   "headcount_change": "integer or null (net number of people being added as positive integer, e.g. '20명 채용' → 20; reductions as negative, e.g. '10명 감축' → -10; null if not stated)",
   "involves_compliance_risk": "boolean or null (true if the decision explicitly mentions anti-bribery risk, ethics code violation, entertainment/gift policy limit breach, conflict of interest, or similar compliance/integrity concerns; null otherwise)",
+  "remaining_budget": "number or null (available/remaining departmental budget if explicitly stated in the text → convert like cost: '5,000만 원' → 50000000, '$100K' → 100000; null if not stated)",
+  "department": "string or null (the organizational department or business unit making this request, e.g. '마케팅팀', 'Marketing', 'R&D Department'; null if not stated)",
   "confidence": 0.0 to 1.0
 }}
 """
@@ -159,41 +164,6 @@ from the principle when you encounter a pattern not described below.
    If no owner is mentioned, use empty array [].
    Graph reasoning will infer appropriate owner from company personnel later.
 
-── CRITICAL: BUDGET CONSTRAINT DETECTION ───────────────────────────────
-
-When the text mentions BOTH a requested/required amount AND an available/
-remaining budget, you MUST compare them and extract a risk if they conflict:
-
-Examples that MUST generate risks:
-- "광고비 2.5억 원 요청. 잔여 예산 5,000만 원"
-  → Requested: 250M, Available: 50M → 5x overrun
-  → risks: [{{
-      "description": "예산 초과 위험: 요청 금액(2.5억 원)이 잔여 예산(5,000만 원)을 5배 초과",
-      "severity": "High",
-      "mitigation": "추가 예산 승인 필요 또는 요청 금액 조정"
-    }}]
-
-- "Project needs $500K. Department budget has $100K remaining."
-  → risks: [{{
-      "description": "Budget overrun risk: Requested amount ($500K) exceeds remaining budget ($100K) by 5x",
-      "severity": "High",
-      "mitigation": "Secure additional budget approval or reduce scope"
-    }}]
-
-- "10명 채용 필요. 승인된 인원은 3명"
-  → risks: [{{
-      "description": "인력 예산 초과: 요청 인원(10명)이 승인 인원(3명)을 초과",
-      "severity": "High",
-      "mitigation": "추가 인력 승인 필요"
-    }}]
-
-Severity guidelines for budget overruns:
-- 3x+ overrun → High severity
-- 2x-3x overrun → Medium severity
-- <2x overrun → Medium severity
-
-This is MANDATORY - do not skip risk extraction when budget constraints are violated.
-
 ── FIELD NOTES ─────────────────────────────────────────────────────────────
 
 decision_statement  One clear, executable sentence describing the action.
@@ -252,6 +222,11 @@ involves_compliance_risk  True when the decision explicitly raises anti-bribery,
 involves_hiring     True only when someone is being added to the payroll or
                     employment headcount changes as a direct result.
 
+risks.description_en  ALWAYS in English, regardless of input language. Translate
+                    or paraphrase the risk description concisely in English
+                    (max 80 chars). Example: "Budget overrun: 3× over remaining
+                    budget" or "HIPAA violation: patient PII used without consent".
+
 risks.severity      Assess actual impact if risk materializes:
                     Critical = life-threatening, irreversible harm, or existential
                              threat (patient death/injury, clinical protocol violations,
@@ -265,13 +240,6 @@ risks.severity      Assess actual impact if risk materializes:
                     Patient Safety Protocol) = CRITICAL severity. Quality standard
                     violations = HIGH severity.
 
-                    BUDGET CONSTRAINTS: When the text mentions both a requested amount
-                    AND available/remaining budget, compare them:
-                    - Requested > Available → Extract as HIGH severity risk
-                    - Example: "2.5억 원 요청, 잔여 예산 5,000만 원" → requested 250M,
-                      available 50M → 5x overrun → HIGH severity risk
-                    - Description: "예산 초과 위험: 요청 금액(X)이 잔여 예산(Y)을 Z배 초과"
-                    - Mitigation: "추가 예산 승인 필요" or "요청 금액 조정"
 
 ── OUTPUT RULES ────────────────────────────────────────────────────────────
 
@@ -286,23 +254,16 @@ risks.severity      Assess actual impact if risk materializes:
 Output valid JSON only."""
 
         try:
-            logger.info(f"Calling OpenAI API with model: {self.model}")
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                temperature=0.0,  # Deterministic extraction
-                response_format={"type": "json_object"}  # Force JSON output
+            logger.info(f"Calling Bedrock Nova with model: {self.model}")
+            raw_response = self.client.invoke(
+                user_message,
+                system_prompt=system_prompt,
+                max_tokens=4096,
             )
-
-            raw_response = response.choices[0].message.content
-            logger.info(f"Received response from OpenAI ({len(raw_response)} chars)")
+            logger.info(f"Received response from Nova ({len(raw_response)} chars)")
             logger.debug(f"Raw response: {raw_response[:200]}...")
-
             return raw_response
 
         except Exception as e:
-            logger.error(f"OpenAI API error: {e}")
+            logger.error(f"Bedrock Nova API error: {e}")
             raise

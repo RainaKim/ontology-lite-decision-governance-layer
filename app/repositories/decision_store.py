@@ -34,6 +34,9 @@ class DecisionRecord:
     # Request flags (captured at submission, control pipeline behavior)
     use_o1_governance: bool = False
     use_o1_graph: bool = False
+    lang: str = "ko"  # "ko" | "en"
+    agent_name: str = "AI Agent"
+    agent_name_en: str = "AI Agent"
     # Pipeline outputs — all optional until pipeline completes
     decision: Optional[dict] = None
     governance: Optional[dict] = None
@@ -42,7 +45,13 @@ class DecisionRecord:
     decision_pack: Optional[dict] = None
     derived_attributes: Optional[dict] = None
     extraction_metadata: Optional[dict] = None
+    risk_scoring: Optional[dict] = None
+    risk_semantics: Optional[dict] = None
+    simulation: Optional[dict] = None
+    decision_context: Optional[dict] = None
+    external_signals: Optional[dict] = None
     error: Optional[str] = None
+    workspace_decision_id: Optional[str] = None  # DB decision ID to update after analysis
 
 
 # ── In-memory store ──────────────────────────────────────────────────────────
@@ -59,6 +68,10 @@ def create(
     input_text: str,
     use_o1_governance: bool = False,
     use_o1_graph: bool = False,
+    lang: str = "ko",
+    agent_name: str = "AI Agent",
+    agent_name_en: str = "AI Agent",
+    workspace_decision_id: Optional[str] = None,
 ) -> DecisionRecord:
     """Create a new pending DecisionRecord and return it."""
     decision_id = str(uuid.uuid4())
@@ -72,6 +85,10 @@ def create(
         updated_at=now,
         use_o1_governance=use_o1_governance,
         use_o1_graph=use_o1_graph,
+        lang=lang,
+        agent_name=agent_name,
+        agent_name_en=agent_name_en,
+        workspace_decision_id=workspace_decision_id,
     )
     _store[decision_id] = record
     return record
@@ -103,6 +120,11 @@ def store_results(
     decision_pack: dict = None,
     derived_attributes: dict = None,
     extraction_metadata: dict = None,
+    risk_scoring: dict = None,
+    risk_semantics: dict = None,
+    simulation: dict = None,
+    decision_context: dict = None,
+    external_signals: dict = None,
 ) -> None:
     """Persist pipeline outputs onto the record."""
     record = _store.get(decision_id)
@@ -122,6 +144,16 @@ def store_results(
         record.derived_attributes = derived_attributes
     if extraction_metadata is not None:
         record.extraction_metadata = extraction_metadata
+    if risk_scoring is not None:
+        record.risk_scoring = risk_scoring
+    if risk_semantics is not None:
+        record.risk_semantics = risk_semantics
+    if simulation is not None:
+        record.simulation = simulation
+    if decision_context is not None:
+        record.decision_context = decision_context
+    if external_signals is not None:
+        record.external_signals = external_signals
     record.updated_at = _now()
 
 

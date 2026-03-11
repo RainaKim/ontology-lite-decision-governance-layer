@@ -109,6 +109,7 @@
     {
       "goal_id": "G1",
       "name": "환자 안전 우수성",
+      "category": "patient_safety",
       "description": "환자 안전 사고 제로 달성 및 최고 수준의 안전 등급 유지",
       "owner_id": "medical_dir_001",
       "kpis": [
@@ -120,6 +121,7 @@
     {
       "goal_id": "G2",
       "name": "규제 및 데이터 준수",
+      "category": "regulatory_compliance",
       "description": "HIPAA, GDPR 및 임상 거버넌스 프레임워크 완전 준수",
       "owner_id": "cco_001",
       "kpis": [
@@ -131,6 +133,7 @@
     {
       "goal_id": "G3",
       "name": "운영 및 재무 효율화",
+      "category": "cost_efficiency",
       "description": "자원 공유 및 프로세스 개선을 통한 환자당 비용 12% 절감",
       "owner_id": "cfo_001",
       "kpis": [

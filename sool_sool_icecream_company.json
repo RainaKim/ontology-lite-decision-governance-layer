@@ -1,0 +1,264 @@
+{
+    "company": {
+      "id": "sool_sool_icecream",
+      "name": "Sool Sool Ice Cream",
+      "industry": "식음료",
+      "governance_framework": "소규모 식품 운영 거버넌스",
+      "size": "25명",
+      "regions": ["뉴욕", "온라인 판매"]
+    },
+  
+    "approval_hierarchy": {
+      "levels": [
+        {
+          "level": 1,
+          "title": "팀 리드",
+          "authority": "team_level",
+          "max_budget_authority": 2000000
+        },
+        {
+          "level": 2,
+          "title": "운영 매니저",
+          "authority": "operations_manager",
+          "max_budget_authority": 10000000
+        },
+        {
+          "level": 3,
+          "title": "CEO",
+          "authority": "executive",
+          "max_budget_authority": null
+        }
+      ],
+  
+      "personnel": [
+        {
+          "id": "ceo_001",
+          "name": "김수민",
+          "role": "CEO",
+          "level": 3,
+          "department": "경영",
+          "reports_to": null
+        },
+        {
+          "id": "ops_mgr_001",
+          "name": "이현우",
+          "role": "운영 매니저",
+          "level": 2,
+          "department": "Operations",
+          "reports_to": "ceo_001"
+        },
+        {
+          "id": "finance_mgr_001",
+          "name": "박지훈",
+          "role": "재무 담당",
+          "level": 2,
+          "department": "Finance",
+          "reports_to": "ceo_001"
+        },
+        {
+          "id": "marketing_lead_001",
+          "name": "최유리",
+          "role": "마케팅 리드",
+          "level": 1,
+          "department": "Marketing",
+          "reports_to": "ops_mgr_001"
+        },
+        {
+          "id": "rnd_lead_001",
+          "name": "정다은",
+          "role": "R&D 리드",
+          "level": 1,
+          "department": "R&D",
+          "reports_to": "ops_mgr_001"
+        },
+        {
+          "id": "procurement_lead_001",
+          "name": "김태성",
+          "role": "구매 리드",
+          "level": 1,
+          "department": "Procurement",
+          "reports_to": "ops_mgr_001"
+        },
+        {
+          "id": "hr_lead_001",
+          "name": "오세진",
+          "role": "HR 리드",
+          "level": 1,
+          "department": "HR",
+          "reports_to": "ceo_001"
+        }
+      ]
+    },
+  
+    "strategic_goals": [
+      {
+        "goal_id": "G1",
+        "name": "매출 성장",
+        "category": "revenue_growth",
+        "description": "SNS 기반 브랜드 마케팅과 신제품 출시를 통해 연 매출 30% 성장",
+        "owner_id": "ceo_001",
+        "kpis": [
+          {
+            "kpi_id": "K1",
+            "name": "월 매출",
+            "target": "월 매출 20% 증가"
+          },
+          {
+            "kpi_id": "K2",
+            "name": "신규 고객 비율",
+            "target": "신규 고객 30% 확보"
+          }
+        ],
+        "priority": "high"
+      },
+  
+      {
+        "goal_id": "G2",
+        "name": "제품 혁신",
+        "category": "product_innovation",
+        "description": "분기마다 새로운 아이스크림 맛 출시",
+        "owner_id": "rnd_lead_001",
+        "kpis": [
+          {
+            "kpi_id": "K3",
+            "name": "신제품 출시",
+            "target": "분기당 최소 1개"
+          }
+        ],
+        "priority": "high"
+      },
+  
+      {
+        "goal_id": "G3",
+        "name": "운영 비용 안정화",
+        "category": "cost_stability",
+        "description": "재고 관리와 공급망 최적화를 통해 운영비 안정 유지",
+        "owner_id": "finance_mgr_001",
+        "kpis": [
+          {
+            "kpi_id": "K4",
+            "name": "재고 회전율",
+            "target": "월 2회 이상"
+          }
+        ],
+        "priority": "medium"
+      }
+    ],
+  
+    "risk_tolerance": {
+      "financial": {
+        "unbudgeted_spend_threshold": 1500,
+        "high_cost_threshold": 5000,
+        "critical_cost_threshold": 10000
+      },
+  
+      "operations": {
+        "inventory_shortage_risk": "high",
+        "production_capacity_limit": true
+      }
+    },
+  
+    "governance_rules": [
+      {
+        "rule_id": "R1",
+        "name": "대규모 구매 승인",
+        "type": "financial",
+        "description": "$1500 이상의 구매 결정은 운영 매니저 승인 필요",
+        "condition": {
+          "field": "cost",
+          "operator": ">",
+          "value": 1500
+        },
+        "consequence": {
+          "action": "require_approval",
+          "approver_role": "운영 매니저",
+          "approver_id": "ops_mgr_001",
+          "severity": "high"
+        },
+        "active": true
+      },
+  
+      {
+        "rule_id": "R2",
+        "name": "재고 중복 주문 방지",
+        "type": "procurement",
+        "description": "이미 배송 중인 물량이 있을 경우 추가 주문 검토 필요",
+        "condition": {
+          "field": "existing_order_in_transit",
+          "operator": "==",
+          "value": true
+        },
+        "consequence": {
+          "action": "require_review",
+          "approver_role": "구매 리드",
+          "approver_id": "procurement_lead_001",
+          "severity": "medium"
+        },
+        "active": true
+      },
+  
+      {
+        "rule_id": "R3",
+        "name": "생산 용량 검증",
+        "type": "operations",
+        "description": "생산 capacity 초과 가능성이 있는 의사결정은 운영 매니저 검토 필요",
+        "condition": {
+          "field": "production_capacity_exceeded",
+          "operator": "==",
+          "value": true
+        },
+        "consequence": {
+          "action": "require_review",
+          "approver_role": "운영 매니저",
+          "approver_id": "ops_mgr_001",
+          "severity": "high"
+        },
+        "active": true
+      },
+  
+      {
+        "rule_id": "R4",
+        "name": "신제품 개발 검토",
+        "type": "strategic",
+        "description": "신제품 개발은 R&D 리드 승인 필요",
+        "condition": {
+          "field": "new_product_development",
+          "operator": "==",
+          "value": true
+        },
+        "consequence": {
+          "action": "require_review",
+          "approver_role": "R&D 리드",
+          "approver_id": "rnd_lead_001",
+          "severity": "medium"
+        },
+        "active": true
+      },
+  
+      {
+        "rule_id": "R5",
+        "name": "채용 승인 규정",
+        "type": "hr",
+        "description": "신규 채용은 재무 상태와 생산 capacity 검토 필요. 재무 담당이 예산 여력을 먼저 검토하고, 이후 CEO가 최종 승인.",
+        "condition": {
+          "field": "involves_hiring",
+          "operator": "==",
+          "value": true
+        },
+        "consequence": {
+          "action": "require_review",
+          "approver_roles": ["재무 담당", "CEO"],
+          "approver_ids": ["finance_mgr_001", "ceo_001"],
+          "requires_sequential": true,
+          "severity": "high",
+          "message": "재무 담당이 현금흐름 계획 및 연간 재무 전망을 확인한 후 CEO 승인 진행"
+        },
+        "active": true
+      }
+    ],
+  
+    "metadata": {
+      "version": "1.0.0",
+      "purpose": "Sool Sool Ice Cream governance demo"
+    }
+  }
