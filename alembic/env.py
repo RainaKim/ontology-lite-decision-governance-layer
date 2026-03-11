@@ -23,6 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # autogenerate can detect their tables.
 from app.db.base import Base  # noqa: E402
 import app.models.user  # noqa: E402, F401 — registers User with Base.metadata
+import app.models.company  # noqa: E402, F401 — registers Company with Base.metadata
+import app.models.decision  # noqa: E402, F401 — registers Decision with Base.metadata
 
 config = context.config
 
