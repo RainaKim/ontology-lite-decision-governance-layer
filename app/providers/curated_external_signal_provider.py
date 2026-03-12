@@ -42,31 +42,12 @@ _CATEGORY_BUCKET = {
     "operational_signal": "operational",
 }
 
-# Decision type → ordered list of preferred source IDs per company
-_DECISION_TYPE_PRIORITY: dict[str, dict[str, list[str]]] = {
-    "sool_sool_icecream": {
-        "procurement":   ["SOOL_EXT_001", "SOOL_EXT_002", "SOOL_EXT_004"],
-        "hiring":        ["SOOL_EXT_005", "SOOL_EXT_002"],
-        "new_product":   ["SOOL_EXT_003", "SOOL_EXT_001"],
-        "privacy":       ["SOOL_EXT_005"],
-        "general":       ["SOOL_EXT_001", "SOOL_EXT_002"],
-    },
-    "mayo_central": {
-        "privacy":       ["MAYO_EXT_001", "MAYO_EXT_002", "MAYO_EXT_005"],
-        "procurement":   ["MAYO_EXT_003", "MAYO_EXT_004"],
-        "hiring":        ["MAYO_EXT_001", "MAYO_EXT_003"],
-        "strategic":     ["MAYO_EXT_004", "MAYO_EXT_003"],
-        "general":       ["MAYO_EXT_001", "MAYO_EXT_004"],
-    },
-    "nexus_dynamics": {
-        "financial_procurement": ["NEXUS_EXT_001", "NEXUS_EXT_004"],
-        "privacy":               ["NEXUS_EXT_002", "NEXUS_EXT_003"],
-        "strategic":             ["NEXUS_EXT_004", "NEXUS_EXT_005"],
-        "regulatory_compliance": ["NEXUS_EXT_003", "NEXUS_EXT_005"],
-        "hiring":                ["NEXUS_EXT_001"],
-        "general":               ["NEXUS_EXT_001", "NEXUS_EXT_004"],
-    },
-}
+def _load_priorities(company_id: str) -> dict[str, list[str]]:
+    path = Path(__file__).parent.parent / "demo_fixtures" / "external_sources" / f"{company_id}_priorities.json"
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return {}
 
 
 def get_fallback_signals(
@@ -152,7 +133,7 @@ def _select_sources(
     all_sources: list[dict],
 ) -> list[dict]:
     """Return up to 3 sources ordered by decision-type priority."""
-    company_priorities = _DECISION_TYPE_PRIORITY.get(company_id, {})
+    company_priorities = _load_priorities(company_id)
     priority_ids = company_priorities.get(decision_type) or company_priorities.get("general", [])
 
     src_map = {s.get("sourceId", ""): s for s in all_sources}

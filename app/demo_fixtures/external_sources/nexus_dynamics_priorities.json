@@ -1,0 +1,8 @@
+{
+    "financial_procurement": ["NEXUS_EXT_001", "NEXUS_EXT_004"],
+    "privacy":               ["NEXUS_EXT_002", "NEXUS_EXT_003"],
+    "strategic":             ["NEXUS_EXT_004", "NEXUS_EXT_005"],
+    "regulatory_compliance": ["NEXUS_EXT_003", "NEXUS_EXT_005"],
+    "hiring":                ["NEXUS_EXT_001"],
+    "general":               ["NEXUS_EXT_001", "NEXUS_EXT_004"]
+}
