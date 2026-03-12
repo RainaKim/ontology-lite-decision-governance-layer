@@ -60,12 +60,12 @@ _FLAG_CATEGORY_PATTERNS = [
     (["APPROVAL_REQUIRED", "COMPLIANCE"], FlagCategory.governance),
 ]
 
-# Severity mapping: flag pattern → severity
-_FLAG_SEVERITY_PATTERNS = [
-    ("CRITICAL", FlagSeverity.critical),
-    ("HIGH", FlagSeverity.high),
-    ("MEDIUM", FlagSeverity.medium),
-]
+# Severity mapping: flag pattern → severity (insertion order = priority)
+_FLAG_SEVERITY_MAP: dict[str, FlagSeverity] = {
+    "CRITICAL": FlagSeverity.critical,
+    "HIGH":     FlagSeverity.high,
+    "MEDIUM":   FlagSeverity.medium,
+}
 
 # Human-readable messages for common flags
 _FLAG_MESSAGES = {
@@ -213,8 +213,8 @@ def _normalize_flags(
 
         # Determine severity
         severity = FlagSeverity.low  # default
-        for pattern, sev in _FLAG_SEVERITY_PATTERNS:
-            if pattern in flag_upper:
+        for key, sev in _FLAG_SEVERITY_MAP.items():
+            if key in flag_upper:
                 severity = sev
                 break
 
