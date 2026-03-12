@@ -33,6 +33,8 @@ from app.schemas.responses import (
 from app.services import company_service
 from app.repositories import decision_store
 from app.routers.normalizers import build_console_payload
+from app.dependencies.company_deps import validate_company_exists
+from app.dependencies.auth_deps import require_tenant_isolation
 
 logger = logging.getLogger(__name__)
 
@@ -56,21 +58,10 @@ async def submit_decision(
     Fetch /v1/decisions/{id} after stream completes for full payload.
     """
     # Validate company exists (using contract-compliant IDs)
-    if not company_service.get_company_v1(request.company_id, lang=request.lang):
-        valid_ids = sorted(company_service.list_companies_v1(lang="en"), key=lambda c: c.id)
-        valid_str = ", ".join(c.id for c in valid_ids)
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown company_id '{request.company_id}'. Valid: {valid_str}",
-        )
+    validate_company_exists(request.company_id, lang=request.lang)
 
     # Enforce tenant isolation: non-admins may only submit under their own company.
-    from app.services.rbac_service import UserRole
-    if current_user.role != UserRole.ADMIN and current_user.company_id != request.company_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Cannot submit decisions for a different company.",
-        )
+    require_tenant_isolation(current_user, request.company_id)
 
     # Create record (persist flags so pipeline can read them)
     record = decision_store.create(
