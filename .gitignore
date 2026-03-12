@@ -31,3 +31,5 @@ Thumbs.db
 # Internal reference docs (for Claude Code only)
 docs/BUILD_PLAN.md
 docs/README_VISION.md
+
+.claude

@@ -5,6 +5,11 @@ Hybrid governance evaluation:
 - Rule matching (deterministic Python)
 - Conflict resolution (o1 reasoning)
 - Approval optimization (o1 reasoning)
+
+Extension pattern — pure function extraction:
+  When adding a new transformation, write it as a pure function (no I/O, no os.environ),
+  then call it from the I/O outer function. Keep it module-private (_name) unless there
+  is more than one caller. Test the pure function directly with in-memory data.
 """
 
 import json
@@ -71,23 +76,47 @@ class GovernanceResult:
         }
 
 
-_COMPANY_RULES_FILES: dict[str, dict[str, str]] = {
-    "nexus_dynamics":     {"ko": "mock_company.json",              "en": "mock_company_en.json"},
-    "mayo_central":       {"ko": "mock_company_healthcare.json",   "en": "mock_company_healthcare_en.json"},
-    "sool_sool_icecream": {"ko": "sool_sool_icecream_company.json","en": "sool_sool_icecream_company_en.json"},
-}
+from app.config.company_registry import COMPANY_RULES_FILES as _COMPANY_RULES_FILES
+
 _DEFAULT_RULES_FILE = "mock_company.json"
+
+_SEVERITY_WEIGHTS: dict[str, float] = {
+    "critical": 8.0,
+    "high": 3.0,
+    "medium": 1.5,
+    "low": 0.5,
+}
+
+_STRATEGIC_IMPACT_BONUS: dict[str, float] = {
+    "critical": 3.5,
+    "high": 1.5,
+    "medium": 0.0,
+    "low": 0.0,
+}
+
+
+def _apply_translation(raw: dict, lang: str) -> dict:
+    """Apply language overlay from a rules dict's 'translations' section.
+    Pure function — no I/O. Returns a merged dict with the translated fields."""
+    lang_key = lang if lang in ("ko", "en") else "ko"
+    if "translations" not in raw:
+        return raw
+    translation = raw.get("translations", {}).get(lang_key, {})
+    data = {**raw, **translation}
+    if "rules" in translation:
+        data["governance_rules"] = translation["rules"]
+    return data
 
 
 def load_rules(rules_path: str = None, company_id: str = None, lang: str = "ko") -> dict:
     """Load governance rules from JSON file, selecting by company_id and lang."""
     if rules_path is None:
-        lang_key = lang if lang in ("ko", "en") else "ko"
         files = _COMPANY_RULES_FILES.get(company_id, {})
-        filename = files.get(lang_key) or _DEFAULT_RULES_FILE
+        filename = files.get("merged") or _DEFAULT_RULES_FILE
         rules_path = Path(__file__).parent.parent / filename
     with open(rules_path, 'r') as f:
-        return json.load(f)
+        raw = json.load(f)
+    return _apply_translation(raw, lang)
 
 
 def compute_risk_score(decision: Decision) -> float:
@@ -111,27 +140,14 @@ def compute_risk_score(decision: Decision) -> float:
         return decision.risk_score
 
     # --- Layer 1: individual risk items ---
-    severity_weights = {
-        "critical": 8.0,
-        "high": 3.0,
-        "medium": 1.5,
-        "low": 0.5,
-    }
-
     total_score = 0.0
     for risk in (decision.risks or []):
         severity = (risk.severity or "medium").lower()
-        total_score += severity_weights.get(severity, 1.0)
+        total_score += _SEVERITY_WEIGHTS.get(severity, 1.0)
 
     # --- Layer 2: structural signals ---
-    strategic_impact_bonus = {
-        "critical": 3.5,
-        "high": 1.5,
-        "medium": 0.0,
-        "low": 0.0,
-    }
     if decision.strategic_impact:
-        total_score += strategic_impact_bonus.get(decision.strategic_impact.value, 0.0)
+        total_score += _STRATEGIC_IMPACT_BONUS.get(decision.strategic_impact.value, 0.0)
 
     if getattr(decision, "involves_compliance_risk", False):
         total_score += 2.5

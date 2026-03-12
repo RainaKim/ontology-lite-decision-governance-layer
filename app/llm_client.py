@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 
 from app.bedrock_client import BedrockClient
+from app.config.bedrock_config import NOVA_MODEL_ID
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 class LLMClient:
     """Bedrock Nova client for structured decision extraction."""
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "us.amazon.nova-2-lite-v1:0"):
+    def __init__(self, api_key: Optional[str] = None, model: str = NOVA_MODEL_ID):
         """
         Initialize Bedrock client.
 
