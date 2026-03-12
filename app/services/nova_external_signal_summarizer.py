@@ -35,12 +35,13 @@ from app.schemas.external_signals import (
     ExternalSignalSource,
     ExternalSignalsPayload,
 )
+from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION
 
 logger = logging.getLogger(__name__)
 
-_MODEL_ID = "us.amazon.nova-2-lite-v1:0"
+_MODEL_ID = NOVA_MODEL_ID
 _MAX_TOKENS = 1400
-_REGION = "us-east-1"
+_REGION = BEDROCK_REGION
 _BEDROCK_ENDPOINT = (
     f"https://bedrock-runtime.{_REGION}.amazonaws.com"
     f"/model/{_MODEL_ID}/invoke"

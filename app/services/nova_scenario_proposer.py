@@ -26,13 +26,13 @@ from app.schemas.nova_scenarios import (
     NovaScenarioResponse,
 )
 from app.utils.formatters import format_krw
+from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION
 
 logger = logging.getLogger(__name__)
 
-# Bedrock model ID as specified
-_MODEL_ID = "us.amazon.nova-2-lite-v1:0"
+_MODEL_ID = NOVA_MODEL_ID
 _MAX_TOKENS = 1024
-_REGION = "us-east-1"
+_REGION = BEDROCK_REGION
 
 # Bedrock Runtime REST endpoint — API key passed as Bearer token
 _BEDROCK_ENDPOINT = (
