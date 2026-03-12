@@ -5,7 +5,7 @@ which share the same call-validate-return-None skeleton.
 
 Migration is blocked until test_decision_context_extraction.py and
 test_risk_semantics.py are updated — both directly import the old
-service modules as the unit-under-test. See AGENT_LOG.md for details.
+service modules as the unit-under-test. See AGENT_TASKS.md for details.
 """
 import logging
 from typing import Optional, Type, TypeVar
@@ -39,7 +39,7 @@ class BedrockStructuredExtractor:
             if data is None:
                 logger.warning("BedrockStructuredExtractor: no JSON in response")
                 return None
-            return output_model(**data)
+            return output_model.model_validate(data)
         except Exception as exc:
-            logger.warning("BedrockStructuredExtractor: %s", exc)
+            logger.warning("BedrockStructuredExtractor: %s", exc, exc_info=True)
             return None

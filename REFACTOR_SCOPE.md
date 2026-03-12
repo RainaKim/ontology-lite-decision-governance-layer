@@ -49,7 +49,7 @@ These files handle auth, migrations, or external integrations with high blast ra
 | `app/schemas/auth_responses.py` | Tied to auth contract |
 | `app/services/risk_scoring_service.py` | Core scoring engine with 26 tests; constant extraction (2.3) is LOW risk but should be done carefully as a separate PR |
 | `app/services/pipeline_service.py` | Async orchestrator; correct pattern; touching changes execution order |
-| `tests/` | All test files — tests are the safety net, not the subject of refactoring |
+| `tests/` | All test files — tests are the safety net, not the subject of refactoring; only change tests when required to keep them passing after in-scope refactors (e.g., LLM adapter/Bedrock migrations), not as standalone refactor targets |
 
 ---
 
