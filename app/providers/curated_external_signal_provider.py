@@ -31,11 +31,7 @@ logger = logging.getLogger(__name__)
 
 _SOURCES_DIR = Path(__file__).parent.parent / "demo_fixtures" / "external_sources"
 
-_PROFILE_ALIASES: dict[str, str] = {
-    "mayo_central": "mayo_central_hospital",
-    "nexus_dynamics": "nexus_dynamics",
-    "sool_sool_icecream": "sool_sool_icecream",
-}
+from app.config.company_registry import PROFILE_ALIASES as _PROFILE_ALIASES
 
 # Maps category → bucket for signal grouping
 _CATEGORY_BUCKET = {

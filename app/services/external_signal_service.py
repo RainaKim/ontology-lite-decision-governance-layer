@@ -35,11 +35,7 @@ _SOURCES_DIR = Path(__file__).parent.parent / "demo_fixtures" / "external_source
 _MAX_SOURCES = 4
 
 # Company ID → profile file name mapping (handles cases where file name differs from ID)
-_PROFILE_ALIASES: dict[str, str] = {
-    "mayo_central": "mayo_central_hospital",
-    "nexus_dynamics": "nexus_dynamics",
-    "sool_sool_icecream": "sool_sool_icecream",
-}
+from app.config.company_registry import PROFILE_ALIASES as _PROFILE_ALIASES
 
 
 # ── Live fetch provider interface ─────────────────────────────────────────────
