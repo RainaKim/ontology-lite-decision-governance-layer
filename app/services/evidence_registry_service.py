@@ -12,6 +12,9 @@ Design principles:
 - Registry-driven: all evidence traces to a named internal document + section
 - Role resolution is data-driven: alias table built from each company's approval_sources.json
 - Safe: missing entries return None or empty list, never raise in assembly methods
+
+Extension: config tables (e.g. _TRIGGER_OPS) use structural dispatch only — see
+external_signal_service.py config table rules before adding new dispatch entries.
 - Cached: each company registry is loaded from disk once per process lifetime
 """
 

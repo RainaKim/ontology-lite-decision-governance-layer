@@ -27,8 +27,6 @@ logger = logging.getLogger(__name__)
 # Nova proposer imported at module level so tests can patch it cleanly.
 # boto3 is only touched inside _call_nova() — absent credentials are non-fatal.
 from app.services.nova_scenario_proposer import propose_scenarios_with_nova  # noqa: E402
-from app.utils.formatters import format_krw as _fmt_krw
-
 # ── Template config ────────────────────────────────────────────────────────────
 _TEMPLATES_PATH = (
     Path(__file__).parent.parent / "demo_fixtures" / "simulation_templates.json"
@@ -52,20 +50,6 @@ _CONFIDENCE: dict[str, float] = {
 _BANDS = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
 
-# ── Amount formatters ─────────────────────────────────────────────────────────
-# _fmt_krw is imported from app.utils.formatters above — canonical implementation.
-
-def _fmt_en(amount) -> str:
-    if amount is None:
-        return "TBD"
-    v = int(amount)
-    if v >= 1_000_000_000:
-        return f"₩{v / 1_000_000_000:.1f}B"
-    if v >= 1_000_000:
-        return f"₩{v / 1_000_000:.1f}M"
-    if v >= 1_000:
-        return f"₩{v // 1_000:,}K"
-    return f"₩{v:,}"
 
 
 def _derive_status(gov_dict: dict) -> str:
@@ -461,21 +445,14 @@ class RiskResponseSimulationService:
 
     def _summary_ko(self, strategy: str, decision_payload: dict, patch: dict) -> str:
         cost = decision_payload.get("cost")
+        c = f"₩{int(cost)}" if cost is not None else "미정"
+        pc = f"₩{int(patch['cost'])}" if patch.get("cost") is not None else "미정"
         if strategy == "set_cost_to_remaining_budget":
-            return (
-                f"요청 금액을 {_fmt_krw(cost)}에서 "
-                f"잔여 예산({_fmt_krw(patch['cost'])}) 수준으로 조정"
-            )
+            return f"요청 금액을 {c}에서 잔여 예산({pc}) 수준으로 조정"
         if strategy == "set_cost_to_high_threshold":
-            return (
-                f"요청 금액을 {_fmt_krw(cost)}에서 "
-                f"승인 기준 이하({_fmt_krw(patch['cost'])})로 조정"
-            )
+            return f"요청 금액을 {c}에서 승인 기준 이하({pc})로 조정"
         if strategy == "reduce_cost_by_half":
-            return (
-                f"요청 금액을 {_fmt_krw(cost)}에서 "
-                f"절반({_fmt_krw(patch['cost'])})으로 분할 집행"
-            )
+            return f"요청 금액을 {c}에서 절반({pc})으로 분할 집행"
         if strategy == "remove_pii_usage":
             return "고객 개인정보(PII) 처리를 익명화로 대체하여 개인정보 보호 리스크 해소"
         if strategy == "clear_compliance_flag":
@@ -488,21 +465,14 @@ class RiskResponseSimulationService:
 
     def _summary_en(self, strategy: str, decision_payload: dict, patch: dict) -> str:
         cost = decision_payload.get("cost")
+        c = f"₩{int(cost)}" if cost is not None else "TBD"
+        pc = f"₩{int(patch['cost'])}" if patch.get("cost") is not None else "TBD"
         if strategy == "set_cost_to_remaining_budget":
-            return (
-                f"Reduce requested amount from {_fmt_en(cost)} "
-                f"to remaining budget ({_fmt_en(patch['cost'])})"
-            )
+            return f"Reduce requested amount from {c} to remaining budget ({pc})"
         if strategy == "set_cost_to_high_threshold":
-            return (
-                f"Reduce requested amount from {_fmt_en(cost)} "
-                f"to below approval threshold ({_fmt_en(patch['cost'])})"
-            )
+            return f"Reduce requested amount from {c} to below approval threshold ({pc})"
         if strategy == "reduce_cost_by_half":
-            return (
-                f"Reduce requested amount from {_fmt_en(cost)} "
-                f"to half ({_fmt_en(patch['cost'])}) via phased rollout"
-            )
+            return f"Reduce requested amount from {c} to half ({pc}) via phased rollout"
         if strategy == "remove_pii_usage":
             return "Replace direct PII handling with anonymized processing to eliminate privacy risk"
         if strategy == "clear_compliance_flag":

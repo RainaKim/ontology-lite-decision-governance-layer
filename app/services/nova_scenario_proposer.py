@@ -24,7 +24,6 @@ from app.schemas.nova_scenarios import (
     NovaScenarioProposal,
     NovaScenarioResponse,
 )
-from app.utils.formatters import format_krw
 from app.utils.llm_utils import extract_json
 from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION
 
@@ -133,7 +132,7 @@ def _build_prompt(decision: dict, governance_result: dict, risk_scoring: dict) -
     return _PROMPT_TEMPLATE.format(
         allowed_templates="\n".join(f"- {t}" for t in sorted(ALLOWED_TEMPLATE_IDS)),
         statement=decision.get("decision_statement", ""),
-        cost=format_krw(decision.get("cost")),
+        cost=decision.get("cost"),
         uses_pii=decision.get("uses_pii"),
         strategic_impact=decision.get("strategic_impact"),
         triggered_rules=", ".join(triggered) if triggered else "없음",

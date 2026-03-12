@@ -5,6 +5,11 @@ Hybrid governance evaluation:
 - Rule matching (deterministic Python)
 - Conflict resolution (o1 reasoning)
 - Approval optimization (o1 reasoning)
+
+Extension pattern — pure function extraction:
+  When adding a new transformation, write it as a pure function (no I/O, no os.environ),
+  then call it from the I/O outer function. Keep it module-private (_name) unless there
+  is more than one caller. Test the pure function directly with in-memory data.
 """
 
 import json

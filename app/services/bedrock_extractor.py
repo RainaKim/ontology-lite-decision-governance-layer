@@ -1,11 +1,12 @@
-"""Generic Bedrock → Pydantic extractor.
+"""Generic Bedrock → Pydantic extractor — I/O adapter only, no scoring or governance logic.
 
-Intended to replace decision_context_service and risk_evidence_llm,
-which share the same call-validate-return-None skeleton.
+Extension: to add a new LLM extraction step to the pipeline:
+  1. Define a Pydantic output schema in app/schemas/
+  2. Write the prompt string or builder function
+  3. Call extractor.extract(prompt=..., output_model=MySchema) in pipeline_service.py
+  No new service file needed.
 
-Migration is blocked until test_decision_context_extraction.py and
-test_risk_semantics.py are updated — both directly import the old
-service modules as the unit-under-test. See AGENT_TASKS.md for details.
+Do not catch auth failures silently — only suppress transient errors (parse, validation).
 """
 import logging
 from typing import Optional, Type, TypeVar
