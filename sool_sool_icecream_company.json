@@ -3,6 +3,7 @@
       "id": "sool_sool_icecream",
       "name": "Sool Sool Ice Cream",
       "industry": "식음료",
+      "industry_code": "FOOD_SERVICE",
       "governance_framework": "소규모 식품 운영 거버넌스",
       "size": "25명",
       "regions": ["뉴욕", "온라인 판매"]

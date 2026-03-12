@@ -3,6 +3,7 @@
     "id": "nexus_dynamics",
     "name": "Nexus Dynamics",
     "industry": "Corporate Finance",
+    "industry_code": "FINANCE",
     "governance_framework": "Corporate Finance",
     "size": "1,200+ employees",
     "regions": ["South Korea (HQ)", "North America", "Europe", "Southeast Asia"]
