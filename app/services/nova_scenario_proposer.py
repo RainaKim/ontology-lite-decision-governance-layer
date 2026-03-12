@@ -25,6 +25,7 @@ from app.schemas.nova_scenarios import (
     NovaScenarioProposal,
     NovaScenarioResponse,
 )
+from app.utils.formatters import format_krw
 
 logger = logging.getLogger(__name__)
 
@@ -112,24 +113,6 @@ def propose_scenarios_with_nova(
         return None
 
 
-# ── Formatters ────────────────────────────────────────────────────────────────
-
-def _fmt_krw(amount) -> str:
-    """Format KRW amount as Korean string so Nova doesn't attempt its own conversion."""
-    if amount is None:
-        return "미정"
-    v = int(amount)
-    awk = v // 100_000_000
-    man = (v % 100_000_000) // 10_000
-    if awk > 0 and man > 0:
-        return f"{awk}억 {man:,}만 원"
-    if awk > 0:
-        return f"{awk}억 원"
-    if man > 0:
-        return f"{man:,}만 원"
-    return f"{v:,}원"
-
-
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
 def _build_prompt(decision: dict, governance_result: dict, risk_scoring: dict) -> str:
@@ -150,7 +133,7 @@ def _build_prompt(decision: dict, governance_result: dict, risk_scoring: dict) -
     return _PROMPT_TEMPLATE.format(
         allowed_templates="\n".join(f"- {t}" for t in sorted(ALLOWED_TEMPLATE_IDS)),
         statement=decision.get("decision_statement", ""),
-        cost=_fmt_krw(decision.get("cost")),
+        cost=format_krw(decision.get("cost")),
         uses_pii=decision.get("uses_pii"),
         strategic_impact=decision.get("strategic_impact"),
         triggered_rules=", ".join(triggered) if triggered else "없음",
