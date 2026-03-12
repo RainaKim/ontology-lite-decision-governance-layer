@@ -38,6 +38,10 @@ _MAX_SOURCES = 4
 from app.config.company_registry import PROFILE_ALIASES as _PROFILE_ALIASES
 
 # --- Configuration tables (edit here to extend, not in function bodies) ---
+# Extension: append a (field, value) row to add a new type — function body never changes.
+# Rule: config tables handle structural dispatch only (field → enum). Semantic classification
+# (meaning-based routing) must go through an LLM structured call, not a keyword list.
+# See .claude/dev_rules.md rule #1. Other services with config tables follow the same rule.
 
 _DECISION_TYPE_PRIORITY: list[tuple[str, str]] = [
     ("involves_hiring", "hiring"),

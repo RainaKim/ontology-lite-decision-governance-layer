@@ -1,5 +1,6 @@
 # Risk band boundaries and confidence parameters.
 # These mirror the constants in risk_scoring_service.py until P4-A migrates them.
+# See bedrock_config.py for general config module rules.
 RISK_BANDS = {
     "default": {"low_max": 40, "medium_max": 70, "high_max": 85},
 }

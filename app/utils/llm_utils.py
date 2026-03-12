@@ -1,3 +1,5 @@
+# Utilities: pure functions only — no domain logic, no I/O, no imports from app.services.
+# Extension: add new LLM response parsing helpers here; all callers benefit automatically.
 import json
 from typing import Optional
 
