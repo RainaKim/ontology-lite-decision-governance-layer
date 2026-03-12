@@ -1,0 +1,76 @@
+{
+  "companyId": "nexus_dynamics",
+  "version": "1.1.0",
+  "sources": [
+    {
+      "sourceId": "NEXUS_EXT_001",
+      "companyId": "nexus_dynamics",
+      "category": "market_benchmark",
+      "title": "KPMG Korea: Enterprise IT Capital Expenditure Governance Benchmark 2025",
+      "sourceLabel": "KPMG Korea 2025",
+      "sourceType": "industry_benchmark",
+      "domainHint": "kpmg.com/kr",
+      "summaryText": "Korean enterprises with 1,000+ employees require mandatory CFO review for unbudgeted IT expenditures above 50M KRW in 78% of surveyed companies; investments without documented ROI projections have a 62% CFO approval failure rate.",
+      "recency": "2025",
+      "relevanceHintEn": "This expenditure is above the documented CFO approval threshold; peer benchmarks suggest structured ROI documentation significantly improves approval success rates.",
+      "relevanceHintKo": "이 지출은 CFO 승인 기준을 초과합니다. 업계 벤치마크에 따르면 구조화된 ROI 문서화가 승인 성공률을 크게 높입니다.",
+      "relevanceTags": ["financial_procurement", "risk_financial", "strategic_benchmark"]
+    },
+    {
+      "sourceId": "NEXUS_EXT_002",
+      "companyId": "nexus_dynamics",
+      "category": "regulatory_guidance",
+      "title": "EU Data Protection Authorities: GDPR Enforcement Highlights for Non-EU Enterprises Q4 2025",
+      "sourceLabel": "EU DPA Q4 2025",
+      "sourceType": "regulatory_guideline",
+      "domainHint": "gdprhub.eu",
+      "summaryText": "Non-EU headquartered companies (including Korean firms) accounted for 31% of total GDPR fines in 2025; key enforcement areas include AI-assisted profiling, cross-border data transfers, and cookie consent on digital platforms.",
+      "recency": "2025",
+      "relevanceHintEn": "As a Korea-headquartered company with European operations, this decision's PII processing component requires documented GDPR compliance and CISO-level review.",
+      "relevanceHintKo": "유럽에서 운영 중인 한국 본사 기업으로서, 이 결정의 개인정보 처리 부분은 GDPR 준수 문서화 및 CISO 수준 검토가 필요합니다.",
+      "relevanceTags": ["privacy_compliance", "regulatory_compliance", "risk_compliance"]
+    },
+    {
+      "sourceId": "NEXUS_EXT_003",
+      "companyId": "nexus_dynamics",
+      "category": "regulatory_guidance",
+      "title": "Korea PIPC: Personal Information Protection Act (PIPL) 2025 Amendment Enforcement Guidance",
+      "sourceLabel": "PIPC Korea 2025",
+      "sourceType": "regulatory_guideline",
+      "domainHint": "pipc.go.kr",
+      "summaryText": "The 2025 PIPL amendment requires CISO-level accountability for PII-processing decisions; non-compliance penalties increased to KRW 3B or 3% of relevant annual revenue.",
+      "recency": "2025",
+      "relevanceHintEn": "This decision's PII processing component requires CISO sign-off under the amended PIPL to avoid exposure to the increased penalty regime.",
+      "relevanceHintKo": "이 결정의 개인정보 처리 부분은 강화된 과태료 적용 대상이 되지 않도록 개정된 개인정보보호법에 따른 CISO 승인이 필요합니다.",
+      "relevanceTags": ["privacy_compliance", "regulatory_compliance", "risk_compliance"]
+    },
+    {
+      "sourceId": "NEXUS_EXT_004",
+      "companyId": "nexus_dynamics",
+      "category": "strategic_benchmark",
+      "title": "Deloitte Korea: Cross-Border M&A and Global Expansion Activity Report 2025",
+      "sourceLabel": "Deloitte Korea 2025",
+      "sourceType": "market_research",
+      "domainHint": "deloitte.com/kr",
+      "summaryText": "Korean enterprises with documented strategic goal alignment achieve 2.6x higher ROI on international investment; companies with governance gaps in related-party transactions are the leading source of Korean corporate compliance failures.",
+      "recency": "2025",
+      "relevanceHintEn": "Linking this investment to a specific strategic goal (G1/G2/G3) before CFO approval aligns with benchmarks for successful international expansion decisions.",
+      "relevanceHintKo": "CFO 승인 전 이 투자를 특정 전략 목표(G1/G2/G3)에 연결하면 성공적인 해외 진출 의사결정 벤치마크에 부합합니다.",
+      "relevanceTags": ["strategic_benchmark", "regulatory_compliance", "financial_procurement"]
+    },
+    {
+      "sourceId": "NEXUS_EXT_005",
+      "companyId": "nexus_dynamics",
+      "category": "compliance_signal",
+      "title": "Korea Financial Services Commission: Corporate Governance Enforcement Update 2025",
+      "sourceLabel": "FSC Korea 2025",
+      "sourceType": "regulatory_guideline",
+      "domainHint": "fsc.go.kr",
+      "summaryText": "FSC enforcement of related-party transaction disclosure and anti-bribery compliance increased in 2025; board-level accountability for ESG violations now explicitly extends to audit and compliance committees.",
+      "recency": "2025",
+      "relevanceHintEn": "If this decision involves related-party elements or retroactive policy changes, FSC disclosure requirements and mandatory Compliance Officer review apply.",
+      "relevanceHintKo": "이 결정이 특수 관계인 거래나 소급 정책 변경을 포함하는 경우, FSC 공시 요건 및 컴플라이언스 오피서 의무 검토가 적용됩니다.",
+      "relevanceTags": ["regulatory_compliance", "risk_compliance", "strategic_benchmark"]
+    }
+  ]
+}

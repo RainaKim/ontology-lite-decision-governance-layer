@@ -1,0 +1,97 @@
+{
+  "companyId": "sool_sool_icecream",
+  "version": "1.0.0",
+  "approvalSources": [
+    {
+      "roleKey": "CEO",
+      "roleNameKo": "대표이사 (CEO)",
+      "roleNameEn": "Chief Executive Officer (CEO)",
+      "sourceType": "org_chart",
+      "documentNameKo": "Sool Sool Ice Cream 조직 권한 매트릭스 v1.0",
+      "documentNameEn": "Sool Sool Ice Cream Organizational Authority Matrix v1.0",
+      "level": 3,
+      "authoritySummaryKo": "회사의 최고 의사결정 권한자입니다. 신규 채용, $10,000 초과 지출, 전략적으로 중요한 의사결정의 최종 승인 권한을 보유합니다. 특히 인력 채용 결정은 현금 흐름·생산 가동률·매출 전망을 종합적으로 검토한 후 CEO가 최종 판단합니다. 예산 승인 한도에 상한 없음.",
+      "authoritySummaryEn": "The company's highest decision-making authority. Holds final approval authority for new hires, expenditures exceeding $10,000, and strategically significant decisions. Hiring decisions in particular require CEO final judgment after comprehensive review of cash flow, production utilization, and revenue outlook. No upper limit on budget approval authority.",
+      "citationKo": "조직 권한 매트릭스 v1.0, §1: 'CEO는 신규 채용 및 $10,000 초과 지출을 포함한 모든 주요 의사결정에 대한 최종 승인 권한을 가진다.'",
+      "citationEn": "Organizational Authority Matrix v1.0, §1: 'The CEO holds final approval authority over all major decisions including new hires and expenditures exceeding $10,000.'"
+    },
+    {
+      "roleKey": "OPERATIONS_MANAGER",
+      "roleNameKo": "운영 매니저",
+      "roleNameEn": "Operations Manager",
+      "sourceType": "org_chart",
+      "documentNameKo": "Sool Sool Ice Cream 조직 권한 매트릭스 v1.0",
+      "documentNameEn": "Sool Sool Ice Cream Organizational Authority Matrix v1.0",
+      "level": 2,
+      "authoritySummaryKo": "운영 전반에 걸친 의사결정의 2차 검토 및 승인 권한자입니다. $1,500 이상 $10,000 미만의 구매 승인, 생산 용량 초과 여부 검토, 조달 및 재고 관련 의사결정의 최종 승인을 담당합니다. 단독 예산 승인 한도: $10,000.",
+      "authoritySummaryEn": "Second-level review and approval authority across all operations decisions. Responsible for approving purchases between $1,500 and $10,000, reviewing production capacity impact, and final approval on procurement and inventory-related decisions. Single-signatory budget approval limit: $10,000.",
+      "citationKo": "조직 권한 매트릭스 v1.0, §2.1: '운영 매니저는 $1,500 이상 구매 결정의 승인 권한과 생산 용량 영향을 수반하는 의사결정의 검토 권한을 보유한다.'",
+      "citationEn": "Organizational Authority Matrix v1.0, §2.1: 'The Operations Manager holds approval authority for purchases of $1,500 or more and review authority for decisions involving production capacity impact.'"
+    },
+    {
+      "roleKey": "FINANCE_MANAGER",
+      "roleNameKo": "재무 담당",
+      "roleNameEn": "Finance Manager",
+      "sourceType": "org_chart",
+      "documentNameKo": "Sool Sool Ice Cream 조직 권한 매트릭스 v1.0",
+      "documentNameEn": "Sool Sool Ice Cream Organizational Authority Matrix v1.0",
+      "level": 2,
+      "authoritySummaryKo": "재무 상태 및 현금 흐름 관리의 담당 권한자입니다. 은행 잔액 증명, 현금 흐름 계획, 헤드카운트 예산 계획의 관리 및 검토를 담당합니다. 구매·채용 의사결정이 현금 흐름에 미치는 영향을 평가하여 운영 매니저 및 CEO에게 재무 의견을 제공합니다.",
+      "authoritySummaryEn": "Authority over financial status and cash flow management. Responsible for managing and reviewing bank balance statements, cash-flow plans, and headcount budget plans. Assesses cash-flow impact of purchase and hiring decisions and provides financial input to the Operations Manager and CEO.",
+      "citationKo": "조직 권한 매트릭스 v1.0, §2.2: '재무 담당은 현금 흐름 계획 및 헤드카운트 예산 관리 권한을 보유하며, 주요 지출 결정에 대한 재무 검토 의견을 제공할 책임이 있다.'",
+      "citationEn": "Organizational Authority Matrix v1.0, §2.2: 'The Finance Manager holds authority over cash-flow planning and headcount budget management, and is responsible for providing financial review input on major expenditure decisions.'"
+    },
+    {
+      "roleKey": "MARKETING_LEAD",
+      "roleNameKo": "마케팅 리드",
+      "roleNameEn": "Marketing Lead",
+      "sourceType": "org_chart",
+      "documentNameKo": "Sool Sool Ice Cream 조직 권한 매트릭스 v1.0",
+      "documentNameEn": "Sool Sool Ice Cream Organizational Authority Matrix v1.0",
+      "level": 1,
+      "authoritySummaryKo": "마케팅 활동 및 판매 예측의 1차 책임자입니다. SNS 기반 홍보 데이터 분석, 고객 트렌드 조사, 경쟁사 분석, 프로모션 계획 수립 및 종료 시기 결정을 담당합니다. 판매 예측을 기반으로 재고 주문 수량의 적정성에 대한 마케팅 인사이트를 제공합니다. 단독 예산 승인 한도: $2,000.",
+      "authoritySummaryEn": "Primary responsibility for marketing activities and sales forecasting. Responsible for SNS-based promotional data analysis, customer trend research, competitor analysis, promotion planning, and determining promotion end timing. Provides marketing insights on the appropriateness of inventory order quantities based on sales forecasts. Single-signatory budget approval limit: $2,000.",
+      "citationKo": "조직 권한 매트릭스 v1.0, §3.1: '마케팅 리드는 SNS 홍보 기반 판매 예측의 신뢰도 검증 및 프로모션 계획 종료 결정 권한을 보유한다.'",
+      "citationEn": "Organizational Authority Matrix v1.0, §3.1: 'The Marketing Lead holds authority to validate the reliability of SNS-based sales forecasts and decide promotion plan end timing.'"
+    },
+    {
+      "roleKey": "RND_LEAD",
+      "roleNameKo": "R&D 리드",
+      "roleNameEn": "R&D Lead",
+      "sourceType": "org_chart",
+      "documentNameKo": "Sool Sool Ice Cream 조직 권한 매트릭스 v1.0",
+      "documentNameEn": "Sool Sool Ice Cream Organizational Authority Matrix v1.0",
+      "level": 1,
+      "authoritySummaryKo": "신제품 개발 및 맛 연구의 1차 책임자입니다. 신규 아이스크림 맛 후보 선정, 개발 파이프라인 가용 용량 평가, 브랜드 철학 정합성 검토를 담당합니다. 신제품 개발 착수를 위한 검토서 서명 권한을 보유합니다. 단독 예산 승인 한도: $2,000.",
+      "authoritySummaryEn": "Primary responsibility for new product development and flavor research. Responsible for selecting new ice cream flavor candidates, assessing development pipeline capacity, and reviewing brand philosophy alignment. Holds signing authority for new product development commencement review documents. Single-signatory budget approval limit: $2,000.",
+      "citationKo": "조직 권한 매트릭스 v1.0, §3.2: 'R&D 리드는 신규 제품 개발 착수를 위한 검토서 서명 권한 및 개발 파이프라인 가용 용량 평가 권한을 보유한다.'",
+      "citationEn": "Organizational Authority Matrix v1.0, §3.2: 'The R&D Lead holds signing authority for new product development commencement review documents and authority to assess development pipeline capacity.'"
+    },
+    {
+      "roleKey": "PROCUREMENT_LEAD",
+      "roleNameKo": "구매 리드",
+      "roleNameEn": "Procurement Lead",
+      "sourceType": "org_chart",
+      "documentNameKo": "Sool Sool Ice Cream 조직 권한 매트릭스 v1.0",
+      "documentNameEn": "Sool Sool Ice Cream Organizational Authority Matrix v1.0",
+      "level": 1,
+      "authoritySummaryKo": "구매 및 조달의 1차 책임자입니다. 현재 재고 수량, 배송 중인 기존 주문, 창고 보관 용량, 공급 벤더 관리를 담당합니다. 배송 중인 기존 주문이 있을 경우 추가 주문의 적정성을 검토하는 권한을 보유합니다. 단독 예산 승인 한도: $2,000.",
+      "authoritySummaryEn": "Primary responsibility for purchasing and procurement. Responsible for managing current inventory levels, in-transit orders, warehouse storage capacity, and vendor relationships. Holds authority to review the appropriateness of additional orders when in-transit orders exist. Single-signatory budget approval limit: $2,000.",
+      "citationKo": "조직 권한 매트릭스 v1.0, §3.3: '구매 리드는 배송 중 주문이 존재하는 경우 추가 발주의 적정성을 검토할 책임이 있으며, 재고 현황 및 창고 용량을 종합 검토한다.'",
+      "citationEn": "Organizational Authority Matrix v1.0, §3.3: 'The Procurement Lead is responsible for reviewing the appropriateness of additional orders when in-transit orders exist, with comprehensive review of inventory status and warehouse capacity.'"
+    },
+    {
+      "roleKey": "HR_LEAD",
+      "roleNameKo": "HR 리드",
+      "roleNameEn": "HR Lead",
+      "sourceType": "org_chart",
+      "documentNameKo": "Sool Sool Ice Cream 조직 권한 매트릭스 v1.0",
+      "documentNameEn": "Sool Sool Ice Cream Organizational Authority Matrix v1.0",
+      "level": 1,
+      "authoritySummaryKo": "인사 채용 및 HR 운영의 1차 책임자입니다. 채용 공고 작성, 채용 프로세스 관리, 노동 관계법 및 채용 공고 관련 법적 가이드라인 준수를 담당합니다. 채용 공고 게시 전 CEO 승인을 득해야 하며, 외부 채용 플랫폼(LinkedIn 등) 게시는 CEO 승인 이후에만 진행합니다. 단독 예산 승인 한도: $2,000.",
+      "authoritySummaryEn": "Primary responsibility for HR recruitment and operations. Responsible for drafting job postings, managing the recruitment process, and ensuring compliance with labor laws and legal guidelines related to job postings. Must obtain CEO approval before posting job listings, and external platform postings (e.g., LinkedIn) may only proceed after CEO approval. Single-signatory budget approval limit: $2,000.",
+      "citationKo": "조직 권한 매트릭스 v1.0, §3.4: 'HR 리드는 채용 공고 게시 전 CEO 승인을 받을 의무가 있으며, 채용 공고 관련 법적 가이드라인 준수 여부를 사전 검토해야 한다.'",
+      "citationEn": "Organizational Authority Matrix v1.0, §3.4: 'The HR Lead is obligated to obtain CEO approval before posting job listings and must pre-review compliance with legal guidelines related to job postings.'"
+    }
+  ]
+}

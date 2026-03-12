@@ -1,0 +1,81 @@
+{
+  "companyId": "mayo_central",
+  "version": "1.0.0",
+  "policies": [
+    {
+      "ruleId": "R1",
+      "titleKo": "자본 장비 구매 승인 정책",
+      "titleEn": "Capital Equipment Purchase Approval Policy",
+      "sourceType": "policy_document",
+      "documentNameKo": "의료 장비 자산 취득 규정 v2.1",
+      "documentNameEn": "Medical Equipment Asset Acquisition Regulations v2.1",
+      "section": "Section 3.2 — Capital Equipment Purchase Approval Thresholds",
+      "ownerRole": "최고재무책임자",
+      "summaryKo": "1억원을 초과하는 의료 장비 구매는 최고재무책임자(CFO)의 사전 서면 승인과 자산 재고 검토가 필요합니다. 임상 필요성 평가 및 장비 내용연수 분석이 승인 절차에 포함됩니다.",
+      "summaryEn": "Medical equipment purchases exceeding KRW 100,000,000 require prior written approval from the CFO and an asset inventory review. Clinical necessity assessment and equipment lifecycle analysis are included in the approval process.",
+      "citationKo": "의료 장비 자산 취득 규정 v2.1, §3.2: '단일 의료 장비 구매 건이 100,000,000원을 초과하는 경우 CFO 승인 및 자산관리팀 재고 검토 없이 집행될 수 없다.'",
+      "citationEn": "Medical Equipment Asset Acquisition Regulations v2.1, §3.2: 'No single medical equipment purchase exceeding KRW 100,000,000 may be executed without CFO approval and asset management inventory review.'",
+      "tags": ["financial", "capex", "medical-equipment", "approval"]
+    },
+    {
+      "ruleId": "R2",
+      "titleKo": "환자 데이터 프라이버시 및 HIPAA 준수 정책",
+      "titleEn": "Patient Data Privacy and HIPAA Compliance Policy",
+      "sourceType": "policy_document",
+      "documentNameKo": "환자 정보 보호 및 HIPAA 준수 정책 v4.0",
+      "documentNameEn": "Patient Information Protection and HIPAA Compliance Policy v4.0",
+      "section": "Section 5.1 — Patient PII/PHI Processing Authorization Requirements",
+      "ownerRole": "준법감시인",
+      "summaryKo": "환자 개인식별정보(PII) 또는 보호건강정보(PHI)의 접근·처리·2차 활용을 수반하는 모든 의사결정은 준법감시인의 독립적인 사전 검토를 받아야 합니다. HIPAA 및 GDPR 준수 여부, 환자 동의 획득 여부, 비식별화 조치 적정성이 검토 대상에 포함됩니다.",
+      "summaryEn": "All decisions involving the access, processing, or secondary use of patient personally identifiable information (PII) or protected health information (PHI) must undergo independent prior review by the Compliance Officer. HIPAA and GDPR compliance, patient consent acquisition, and adequacy of de-identification measures are included in the scope of review.",
+      "citationKo": "환자 정보 보호 및 HIPAA 준수 정책 v4.0, §5.1: '환자 PII 또는 PHI를 처리하는 모든 의사결정은 준법감시인의 사전 검토 없이 승인될 수 없으며, 비식별화 조치 적용 여부를 명시적으로 확인하여야 한다.'",
+      "citationEn": "Patient Information Protection and HIPAA Compliance Policy v4.0, §5.1: 'No decision involving the processing of patient PII or PHI may be approved without prior review by the Compliance Officer, and the application of de-identification measures must be explicitly confirmed.'",
+      "tags": ["compliance", "privacy", "hipaa", "pii", "phi", "gdpr"]
+    },
+    {
+      "ruleId": "R3",
+      "titleKo": "중대 환자 안전 승인 정책",
+      "titleEn": "Critical Patient Safety Approval Policy",
+      "sourceType": "policy_document",
+      "documentNameKo": "임상 안전 리스크 관리 프레임워크 v2.3",
+      "documentNameEn": "Clinical Safety Risk Management Framework v2.3",
+      "section": "Section 2.1 — Executive Approval for Critical Patient Safety Decisions",
+      "ownerRole": "의료원장",
+      "summaryKo": "환자 안전에 중대한 영향을 미치는 의사결정은 의료원장의 최종 승인이 필요합니다. 전략적 영향도가 '중대(critical)'로 분류된 임상·운영 의사결정은 임상 위험 평가 결과와 함께 의료원장에게 상신되어야 합니다.",
+      "summaryEn": "Decisions with critical impact on patient safety require final approval from the Medical Director. Clinical and operational decisions classified as 'critical' strategic impact must be submitted to the Medical Director along with clinical risk assessment results.",
+      "citationKo": "임상 안전 리스크 관리 프레임워크 v2.3, §2.1: '전략적 영향도가 중대로 분류된 모든 의사결정은 의료원장의 서면 승인 없이 시행될 수 없으며, 임상 위험 평가서를 첨부하여야 한다.'",
+      "citationEn": "Clinical Safety Risk Management Framework v2.3, §2.1: 'All decisions classified as critical strategic impact may not be implemented without written approval from the Medical Director, and must be accompanied by a clinical risk assessment.'",
+      "tags": ["strategic", "patient-safety", "clinical", "executive"]
+    },
+    {
+      "ruleId": "R4",
+      "titleKo": "전략 정합성 요건 정책",
+      "titleEn": "Strategic Alignment Requirements Policy",
+      "sourceType": "policy_document",
+      "documentNameKo": "Mayo Central 전략 목표 연계 운영 지침 v1.5",
+      "documentNameEn": "Mayo Central Strategic Goal Linkage Operating Guidelines v1.5",
+      "section": "Section 4 — Decision-to-Goal Linkage Requirements",
+      "ownerRole": "병원장",
+      "summaryKo": "5만원 초과 지출 또는 전략적 중요도가 높거나 중대한 의사결정은 G1(환자 안전 우수성), G2(규제 및 데이터 준수), G3(운영 및 재무 효율화) 중 최소 하나의 전략 목표와 명시적으로 연계되어야 합니다. 전략 목표 연계 여부는 의사결정서에 기재되어야 합니다.",
+      "summaryEn": "Decisions involving expenditures over KRW 50,000 or with high or critical strategic importance must be explicitly linked to at least one of G1 (Patient Safety Excellence), G2 (Regulatory and Data Compliance), or G3 (Operational and Financial Efficiency). Goal linkage must be documented in the decision record.",
+      "citationKo": "Mayo Central 전략 목표 연계 운영 지침 v1.5, §4.1: '5만원 초과 지출 또는 전략적으로 중대한 모든 의사결정은 당해 연도 전략 목표(G1–G3)와의 연계성을 의사결정서에 명시하여야 한다.'",
+      "citationEn": "Mayo Central Strategic Goal Linkage Operating Guidelines v1.5, §4.1: 'All decisions involving expenditures over KRW 50,000 or that are strategically significant must explicitly state their linkage to the current year strategic goals (G1–G3) in the decision documentation.'",
+      "tags": ["strategic", "alignment", "planning"]
+    },
+    {
+      "ruleId": "R5",
+      "titleKo": "대규모 투자 이중 승인 정책",
+      "titleEn": "Large Investment Dual Approval Policy",
+      "sourceType": "policy_document",
+      "documentNameKo": "대규모 의료 투자 이사회 결의 규정 v3.0",
+      "documentNameEn": "Large-Scale Medical Investment Board Resolution Regulations v3.0",
+      "section": "Section 2.2 — Sequential Dual Approval for Investments Exceeding KRW 500M",
+      "ownerRole": "병원장",
+      "summaryKo": "5억원을 초과하는 단일 투자 의사결정은 CFO 선행 검토 후 병원장 최종 승인의 순차적 이중 결재 절차를 따라야 합니다. 이 절차는 이사회 보고 의무를 동반하며, 투자 타당성 분석서 및 임상 필요성 평가서가 첨부되어야 합니다.",
+      "summaryEn": "Single investment decisions exceeding KRW 500,000,000 must follow a sequential dual approval procedure: CFO review first, then Hospital Administrator final approval. This procedure is accompanied by mandatory board reporting obligations, and requires attached investment feasibility analysis and clinical necessity assessment.",
+      "citationKo": "대규모 의료 투자 이사회 결의 규정 v3.0, §2.2: '5억원 초과 투자 건은 CFO-병원장 순차 승인 후 이사회에 보고되어야 하며, 투자 타당성 분석서를 첨부하여야 한다.'",
+      "citationEn": "Large-Scale Medical Investment Board Resolution Regulations v3.0, §2.2: 'Investments exceeding KRW 500M must be reported to the board following sequential CFO–Hospital Administrator approval, with an attached investment feasibility analysis.'",
+      "tags": ["financial", "board", "investment", "approval"]
+    }
+  ]
+}

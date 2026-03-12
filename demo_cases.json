@@ -1,0 +1,256 @@
+{
+  "metadata": {
+    "purpose": "Demo cases for Decision Governance Layer testing",
+    "company": "Nexus Tech",
+    "version": "1.0.0",
+    "created_at": "2025-02-14",
+    "test_coverage": {
+      "compliant_scenarios": 1,
+      "failing_scenarios": 2,
+      "total_rules_tested": 5
+    }
+  },
+
+  "demo_cases": [
+    {
+      "case_id": "FAIL_001",
+      "name": "Unauthorized High-Cost Feature Launch",
+      "scenario_type": "failing",
+      "expected_outcome": "REJECTED - Budget approval required",
+      "violated_rules": ["R1"],
+      "decision_text": "We should launch a new AI-powered analytics dashboard for enterprise clients by end of Q2. This will require hiring 2 senior data engineers at $180k each, cloud infrastructure costs of $35k annually, and third-party ML API subscriptions at $15k/year. Total first-year cost: $230k. The dashboard will increase user engagement by 30% and help us compete with Tableau and PowerBI. Engineering Manager David will own delivery, with support from the data science team. Timeline: 12 weeks from approval. Key risks include integration complexity with existing data pipeline and potential performance issues at scale. We assume enterprise clients are willing to pay a 20% premium for AI features.",
+      "extracted_attributes": {
+        "cost": 230000,
+        "target_market": "enterprise",
+        "uses_pii": false,
+        "launch_date": "2025-06-30",
+        "owner": "David Okonkwo",
+        "department": "Engineering"
+      },
+      "governance_evaluation": {
+        "rule_R1_triggered": true,
+        "reason": "Cost of $230,000 exceeds $100,000 threshold",
+        "required_approver": "Bob Martinez (CFO)",
+        "current_approvers": [],
+        "approval_gap": ["CFO"],
+        "severity": "high",
+        "recommendation": "REJECT - Decision requires CFO approval before proceeding"
+      },
+      "expected_decision_pack": {
+        "status": "non_compliant",
+        "blocking_issues": [
+          {
+            "rule": "R1",
+            "issue": "Budget exceeds $100k without CFO approval",
+            "required_action": "Obtain approval from Bob Martinez (CFO)",
+            "severity": "high"
+          }
+        ],
+        "approval_chain": [
+          {
+            "step": 1,
+            "role": "CFO",
+            "person": "Bob Martinez",
+            "status": "required",
+            "rationale": "Cost of $230k triggers budget approval rule"
+          },
+          {
+            "step": 2,
+            "role": "Engineering Manager",
+            "person": "David Okonkwo",
+            "status": "assigned",
+            "rationale": "Execution owner"
+          }
+        ]
+      }
+    },
+
+    {
+      "case_id": "FAIL_002",
+      "name": "EU User Analytics with Deployment Conflict",
+      "scenario_type": "failing",
+      "expected_outcome": "CRITICAL - Multiple governance violations",
+      "violated_rules": ["R2", "R3"],
+      "decision_text": "We need to deploy a new customer behavior tracking system for our European users to improve personalization and increase conversion rates by 25%. The system will collect user interaction data, purchase history, email addresses, and browsing patterns to build detailed user profiles. Launch date is scheduled for March 15, 2025 at 3:00 AM UTC to minimize user impact. This aligns with our Q1 EU expansion goal (G1) and targets the $15M ARR milestone. Engineering Manager David will lead the implementation with a 4-person team. Budget: $45k for third-party analytics tools and cloud storage. Key assumptions: GDPR consent mechanisms are already in place, EU data residency requirements are met by our Frankfurt data center, and users will opt-in at 60% rate. Risks include potential privacy complaints and data breach exposure given the sensitive PII being collected.",
+      "extracted_attributes": {
+        "cost": 45000,
+        "target_market": "EU",
+        "uses_pii": true,
+        "launch_date": "2025-03-15T03:00:00Z",
+        "owner": "David Okonkwo",
+        "department": "Engineering",
+        "data_types": ["email", "purchase_history", "browsing_patterns"],
+        "compliance_frameworks": ["GDPR"]
+      },
+      "governance_evaluation": {
+        "rule_R2_triggered": true,
+        "rule_R3_triggered": true,
+        "reasons": [
+          "Decision targets EU market (triggers R2)",
+          "Decision uses PII: email, purchase history, browsing patterns (triggers R2)",
+          "Launch date 2025-03-15T03:00:00Z overlaps with maintenance window 2025-03-15T02:00:00Z - 2025-03-15T06:00:00Z (triggers R3)"
+        ],
+        "required_approver": "Charlie Kim (CTO)",
+        "current_approvers": [],
+        "approval_gap": ["CTO"],
+        "severity": "critical",
+        "recommendation": "REJECT - Multiple critical violations detected"
+      },
+      "expected_decision_pack": {
+        "status": "non_compliant",
+        "blocking_issues": [
+          {
+            "rule": "R2",
+            "issue": "EU market + PII usage requires CTO review",
+            "required_action": "Obtain privacy compliance review from Charlie Kim (CTO)",
+            "severity": "critical",
+            "compliance_impact": "GDPR violation risk"
+          },
+          {
+            "rule": "R3",
+            "issue": "Launch date conflicts with scheduled database migration maintenance window",
+            "required_action": "Reschedule launch to avoid 2025-03-15 02:00-06:00 UTC",
+            "severity": "critical",
+            "operational_impact": "High risk of service disruption and data loss"
+          }
+        ],
+        "approval_chain": [
+          {
+            "step": 1,
+            "role": "CTO",
+            "person": "Charlie Kim",
+            "status": "required",
+            "rationale": "Privacy compliance review for EU + PII (R2)"
+          },
+          {
+            "step": 2,
+            "role": "Engineering Manager",
+            "person": "David Okonkwo",
+            "status": "assigned",
+            "rationale": "Execution owner"
+          }
+        ],
+        "risk_summary": {
+          "privacy_risk": "high",
+          "operational_risk": "critical",
+          "compliance_risk": "critical",
+          "overall_risk_score": 9.5
+        }
+      }
+    },
+
+    {
+      "case_id": "PASS_001",
+      "name": "Database Query Optimization Project",
+      "scenario_type": "compliant",
+      "expected_outcome": "APPROVED - All governance checks passed",
+      "violated_rules": [],
+      "decision_text": "We should optimize our PostgreSQL database queries to reduce infrastructure costs by 15% and improve API response times from 800ms to under 400ms. This initiative directly supports our cost reduction goal (G3) and targets the $500/customer cost KPI (K6). Engineering Manager David will lead a 3-week sprint with 2 backend engineers to refactor the top 20 slowest queries, implement connection pooling, and add query result caching. Total cost: $18,000 (developer time only, no new infrastructure). Timeline: Start February 20, complete March 10. Risks include potential query regression bugs and temporary performance degradation during migration. Key assumptions: Current query patterns will remain stable, and caching hit rate will reach 70%. Success metrics: 50% reduction in database CPU usage, 50% improvement in P95 API latency. No customer-facing changes, no PII access required, internal optimization only.",
+      "extracted_attributes": {
+        "cost": 18000,
+        "target_market": "internal",
+        "uses_pii": false,
+        "launch_date": "2025-03-10",
+        "owner": "David Okonkwo",
+        "department": "Engineering",
+        "goal_alignment": "G3",
+        "kpi_targets": ["K5", "K6"]
+      },
+      "governance_evaluation": {
+        "rule_R1_triggered": false,
+        "rule_R2_triggered": false,
+        "rule_R3_triggered": false,
+        "rule_R4_triggered": false,
+        "rule_R5_triggered": false,
+        "reasons": [
+          "Cost of $18,000 is below $100k threshold (R1: pass)",
+          "No EU targeting or PII usage (R2: pass)",
+          "Launch date 2025-03-10 does not conflict with maintenance windows (R3: pass)",
+          "Cost below $50k, strategic alignment not required (R4: pass)",
+          "Properly maps to strategic goal G3 and KPIs K5, K6"
+        ],
+        "required_approver": null,
+        "current_approvers": ["David Okonkwo"],
+        "approval_gap": [],
+        "severity": "none",
+        "recommendation": "APPROVE - All governance requirements satisfied"
+      },
+      "expected_decision_pack": {
+        "status": "compliant",
+        "blocking_issues": [],
+        "approval_chain": [
+          {
+            "step": 1,
+            "role": "Engineering Manager",
+            "person": "David Okonkwo",
+            "status": "approved",
+            "rationale": "Cost within manager authority ($18k < $25k limit)"
+          }
+        ],
+        "governance_summary": {
+          "rules_evaluated": 5,
+          "rules_passed": 5,
+          "rules_failed": 0,
+          "compliance_status": "fully_compliant"
+        },
+        "strategic_alignment": {
+          "aligned_goals": ["G3"],
+          "target_kpis": ["K5", "K6"],
+          "alignment_score": 1.0
+        },
+        "risk_summary": {
+          "privacy_risk": "none",
+          "operational_risk": "low",
+          "compliance_risk": "none",
+          "overall_risk_score": 2.0
+        },
+        "ready_for_execution": true,
+        "next_steps": [
+          "David Okonkwo to proceed with sprint planning",
+          "No additional approvals required",
+          "Monitor P95 latency and database CPU during rollout"
+        ]
+      }
+    }
+  ],
+
+  "rule_coverage_matrix": {
+    "R1_budget_approval": {
+      "tested_in": ["FAIL_001"],
+      "test_status": "covered"
+    },
+    "R2_privacy_compliance": {
+      "tested_in": ["FAIL_002"],
+      "test_status": "covered"
+    },
+    "R3_deployment_conflict": {
+      "tested_in": ["FAIL_002"],
+      "test_status": "covered"
+    },
+    "R4_strategic_alignment": {
+      "tested_in": ["PASS_001"],
+      "test_status": "covered"
+    },
+    "R5_multi_approval": {
+      "tested_in": [],
+      "test_status": "not_covered",
+      "note": "Would require decision > $500k"
+    }
+  },
+
+  "usage_instructions": {
+    "description": "These demo cases can be used to test the Decision Governance Layer",
+    "how_to_test": [
+      "1. POST decision_text from each case to /extract endpoint",
+      "2. Verify extracted Decision object matches expected_attributes",
+      "3. Apply governance rules from mock_company.json",
+      "4. Compare governance evaluation results with expected_decision_pack",
+      "5. Confirm failing cases are rejected, compliant case is approved"
+    ],
+    "expected_behaviors": {
+      "FAIL_001": "Should trigger budget approval requirement (R1)",
+      "FAIL_002": "Should trigger privacy review (R2) AND flag deployment conflict (R3)",
+      "PASS_001": "Should pass all checks and be ready for execution"
+    }
+  }
+}

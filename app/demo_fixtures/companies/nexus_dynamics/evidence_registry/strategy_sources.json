@@ -1,0 +1,96 @@
+{
+  "companyId": "nexus_dynamics",
+  "version": "1.0.0",
+  "strategySources": [
+    {
+      "goalId": "G1",
+      "sourceType": "strategy_document",
+      "documentNameKo": "2025 글로벌 성장 전략 계획서",
+      "documentNameEn": "2025 Global Growth Strategy Plan",
+      "ownerRole": "CEO",
+      "ownerDepartment": "경영진",
+      "summaryKo": "신규 시장 진출 및 전략적 M&A를 통해 연결 매출 25% 성장을 달성하는 것을 목표로 합니다. 북미, 유럽, 동남아시아 3개 권역에서 영업 거점 확대 및 현지 파트너십 구축을 핵심 실행 과제로 설정합니다.",
+      "summaryEn": "Targets 25% consolidated revenue growth through new market entry and strategic M&A. Expanding sales presence and building local partnerships across three regions — North America, Europe, and Southeast Asia — are set as key execution priorities.",
+      "targetSummaryKo": "전년 대비 25% 매출 성장 및 신규 시장 매출 $50M ARR 달성 (2025년 말 기준)",
+      "targetSummaryEn": "25% YoY revenue growth and $50M ARR from new markets by end of 2025",
+      "kpis": [
+        {
+          "kpiId": "K1",
+          "nameKo": "매출 성장률",
+          "nameEn": "Revenue Growth Rate",
+          "targetKo": "전년 대비 25% 증가",
+          "targetEn": "25% increase year-over-year"
+        },
+        {
+          "kpiId": "K2",
+          "nameKo": "신규 시장 매출",
+          "nameEn": "New Market Revenue",
+          "targetKo": "$50M ARR 달성",
+          "targetEn": "Achieve $50M ARR"
+        }
+      ],
+      "citationKo": "2025 글로벌 성장 전략 계획서, §1.2: '글로벌 매출 확대는 2025년 최우선 전략 목표로, 모든 주요 투자 의사결정은 본 목표와의 정합성을 검토받아야 한다.'",
+      "citationEn": "2025 Global Growth Strategy Plan, §1.2: 'Global revenue expansion is the top strategic priority for 2025; all major investment decisions must be reviewed for alignment with this goal.'"
+    },
+    {
+      "goalId": "G2",
+      "sourceType": "strategy_document",
+      "documentNameKo": "준법 및 윤리 경영 전략 로드맵 2025",
+      "documentNameEn": "Compliance and Ethical Governance Strategy Roadmap 2025",
+      "ownerRole": "준법감시인",
+      "ownerDepartment": "준법감시팀",
+      "summaryKo": "전 관할권에서 중대 준법 위반 제로를 달성하고, 내부 감사 통과율 100%를 유지하는 것을 목표로 합니다. 선제적 리스크 식별, 임직원 교육 강화, 내부 신고 채널 운영을 3대 실행 축으로 설정합니다.",
+      "summaryEn": "Targets zero critical compliance violations across all jurisdictions and 100% internal audit pass rate. Proactive risk identification, employee training reinforcement, and whistleblower channel operations are the three execution pillars.",
+      "targetSummaryKo": "중대 준법 위반 0건 및 내부 감사 통과율 100% 유지 (2025년 전 분기 기준)",
+      "targetSummaryEn": "Zero critical compliance violations and 100% audit pass rate maintained across all quarters of 2025",
+      "kpis": [
+        {
+          "kpiId": "K3",
+          "nameKo": "준법 위반 건수",
+          "nameEn": "Compliance Violation Count",
+          "targetKo": "중대 위반 0건",
+          "targetEn": "Zero critical violations"
+        },
+        {
+          "kpiId": "K4",
+          "nameKo": "감사 통과율",
+          "nameEn": "Audit Pass Rate",
+          "targetKo": "100%",
+          "targetEn": "100%"
+        }
+      ],
+      "citationKo": "준법 및 윤리 경영 전략 로드맵 2025, §2.1: '준법 위반 리스크를 수반하는 의사결정은 반드시 준법감시팀의 사전 검토를 받아 G2 목표 달성에 위협이 되지 않도록 관리한다.'",
+      "citationEn": "Compliance and Ethical Governance Strategy Roadmap 2025, §2.1: 'Decisions carrying compliance risk must undergo prior review by the Compliance Office to ensure they do not threaten achievement of G2.'"
+    },
+    {
+      "goalId": "G3",
+      "sourceType": "strategy_document",
+      "documentNameKo": "2025 운영비용 효율화 실행 계획서",
+      "documentNameEn": "2025 Operating Cost Efficiency Execution Plan",
+      "ownerRole": "CFO",
+      "ownerDepartment": "재무본부",
+      "summaryKo": "벤더 합리화, 프로세스 자동화, IT 인프라 통합을 통해 운영비용을 전년 대비 10% 절감하는 것을 목표로 합니다. 매출 대비 비용 비율 0.65 미만 유지가 핵심 재무 지표입니다. 분기별 진행 현황은 CFO 주관 검토 회의에서 점검됩니다.",
+      "summaryEn": "Targets a 10% YoY reduction in operating costs through vendor rationalization, process automation, and IT infrastructure consolidation. Maintaining a cost-to-revenue ratio below 0.65 is the key financial metric. Quarterly progress is reviewed in CFO-led review meetings.",
+      "targetSummaryKo": "운영비 전년 대비 10% 절감, 매출 대비 비용 비율 0.65 미만 달성",
+      "targetSummaryEn": "10% YoY operating cost reduction and cost-to-revenue ratio below 0.65",
+      "kpis": [
+        {
+          "kpiId": "K5",
+          "nameKo": "운영비 절감률",
+          "nameEn": "Operating Cost Reduction Rate",
+          "targetKo": "전년 대비 10% 절감",
+          "targetEn": "10% reduction year-over-year"
+        },
+        {
+          "kpiId": "K6",
+          "nameKo": "매출 대비 비용 비율",
+          "nameEn": "Cost-to-Revenue Ratio",
+          "targetKo": "0.65 미만",
+          "targetEn": "Below 0.65"
+        }
+      ],
+      "citationKo": "2025 운영비용 효율화 실행 계획서, §3.4: '비용 절감 목표와 충돌하거나 예산 초과가 예상되는 의사결정은 CFO 검토를 통해 G3 목표 달성 영향도를 사전 평가하여야 한다.'",
+      "citationEn": "2025 Operating Cost Efficiency Execution Plan, §3.4: 'Decisions that conflict with cost reduction targets or are expected to exceed budget must be assessed in advance by the CFO for impact on G3 goal achievement.'"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "companyId": "mayo_central",
+  "companyName": "Mayo Central Hospital",
+  "industry": "healthcare",
+  "size": "3500+",
+  "regions": ["North America", "Europe"],
+  "signalCategories": [
+    "compliance_signal",
+    "regulatory_guidance",
+    "trend_signal"
+  ],
+  "preferredSourceTypes": [
+    "regulatory",
+    "government",
+    "healthcare_standard",
+    "industry_report"
+  ],
+  "searchThemes": {
+    "default": [
+      "HIPAA regulatory guidance enforcement 2025",
+      "healthcare data governance PHI compliance",
+      "hospital clinical technology adoption benchmark"
+    ],
+    "decisionTypes": {
+      "privacy_compliance": [
+        "PHI data handling HIPAA enforcement HHS OCR",
+        "patient data access Compliance Officer review requirement",
+        "HIPAA breach notification 60-day rule"
+      ],
+      "financial_procurement": [
+        "medical equipment FDA approval procurement standard",
+        "hospital capital equipment purchase CFO approval governance",
+        "healthcare supply chain regulatory compliance"
+      ],
+      "strategic_benchmark": [
+        "patient safety zero incident benchmark clinical technology",
+        "hospital AI clinical decision support adoption rate",
+        "Medical Director approval patient safety critical decision"
+      ],
+      "regulatory_compliance": [
+        "CMS healthcare compliance update reimbursement",
+        "Joint Commission accreditation standard 2025",
+        "HHS enforcement priority hospital 2025"
+      ],
+      "risk_compliance": [
+        "HIPAA audit trail requirement hospital",
+        "GDPR healthcare data Europe hospital compliance",
+        "PHI unauthorized disclosure penalty consequence"
+      ]
+    }
+  },
+  "governanceRuleAlignment": {
+    "R1": "financial_procurement",
+    "R2": "privacy_compliance",
+    "R3": "strategic_benchmark",
+    "R4": "strategic_benchmark",
+    "R5": "financial_procurement"
+  },
+  "strategicGoalAlignment": {
+    "G1": "strategic_benchmark",
+    "G2": "privacy_compliance",
+    "G3": "financial_procurement"
+  },
+  "fallbackSourceRegistry": "mayo_central_hospital_sources.json",
+  "signalEmphasis": ["regulatory_guidance", "compliance_signal"],
+  "notes": "Mayo Central Hospital operates under strict HIPAA and GDPR compliance (R2: Compliance Officer for any PHI/PII; R3: Medical Director for critical patient safety decisions; R5: dual CFO+Administrator for large investments). External signals should emphasize HIPAA/OCR enforcement guidance, PHI breach notification requirements, CMS clinical technology standards, and patient safety benchmarks. Strategic goal G2 (Regulatory and Data Compliance: zero unauthorized PHI disclosures) is the highest-sensitivity governance area."
+}

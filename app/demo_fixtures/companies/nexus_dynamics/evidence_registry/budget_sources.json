@@ -1,0 +1,83 @@
+{
+  "companyId": "nexus_dynamics",
+  "version": "1.0.0",
+  "budgetSources": [
+    {
+      "sourceId": "BS_DEPT_BUDGET",
+      "sourceType": "budget_sheet",
+      "documentNameKo": "부서별 연간 예산 계획서 (FY2025)",
+      "documentNameEn": "Departmental Annual Budget Plan (FY2025)",
+      "ownerRole": "CFO",
+      "summaryKo": "각 부서의 연간 승인 예산, 분기별 배분액, 잔여 예산을 기록한 내부 재무 문서입니다. 의사결정의 요청 비용이 해당 부서 잔여 예산 범위 내에 있는지 검토할 때 기준 문서로 활용됩니다.",
+      "summaryEn": "Internal financial document recording each department's approved annual budget, quarterly allocation, and remaining budget. Used as the reference document when reviewing whether a decision's requested cost falls within the department's remaining budget.",
+      "relevantFields": [
+        "cost",
+        "remaining_budget",
+        "department_budget",
+        "budget_period"
+      ],
+      "citationTemplateKo": "부서별 연간 예산 계획서(FY2025) 기준, {{department}} 부서의 잔여 예산({{remaining_budget}}원)을 감안할 때 요청 금액({{cost}}원)은 {{verdict}}입니다.",
+      "citationTemplateEn": "Per the Departmental Annual Budget Plan (FY2025), given the {{departmentEn}} department's remaining budget (KRW {{remaining_budget}}), the requested amount (KRW {{cost}}) is {{verdictEn}}."
+    },
+    {
+      "sourceId": "BS_QUARTERLY_SHEET",
+      "sourceType": "budget_sheet",
+      "documentNameKo": "분기별 예산 집행 현황표 (Q1–Q4 FY2025)",
+      "documentNameEn": "Quarterly Budget Execution Status Sheet (Q1–Q4 FY2025)",
+      "ownerRole": "재무팀장",
+      "summaryKo": "분기 단위로 집계된 예산 집행 현황 및 잔여 예산 현황을 기록한 문서입니다. 특정 분기 내 예산 소진율이 기준치를 초과할 경우 추가 지출 의사결정에 대한 CFO 검토가 요구됩니다.",
+      "summaryEn": "Document recording quarterly aggregated budget execution status and remaining budget. When quarterly budget utilization exceeds the threshold rate, CFO review is required for additional expenditure decisions.",
+      "relevantFields": [
+        "cost",
+        "quarterly_budget_utilized_pct",
+        "remaining_quarterly_budget",
+        "quarter"
+      ],
+      "citationTemplateKo": "분기별 예산 집행 현황표({{quarter}}) 기준, 현재 분기 예산 소진율은 {{quarterly_budget_utilized_pct}}%이며, 잔여 분기 예산({{remaining_quarterly_budget}}원) 대비 요청 금액({{cost}}원)은 {{verdict}}입니다.",
+      "citationTemplateEn": "Per the Quarterly Budget Execution Status Sheet ({{quarter}}), current quarter budget utilization is {{quarterly_budget_utilized_pct}}%, and the requested amount (KRW {{cost}}) relative to remaining quarterly budget (KRW {{remaining_quarterly_budget}}) is {{verdict}}."
+    },
+    {
+      "sourceId": "BS_SPEND_AUTHORITY",
+      "sourceType": "approval_matrix",
+      "documentNameKo": "지출 권한 매트릭스 (결재 전결 규정)",
+      "documentNameEn": "Spend Authority Matrix (Approval Delegation Regulations)",
+      "ownerRole": "CFO",
+      "summaryKo": "직급별 단독 지출 승인 한도를 규정한 내부 위임 전결 규정입니다. 재무팀장은 5천만원, 내부감사실장은 2억원, CFO는 10억원, CEO는 한도 없음으로 지출 권한이 설정되어 있습니다. 한도를 초과하는 지출은 상위 직급의 승인을 받아야 합니다.",
+      "summaryEn": "Internal delegated authority regulation specifying single-signatory spending approval limits by role. Limits are: Finance Manager KRW 50M, Internal Audit Director KRW 200M, CFO KRW 1B, CEO unlimited. Expenditures exceeding limits require approval from the next authority level.",
+      "relevantFields": [
+        "cost",
+        "budget_threshold",
+        "approver_role",
+        "max_budget_authority"
+      ],
+      "spendTiers": [
+        {"limit": 50000000,    "roleNameKo": "재무팀장",             "roleNameEn": "Finance Manager"},
+        {"limit": 200000000,   "roleNameKo": "내부감사실장",          "roleNameEn": "Internal Audit Director"},
+        {"limit": 1000000000,  "roleNameKo": "최고재무책임자 (CFO)",   "roleNameEn": "Chief Financial Officer (CFO)"}
+      ],
+      "citationTemplateKo": "지출 권한 매트릭스 기준, 요청 금액({{cost}}원)은 {{approver_role}}의 단독 승인 한도({{max_budget_authority}}원)를 {{verdict}}합니다.",
+      "citationTemplateEn": "Per the Spend Authority Matrix, the requested amount (KRW {{cost}}) {{verdictEn}} the {{approverRoleEn}}'s single-signatory approval limit (KRW {{max_budget_authority}})."
+    },
+    {
+      "sourceId": "BS_OPEX_BASELINE",
+      "sourceType": "finance_system",
+      "documentNameKo": "운영비용 기준선 보고서 (FY2024 실적 기반)",
+      "documentNameEn": "Operating Cost Baseline Report (Based on FY2024 Actuals)",
+      "ownerRole": "CFO",
+      "summaryKo": "FY2024 실적을 기반으로 산출된 부서별 운영비 기준선 및 절감 목표 대비 현황을 기록한 재무 시스템 보고서입니다. G3(운영비용 효율화) 목표 달성 추적의 기준 데이터로 활용됩니다. 요청 지출이 비용 절감 목표와 상충하는지 여부를 판단하는 데 사용됩니다.",
+      "summaryEn": "Finance system report recording departmental operating cost baselines derived from FY2024 actuals and current status against reduction targets. Used as baseline data for tracking G3 (Operating Cost Efficiency) goal achievement. Used to assess whether a requested expenditure conflicts with cost reduction targets.",
+      "relevantFields": [
+        "cost",
+        "opex_baseline",
+        "cost_reduction_target_pct",
+        "cost_to_revenue_ratio"
+      ],
+      "constants": {
+        "opex_baseline": 500000000,
+        "cost_reduction_target_pct": 10
+      },
+      "citationTemplateKo": "운영비용 기준선 보고서 기준, FY2024 운영비 기준선({{opex_baseline}}원) 및 G3 절감 목표({{cost_reduction_target_pct}}%) 대비 요청 비용({{cost}}원)은 {{verdict}} 수준입니다.",
+      "citationTemplateEn": "Per the Operating Cost Baseline Report, relative to the FY2024 baseline (KRW {{opex_baseline}}) and G3 reduction target ({{cost_reduction_target_pct}}%), the requested cost (KRW {{cost}}) is {{verdictEn}}."
+    }
+  ]
+}

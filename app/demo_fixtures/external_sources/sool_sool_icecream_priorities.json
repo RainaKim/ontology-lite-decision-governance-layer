@@ -1,0 +1,7 @@
+{
+    "procurement":   ["SOOL_EXT_001", "SOOL_EXT_002", "SOOL_EXT_004"],
+    "hiring":        ["SOOL_EXT_005", "SOOL_EXT_002"],
+    "new_product":   ["SOOL_EXT_003", "SOOL_EXT_001"],
+    "privacy":       ["SOOL_EXT_005"],
+    "general":       ["SOOL_EXT_001", "SOOL_EXT_002"]
+}
