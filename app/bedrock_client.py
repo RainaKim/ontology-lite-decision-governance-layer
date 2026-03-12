@@ -6,6 +6,11 @@ risk semantics (risk_evidence_llm), and scenario proposals (nova_scenario_propos
 
 Authentication: BEDROCK_API_KEY from .env — passed as Bearer token.
 System prompts use the Nova top-level "system" field (not a messages role).
+
+Extension — dependency injection:
+  Inject http_client at construction time for tests (httpx.MockTransport).
+  api_key still defaults to os.environ.get("BEDROCK_API_KEY") for production.
+  Do not inject per-method — constructor injection only.
 """
 
 from __future__ import annotations
@@ -15,11 +20,13 @@ import os
 
 import httpx
 
+from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION, BEDROCK_TIMEOUT
+
 logger = logging.getLogger(__name__)
 
-_DEFAULT_MODEL = "us.amazon.nova-2-lite-v1:0"
-_DEFAULT_REGION = "us-east-1"
-_TIMEOUT = 60.0
+_DEFAULT_MODEL = NOVA_MODEL_ID
+_DEFAULT_REGION = BEDROCK_REGION
+_TIMEOUT = BEDROCK_TIMEOUT
 
 
 class BedrockClient:

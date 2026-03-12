@@ -31,16 +31,30 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Band thresholds and confidence constants
+# ---------------------------------------------------------------------------
+
+_BAND_LOW_MAX    = 40
+_BAND_MEDIUM_MAX = 70
+_BAND_HIGH_MAX   = 85
+
+_CONF_BASE  = 0.9
+_CONF_DECAY = 0.1
+_CONF_MIN   = 0.4
+_CONF_MAX   = 0.95
+
+
+# ---------------------------------------------------------------------------
 # Band + severity helpers
 # ---------------------------------------------------------------------------
 
 def _band(score: int) -> str:
     """Map 0-100 score to risk band label."""
-    if score < 40:
+    if score < _BAND_LOW_MAX:
         return "LOW"
-    if score < 70:
+    if score < _BAND_MEDIUM_MAX:
         return "MEDIUM"
-    if score < 85:
+    if score < _BAND_HIGH_MAX:
         return "HIGH"
     return "CRITICAL"
 
@@ -1535,17 +1549,18 @@ class RiskScoringService:
         confidence_deductions: int,
     ) -> RiskAggregate:
         if not dims:
-            return RiskAggregate(score=0, band="LOW", confidence=0.4)
+            return RiskAggregate(score=0, band="LOW", confidence=_CONF_MIN)
 
-        # TODO(dev_rules §1 + /simplify smell #4): Industry detection by substring
-        # matching is fragile when `company.industry` field changes wording.
-        # Replace with a normalised company metadata key (e.g. industry_code: "healthcare")
-        # driven from company JSON config — no code change needed per new company.
-        industry = (cp.get("company", {}).get("industry") or "").lower()
-        is_healthcare = any(kw in industry for kw in
-                            ("health", "hospital", "medical", "헬스", "의료"))
-        is_public = any(kw in industry for kw in
-                        ("government", "public", "정부", "공공", "gsa"))
+        industry_code = (cp.get("company", {}).get("industry_code") or "").upper()
+        industry_text = (cp.get("company", {}).get("industry") or "").lower()
+
+        if industry_code:
+            is_healthcare = industry_code == "HEALTHCARE"
+            is_public = industry_code in ("PUBLIC_SECTOR", "GOVERNMENT")
+        else:
+            # Legacy fallback: substring matching when industry_code absent
+            is_healthcare = any(kw in industry_text for kw in ("health", "hospital", "medical", "헬스", "의료"))
+            is_public = any(kw in industry_text for kw in ("government", "public", "정부", "공공", "gsa"))
 
         default_weights: dict[str, float] = {
             "financial":   0.40,
@@ -1567,7 +1582,7 @@ class RiskScoringService:
             (active_weights[d.id] / total_w) * d.score for d in dims
         )
         agg_score = int(round(_clamp(weighted_sum, 0, 100)))
-        confidence = _clamp(0.9 - confidence_deductions * 0.1, 0.4, 0.95)
+        confidence = _clamp(_CONF_BASE - confidence_deductions * _CONF_DECAY, _CONF_MIN, _CONF_MAX)
 
         return RiskAggregate(
             score=agg_score,

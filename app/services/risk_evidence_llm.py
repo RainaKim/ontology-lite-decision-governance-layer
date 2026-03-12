@@ -23,14 +23,11 @@ For testing, pass _client to inject a mock BedrockClient::
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 from typing import Any, Optional
 
-from pydantic import ValidationError
-
 from app.schemas.risk_semantics import RiskSemantics
+from app.services.bedrock_extractor import BedrockStructuredExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -146,47 +143,24 @@ def infer_risk_semantics(
     Never raises.  Failures are logged at DEBUG/WARNING level.
     """
     try:
-        client = _client or _make_client()
-        if client is None:
-            logger.debug("infer_risk_semantics: no API key configured — skipping")
-            return None
-
         user_content = _USER_TEMPLATE.format(
             decision_text=decision_text[:3000],  # truncate to avoid token overflow
             goals_block=_build_goals_block(company_summary),
             rules_block=_build_rules_block(triggered_rules_summary),
         )
 
-        raw = client.invoke(user_content, system_prompt=_SYSTEM_PROMPT)
-        logger.debug(f"infer_risk_semantics raw response ({len(raw)} chars): {raw[:200]}")
-
-        parsed = json.loads(raw)
-        semantics = RiskSemantics.model_validate(parsed)
+        semantics = BedrockStructuredExtractor(_client=_client).extract(
+            user_content, RiskSemantics, system_prompt=_SYSTEM_PROMPT
+        )
+        if semantics is None:
+            logger.debug("infer_risk_semantics: extractor returned None — skipping")
+            return None
         logger.info(
             f"infer_risk_semantics: {len(semantics.goal_impacts)} goal_impacts, "
             f"global_confidence={semantics.global_confidence:.2f}"
         )
         return semantics
 
-    except json.JSONDecodeError as e:
-        logger.warning(f"infer_risk_semantics: JSON parse failed — {e}")
-        return None
-    except ValidationError as e:
-        logger.warning(f"infer_risk_semantics: Pydantic validation failed — {e}")
-        return None
     except Exception as e:
         logger.warning(f"infer_risk_semantics: unexpected error — {e}")
-        return None
-
-
-def _make_client():
-    """Return a BedrockClient if BEDROCK_API_KEY is set, else None."""
-    api_key = os.environ.get("BEDROCK_API_KEY")
-    if not api_key:
-        return None
-    try:
-        from app.bedrock_client import BedrockClient
-        return BedrockClient()
-    except Exception as e:
-        logger.warning(f"infer_risk_semantics: failed to create BedrockClient — {e}")
         return None
