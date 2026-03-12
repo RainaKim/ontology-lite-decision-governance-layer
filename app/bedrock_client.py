@@ -15,11 +15,13 @@ import os
 
 import httpx
 
+from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION, BEDROCK_TIMEOUT
+
 logger = logging.getLogger(__name__)
 
-_DEFAULT_MODEL = "us.amazon.nova-2-lite-v1:0"
-_DEFAULT_REGION = "us-east-1"
-_TIMEOUT = 60.0
+_DEFAULT_MODEL = NOVA_MODEL_ID
+_DEFAULT_REGION = BEDROCK_REGION
+_TIMEOUT = BEDROCK_TIMEOUT
 
 
 class BedrockClient:
