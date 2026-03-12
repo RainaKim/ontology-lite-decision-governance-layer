@@ -17,9 +17,10 @@ Design principles:
 
 import json
 import logging
+import operator
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -384,29 +385,41 @@ def _normalize_approval(entry: dict) -> dict:
 
 # ── Trigger evaluation helpers ───────────────────────────────────────────────
 
+_TRIGGER_OPS: dict[str, Callable] = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    ">":  operator.gt,
+    "<":  operator.lt,
+    ">=": operator.ge,
+    "<=": operator.le,
+}
+
+
 def _eval_trigger_condition(trigger: dict, decision_payload: dict) -> bool:
     """
     Evaluate a single trigger condition against the decision payload.
 
-    Supports operators: ">" (numeric greater-than) and "==" (equality, default).
+    Operator dispatch driven by _TRIGGER_OPS. Numeric operators cast to float;
+    equality/inequality compare as-is. Unknown operators return False safely.
     Returns False when the payload field is absent or a type conversion fails.
     """
     field = trigger.get("triggerField")
     if not field:
         return False
     expected = trigger.get("triggerValue")
-    operator = trigger.get("triggerOperator", "==")
+    op_key = trigger.get("triggerOperator", "==")
     actual = decision_payload.get(field)
-
-    if operator == ">":
-        if actual is None:
-            return False
-        try:
-            return float(actual) > float(expected)
-        except (TypeError, ValueError):
-            return False
-    # Default: equality
-    return actual == expected
+    if actual is None:
+        return False
+    op_fn = _TRIGGER_OPS.get(op_key)
+    if op_fn is None:
+        return False  # unknown operator: safe default
+    try:
+        if op_key in ("==", "!="):
+            return op_fn(actual, expected)
+        return op_fn(float(actual), float(expected))
+    except (TypeError, ValueError):
+        return False
 
 
 def _build_budget_runtime_meta(entry: dict, cost: Optional[float]) -> dict:
