@@ -12,14 +12,18 @@ Design principles:
 - Registry-driven: all evidence traces to a named internal document + section
 - Role resolution is data-driven: alias table built from each company's approval_sources.json
 - Safe: missing entries return None or empty list, never raise in assembly methods
+
+Extension: config tables (e.g. _TRIGGER_OPS) use structural dispatch only — see
+external_signal_service.py config table rules before adding new dispatch entries.
 - Cached: each company registry is loaded from disk once per process lifetime
 """
 
 import json
 import logging
+import operator
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -384,29 +388,43 @@ def _normalize_approval(entry: dict) -> dict:
 
 # ── Trigger evaluation helpers ───────────────────────────────────────────────
 
+_TRIGGER_OPS: dict[str, Callable] = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    ">":  operator.gt,
+    "<":  operator.lt,
+    ">=": operator.ge,
+    "<=": operator.le,
+}
+
+
 def _eval_trigger_condition(trigger: dict, decision_payload: dict) -> bool:
     """
     Evaluate a single trigger condition against the decision payload.
 
-    Supports operators: ">" (numeric greater-than) and "==" (equality, default).
+    Operator dispatch driven by _TRIGGER_OPS. Numeric operators cast to float;
+    equality/inequality compare as-is. Unknown operators return False safely.
     Returns False when the payload field is absent or a type conversion fails.
     """
     field = trigger.get("triggerField")
     if not field:
         return False
     expected = trigger.get("triggerValue")
-    operator = trigger.get("triggerOperator", "==")
+    op_key = trigger.get("triggerOperator", "==")
     actual = decision_payload.get(field)
 
-    if operator == ">":
+    op_fn = _TRIGGER_OPS.get(op_key)
+    if op_fn is None:
+        return False
+
+    if op_key in (">", "<", ">=", "<="):
         if actual is None:
             return False
         try:
-            return float(actual) > float(expected)
+            return op_fn(float(actual), float(expected))
         except (TypeError, ValueError):
             return False
-    # Default: equality
-    return actual == expected
+    return op_fn(actual, expected)
 
 
 def _build_budget_runtime_meta(entry: dict, cost: Optional[float]) -> dict:

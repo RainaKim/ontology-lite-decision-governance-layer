@@ -12,7 +12,6 @@ Architecture contract:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Optional
@@ -25,13 +24,14 @@ from app.schemas.nova_scenarios import (
     NovaScenarioProposal,
     NovaScenarioResponse,
 )
+from app.utils.llm_utils import extract_json
+from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION
 
 logger = logging.getLogger(__name__)
 
-# Bedrock model ID as specified
-_MODEL_ID = "us.amazon.nova-2-lite-v1:0"
+_MODEL_ID = NOVA_MODEL_ID
 _MAX_TOKENS = 1024
-_REGION = "us-east-1"
+_REGION = BEDROCK_REGION
 
 # Bedrock Runtime REST endpoint — API key passed as Bearer token
 _BEDROCK_ENDPOINT = (
@@ -112,24 +112,6 @@ def propose_scenarios_with_nova(
         return None
 
 
-# ── Formatters ────────────────────────────────────────────────────────────────
-
-def _fmt_krw(amount) -> str:
-    """Format KRW amount as Korean string so Nova doesn't attempt its own conversion."""
-    if amount is None:
-        return "미정"
-    v = int(amount)
-    awk = v // 100_000_000
-    man = (v % 100_000_000) // 10_000
-    if awk > 0 and man > 0:
-        return f"{awk}억 {man:,}만 원"
-    if awk > 0:
-        return f"{awk}억 원"
-    if man > 0:
-        return f"{man:,}만 원"
-    return f"{v:,}원"
-
-
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
 def _build_prompt(decision: dict, governance_result: dict, risk_scoring: dict) -> str:
@@ -150,7 +132,7 @@ def _build_prompt(decision: dict, governance_result: dict, risk_scoring: dict) -
     return _PROMPT_TEMPLATE.format(
         allowed_templates="\n".join(f"- {t}" for t in sorted(ALLOWED_TEMPLATE_IDS)),
         statement=decision.get("decision_statement", ""),
-        cost=_fmt_krw(decision.get("cost")),
+        cost=decision.get("cost"),
         uses_pii=decision.get("uses_pii"),
         strategic_impact=decision.get("strategic_impact"),
         triggered_rules=", ".join(triggered) if triggered else "없음",
@@ -216,19 +198,9 @@ def _parse_and_validate(
     Returns filtered list (may be shorter than input) or None if nothing
     valid remains after filtering.
     """
-    # Strip markdown code fences if present
-    text = raw.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(
-            line for line in lines
-            if not line.startswith("```")
-        ).strip()
-
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        logger.warning(f"[nova] JSON parse failed: {exc} — using fallback scenarios")
+    data = extract_json(raw)
+    if data is None:
+        logger.warning("[nova] JSON parse failed — using fallback scenarios")
         return None
 
     try:

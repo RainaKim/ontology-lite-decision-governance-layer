@@ -1,5 +1,6 @@
 # Single source of truth for company ID → rules file and profile aliases.
 # Add a new row here when onboarding a new company — no other code changes needed.
+# See bedrock_config.py for general config module rules.
 
 COMPANY_RULES_FILES: dict[str, dict[str, str]] = {
     "nexus_dynamics": {
