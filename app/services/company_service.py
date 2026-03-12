@@ -14,22 +14,20 @@ from pathlib import Path
 from typing import Optional
 
 from app.schemas.responses import CompanySummaryResponse, CompanyDetailResponse
+from app.config.company_registry import COMPANY_RULES_FILES as _REGISTRY_BY_COMPANY
 
 logger = logging.getLogger(__name__)
 
 # ── Company registry ─────────────────────────────────────────────────────────
-# Maps lang → company_id → JSON file path
+# Derived from single source of truth in app/config/company_registry.py
+# Restructured to lang → company_id → filename for backward-compatible iteration
 _REGISTRY: dict[str, dict[str, str]] = {
-    "ko": {
-        "nexus_dynamics": "mock_company.json",
-        "mayo_central": "mock_company_healthcare.json",
-        "sool_sool_icecream": "sool_sool_icecream_company.json",
-    },
-    "en": {
-        "nexus_dynamics": "mock_company_en.json",
-        "mayo_central": "mock_company_healthcare_en.json",
-        "sool_sool_icecream": "sool_sool_icecream_company_en.json",
-    },
+    lang: {
+        company_id: files[lang]
+        for company_id, files in _REGISTRY_BY_COMPANY.items()
+        if lang in files
+    }
+    for lang in ("ko", "en")
 }
 
 _cache: dict[str, dict] = {}           # key: "{lang}:{company_id}"

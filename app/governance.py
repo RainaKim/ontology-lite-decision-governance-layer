@@ -71,11 +71,8 @@ class GovernanceResult:
         }
 
 
-_COMPANY_RULES_FILES: dict[str, dict[str, str]] = {
-    "nexus_dynamics":     {"ko": "mock_company.json",              "en": "mock_company_en.json"},
-    "mayo_central":       {"ko": "mock_company_healthcare.json",   "en": "mock_company_healthcare_en.json"},
-    "sool_sool_icecream": {"ko": "sool_sool_icecream_company.json","en": "sool_sool_icecream_company_en.json"},
-}
+from app.config.company_registry import COMPANY_RULES_FILES as _COMPANY_RULES_FILES
+
 _DEFAULT_RULES_FILE = "mock_company.json"
 
 
