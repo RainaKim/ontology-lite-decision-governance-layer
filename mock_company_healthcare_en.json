@@ -2,6 +2,7 @@
   "company": {
     "name": "Mayo Central Hospital",
     "industry": "Healthcare",
+    "industry_code": "HEALTHCARE",
     "size": "3,500+ employees",
     "regions": ["North America", "Europe"]
   },

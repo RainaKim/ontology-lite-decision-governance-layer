@@ -3,6 +3,7 @@
     "id": "sool_sool_icecream",
     "name": "Sool Sool Ice Cream",
     "industry": "Food & Beverage",
+    "industry_code": "FOOD_SERVICE",
     "governance_framework": "SMB Food Operations Governance",
     "size": "25 employees",
     "regions": ["South Korea (HQ)", "New York, United States", "Online sales (US market)"]

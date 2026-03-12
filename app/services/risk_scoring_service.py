@@ -1551,15 +1551,16 @@ class RiskScoringService:
         if not dims:
             return RiskAggregate(score=0, band="LOW", confidence=_CONF_MIN)
 
-        # TODO(dev_rules §1 + /simplify smell #4): Industry detection by substring
-        # matching is fragile when `company.industry` field changes wording.
-        # Replace with a normalised company metadata key (e.g. industry_code: "healthcare")
-        # driven from company JSON config — no code change needed per new company.
-        industry = (cp.get("company", {}).get("industry") or "").lower()
-        is_healthcare = any(kw in industry for kw in
-                            ("health", "hospital", "medical", "헬스", "의료"))
-        is_public = any(kw in industry for kw in
-                        ("government", "public", "정부", "공공", "gsa"))
+        industry_code = (cp.get("company", {}).get("industry_code") or "").upper()
+        industry_text = (cp.get("company", {}).get("industry") or "").lower()
+
+        if industry_code:
+            is_healthcare = industry_code == "HEALTHCARE"
+            is_public = industry_code in ("PUBLIC_SECTOR", "GOVERNMENT")
+        else:
+            # Legacy fallback: substring matching when industry_code absent
+            is_healthcare = any(kw in industry_text for kw in ("health", "hospital", "medical", "헬스", "의료"))
+            is_public = any(kw in industry_text for kw in ("government", "public", "정부", "공공", "gsa"))
 
         default_weights: dict[str, float] = {
             "financial":   0.40,

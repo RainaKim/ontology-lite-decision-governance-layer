@@ -2,6 +2,7 @@
   "company": {
     "name": "Mayo Central Hospital",
     "industry": "헬스케어",
+    "industry_code": "HEALTHCARE",
     "size": "3,500명 이상",
     "regions": ["북미", "유럽"]
   },
