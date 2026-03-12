@@ -1,0 +1,82 @@
+{
+  "companyId": "sool_sool_icecream",
+  "version": "1.0.0",
+  "strategySources": [
+    {
+      "goalId": "G1",
+      "sourceType": "strategy_document",
+      "documentNameKo": "2025 매출 성장 전략 계획서",
+      "documentNameEn": "2025 Revenue Growth Strategy Plan",
+      "ownerRole": "CEO",
+      "ownerDepartment": "경영",
+      "summaryKo": "SNS 기반 브랜드 마케팅과 신제품 출시를 중심으로 연 매출 30% 성장을 목표로 합니다. 뉴욕 매장 판매와 온라인 채널 확장을 통해 신규 고객 30%를 확보하고, 월 매출을 20% 이상 증가시키는 것이 핵심 실행 과제입니다. 모든 주요 구매 및 운영 결정은 본 성장 목표와의 정합성을 사전 검토해야 합니다.",
+      "summaryEn": "Targets 30% annual revenue growth centered on SNS-based brand marketing and new product launches. Acquiring 30% new customers through New York store sales and online channel expansion, and increasing monthly revenue by 20% or more, are the key execution priorities. All major purchase and operational decisions must be pre-reviewed for alignment with this growth goal.",
+      "targetSummaryKo": "연 매출 30% 성장, 월 매출 20% 증가, 신규 고객 비율 30% 확보",
+      "targetSummaryEn": "30% annual revenue growth, 20% monthly revenue increase, 30% new customer acquisition",
+      "kpis": [
+        {
+          "kpiId": "K1",
+          "nameKo": "월 매출 성장률",
+          "nameEn": "Monthly Revenue Growth Rate",
+          "targetKo": "전월 대비 20% 증가",
+          "targetEn": "20% increase month-over-month"
+        },
+        {
+          "kpiId": "K2",
+          "nameKo": "신규 고객 비율",
+          "nameEn": "New Customer Acquisition Rate",
+          "targetKo": "전체 고객 중 신규 고객 30% 확보",
+          "targetEn": "30% of total customers to be newly acquired"
+        }
+      ],
+      "citationKo": "2025 매출 성장 전략 계획서, §1.2: '모든 주요 구매 및 운영 의사결정은 G1 매출 성장 목표와의 정합성을 사전 검토받아야 한다.'",
+      "citationEn": "2025 Revenue Growth Strategy Plan, §1.2: 'All major purchase and operational decisions must be pre-reviewed for alignment with the G1 revenue growth goal.'"
+    },
+    {
+      "goalId": "G2",
+      "sourceType": "strategy_document",
+      "documentNameKo": "2025 제품 혁신 로드맵",
+      "documentNameEn": "2025 Product Innovation Roadmap",
+      "ownerRole": "R&D 리드",
+      "ownerDepartment": "R&D",
+      "summaryKo": "분기마다 새로운 아이스크림 맛을 출시하여 제품 경쟁력을 높이는 것을 목표로 합니다. 고객 선호도 트렌드, 경쟁사 분석, 브랜드 철학과의 정합성을 기반으로 신제품 후보를 선정합니다. 원재료 조달 가능성과 적정 가격의 공급 벤더 확보가 신제품 출시의 전제 조건입니다.",
+      "summaryEn": "Targets quarterly new ice cream flavor launches to strengthen product competitiveness. New product candidates are selected based on customer preference trends, competitor analysis, and alignment with brand philosophy. Ingredient sourcing availability and securing vendors at appropriate prices are prerequisites for new product launches.",
+      "targetSummaryKo": "분기당 신규 맛 최소 1개 출시, 연간 4개 이상 신제품 라인업 확보",
+      "targetSummaryEn": "Minimum 1 new flavor launch per quarter, securing an annual lineup of 4 or more new products",
+      "kpis": [
+        {
+          "kpiId": "K3",
+          "nameKo": "신제품 출시 수",
+          "nameEn": "New Product Launch Count",
+          "targetKo": "분기당 최소 1개 신규 맛 출시",
+          "targetEn": "Minimum 1 new flavor launch per quarter"
+        }
+      ],
+      "citationKo": "2025 제품 혁신 로드맵, §2.1: '신규 제품 개발 의사결정은 G2 목표 달성을 위해 R&D 리드의 검토와 마케팅 트렌드 정합성 확인을 거쳐야 한다.'",
+      "citationEn": "2025 Product Innovation Roadmap, §2.1: 'New product development decisions must undergo R&D Lead review and marketing trend alignment verification to achieve the G2 goal.'"
+    },
+    {
+      "goalId": "G3",
+      "sourceType": "strategy_document",
+      "documentNameKo": "2025 운영 비용 안정화 실행 계획서",
+      "documentNameEn": "2025 Operational Cost Stabilization Execution Plan",
+      "ownerRole": "재무 담당",
+      "ownerDepartment": "Finance",
+      "summaryKo": "재고 관리 최적화와 공급망 효율화를 통해 운영비를 안정적으로 유지하는 것을 목표로 합니다. 재고 회전율 월 2회 이상 유지를 핵심 지표로 설정하여 과잉 재고에 따른 현금 잠김과 폐기 손실을 방지합니다. 모든 구매 결정은 현금 흐름 계획에 미치는 영향을 사전 검토해야 합니다.",
+      "summaryEn": "Targets stable operating cost maintenance through inventory management optimization and supply chain efficiency. Monthly inventory turnover of at least 2 times is set as the key metric to prevent cash lock-up from excess inventory and disposal losses. All purchase decisions must pre-assess their impact on the cash-flow plan.",
+      "targetSummaryKo": "재고 회전율 월 2회 이상 유지, 불필요한 재고 폐기 손실 최소화",
+      "targetSummaryEn": "Maintain monthly inventory turnover of 2 or more, minimize unnecessary inventory disposal losses",
+      "kpis": [
+        {
+          "kpiId": "K4",
+          "nameKo": "재고 회전율",
+          "nameEn": "Inventory Turnover Rate",
+          "targetKo": "월 2회 이상",
+          "targetEn": "2 or more times per month"
+        }
+      ],
+      "citationKo": "2025 운영 비용 안정화 실행 계획서, §3.2: '재고 또는 구매에 영향을 미치는 의사결정은 G3 목표와의 충돌 여부를 사전 검토해야 하며, 재고 회전율에 부정적 영향을 줄 수 있는 결정은 재무 담당의 검토를 받아야 한다.'",
+      "citationEn": "2025 Operational Cost Stabilization Execution Plan, §3.2: 'Decisions affecting inventory or procurement must be pre-reviewed for conflict with the G3 goal; decisions with potential negative impact on inventory turnover rate must be reviewed by the Finance Manager.'"
+    }
+  ]
+}

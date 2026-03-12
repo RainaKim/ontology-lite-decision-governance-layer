@@ -1,0 +1,7 @@
+{
+    "privacy":       ["MAYO_EXT_001", "MAYO_EXT_002", "MAYO_EXT_005"],
+    "procurement":   ["MAYO_EXT_003", "MAYO_EXT_004"],
+    "hiring":        ["MAYO_EXT_001", "MAYO_EXT_003"],
+    "strategic":     ["MAYO_EXT_004", "MAYO_EXT_003"],
+    "general":       ["MAYO_EXT_001", "MAYO_EXT_004"]
+}

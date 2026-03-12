@@ -1,0 +1,65 @@
+{
+  "companyId": "mayo_central",
+  "version": "1.0.0",
+  "budgetSources": [
+    {
+      "sourceId": "BS_DEPT_BUDGET",
+      "sourceType": "budget_sheet",
+      "documentNameKo": "부서별 의료비 예산 계획서 (FY2025)",
+      "documentNameEn": "Departmental Medical Budget Plan (FY2025)",
+      "ownerRole": "최고재무책임자",
+      "summaryKo": "각 진료과 및 지원 부서의 연간 승인 예산, 분기별 배분액, 잔여 예산을 기록한 내부 재무 문서입니다. 의사결정의 요청 비용이 해당 부서 잔여 예산 범위 내에 있는지 검토할 때 기준 문서로 활용됩니다.",
+      "summaryEn": "Internal financial document recording each clinical department and support division's approved annual budget, quarterly allocation, and remaining budget. Used as the reference document when reviewing whether a decision's requested cost falls within the department's remaining budget.",
+      "relevantFields": [
+        "cost",
+        "remaining_budget",
+        "department_budget",
+        "budget_period"
+      ],
+      "citationTemplateKo": "부서별 의료비 예산 계획서(FY2025) 기준, {{department}} 부서의 잔여 예산({{remaining_budget}}원)을 감안할 때 요청 금액({{cost}}원)은 {{verdict}}입니다.",
+      "citationTemplateEn": "Per the Departmental Medical Budget Plan (FY2025), given the {{departmentEn}} department's remaining budget (KRW {{remaining_budget}}), the requested amount (KRW {{cost}}) is {{verdictEn}}."
+    },
+    {
+      "sourceId": "BS_SPEND_AUTHORITY",
+      "sourceType": "approval_matrix",
+      "documentNameKo": "의료기관 지출 권한 매트릭스 (결재 전결 규정)",
+      "documentNameEn": "Healthcare Institution Spend Authority Matrix (Approval Delegation Regulations)",
+      "ownerRole": "최고재무책임자",
+      "summaryKo": "직급별 단독 지출 승인 한도를 규정한 내부 위임 전결 규정입니다. 재무팀장은 5천만원, CFO는 5억원, 병원장은 한도 없음으로 지출 권한이 설정되어 있습니다. 한도를 초과하는 지출은 상위 직급의 승인을 받아야 합니다.",
+      "summaryEn": "Internal delegated authority regulation specifying single-signatory spending approval limits by role. Limits are: Finance Team Lead KRW 50M, CFO KRW 500M, Hospital Administrator unlimited. Expenditures exceeding limits require approval from the next authority level.",
+      "relevantFields": [
+        "cost",
+        "budget_threshold",
+        "approver_role",
+        "max_budget_authority"
+      ],
+      "spendTiers": [
+        {"limit": 50000000,   "roleNameKo": "재무팀장",         "roleNameEn": "Finance Team Lead"},
+        {"limit": 500000000,  "roleNameKo": "최고재무책임자",    "roleNameEn": "Chief Financial Officer (CFO)"}
+      ],
+      "citationTemplateKo": "의료기관 지출 권한 매트릭스 기준, 요청 금액({{cost}}원)은 {{approver_role}}의 단독 승인 한도({{max_budget_authority}}원)를 {{verdict}}합니다.",
+      "citationTemplateEn": "Per the Healthcare Institution Spend Authority Matrix, the requested amount (KRW {{cost}}) {{verdictEn}} the {{approverRoleEn}}'s single-signatory approval limit (KRW {{max_budget_authority}})."
+    },
+    {
+      "sourceId": "BS_OPEX_BASELINE",
+      "sourceType": "finance_system",
+      "documentNameKo": "환자당 운영비 기준선 보고서 (FY2024 실적 기반)",
+      "documentNameEn": "Cost-per-Patient Operating Baseline Report (Based on FY2024 Actuals)",
+      "ownerRole": "최고재무책임자",
+      "summaryKo": "FY2024 실적을 기반으로 산출된 부서별 환자당 운영비 기준선 및 G3 절감 목표 대비 현황을 기록한 재무 시스템 보고서입니다. G3(운영 및 재무 효율화) 목표 달성 추적의 기준 데이터로 활용됩니다. 요청 지출이 환자당 비용 절감 목표와 상충하는지 여부를 판단하는 데 사용됩니다.",
+      "summaryEn": "Finance system report recording departmental cost-per-patient baselines derived from FY2024 actuals and current status against G3 reduction targets. Used as baseline data for tracking G3 (Operational and Financial Efficiency) goal achievement. Used to assess whether a requested expenditure conflicts with the cost-per-patient reduction target.",
+      "relevantFields": [
+        "cost",
+        "opex_baseline",
+        "cost_reduction_target_pct",
+        "cost_per_patient"
+      ],
+      "constants": {
+        "opex_baseline": 1000000000,
+        "cost_reduction_target_pct": 12
+      },
+      "citationTemplateKo": "환자당 운영비 기준선 보고서 기준, FY2024 운영비 기준선({{opex_baseline}}원) 및 G3 절감 목표({{cost_reduction_target_pct}}%) 대비 요청 비용({{cost}}원)은 {{verdict}} 수준입니다.",
+      "citationTemplateEn": "Per the Cost-per-Patient Operating Baseline Report, relative to the FY2024 baseline (KRW {{opex_baseline}}) and G3 reduction target ({{cost_reduction_target_pct}}%), the requested cost (KRW {{cost}}) is {{verdictEn}}."
+    }
+  ]
+}

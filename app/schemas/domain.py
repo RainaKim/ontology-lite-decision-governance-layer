@@ -44,14 +44,18 @@ class KPI(BaseModel):
 class Risk(BaseModel):
     """Potential failure vector or constraint."""
     description: str = Field(..., min_length=3, max_length=500)
+    description_en: Optional[str] = Field(None, description="English translation of description; always in English regardless of input language")
     severity: Optional[str] = Field(None, description="Low/Medium/High/Critical")
     mitigation: Optional[str] = Field(None, description="How to address this risk")
+    risk_type: Optional[str] = Field(None, description="Structured risk category: 'budget_overrun' | 'compliance' | 'operational' | 'strategic' | 'other'")
 
 
 class Owner(BaseModel):
     """Accountable individual or role."""
     name: str = Field(..., min_length=2, max_length=200)
     role: Optional[str] = Field(None, description="Job title or functional role")
+    name_en: Optional[str] = Field(None, description="English transliteration or translation of name; null if already English")
+    role_en: Optional[str] = Field(None, description="English translation of role title; null if already English")
     responsibility: Optional[str] = Field(None, description="Specific accountability")
 
 
@@ -67,6 +71,8 @@ class ApprovalChainStep(BaseModel):
     role: str = Field(..., description="Specific role or title")
     required: bool = Field(default=True, description="Is this approval mandatory")
     rationale: Optional[str] = Field(None, description="Why this approval is needed")
+    source_rule_id: Optional[str] = Field(None, description="ID of the governance rule that triggered this approval requirement")
+    rule_action: Optional[str] = Field(None, description="Rule action type: require_approval | require_review | require_goal_mapping")
 
 
 class Decision(BaseModel):
@@ -101,9 +107,8 @@ class Decision(BaseModel):
     )
 
     owners: list[Owner] = Field(
-        ...,
-        min_length=1,
-        description="Accountable roles (at least one required)"
+        default_factory=list,
+        description="Accountable roles (empty if not stated in input)"
     )
 
     required_approvals: list[str] = Field(
@@ -121,6 +126,56 @@ class Decision(BaseModel):
         ge=0.0,
         le=1.0,
         description="Extraction reliability score (0-1)"
+    )
+
+    # Governance rule fields — extracted by LLM so rules can evaluate them
+    counterparty_relation: Optional[str] = Field(
+        None,
+        description="'related_party' if decision involves subsidiaries, affiliates, or related entities; null otherwise"
+    )
+    policy_change_type: Optional[str] = Field(
+        None,
+        description="'retroactive' if decision involves retroactive policy changes; null otherwise"
+    )
+    uses_pii: Optional[bool] = Field(
+        None,
+        description="true if the decision involves processing, sharing, or exposing personal/customer data (PII); null otherwise"
+    )
+    cost: Optional[float] = Field(
+        None,
+        description="Primary financial commitment in full numeric form (e.g. 250000000 for 2.5억 원, 3500000 for $3.5M); null if no financial commitment stated. When inferred from domain knowledge (e.g. MRI equipment), use the UPPER BOUND of the typical market range for conservative governance evaluation."
+    )
+    cost_estimate_range: Optional[str] = Field(
+        None,
+        description="Human-readable cost range when cost is inferred from domain knowledge rather than explicitly stated (e.g. '$1.5M-$3.5M (typical MRI equipment)'); null if cost was explicitly stated in the input text"
+    )
+    target_market: Optional[str] = Field(
+        None,
+        description="Target market or region if explicitly mentioned (e.g. 'North America', 'EU', '북미'); null otherwise"
+    )
+    launch_date: Optional[bool] = Field(
+        None,
+        description="true if the decision involves a product launch, service deployment, or release; null otherwise"
+    )
+    involves_hiring: Optional[bool] = Field(
+        None,
+        description="true if the decision involves hiring, onboarding, or significant headcount change; null otherwise"
+    )
+    involves_compliance_risk: Optional[bool] = Field(
+        None,
+        description="true if the decision explicitly involves anti-bribery risk, ethics code violation, entertainment/gift policy breach, or similar compliance/integrity concerns; null otherwise"
+    )
+    remaining_budget: Optional[float] = Field(
+        None,
+        description="Available/remaining departmental budget in full numeric form (e.g. 50000000 for 5,000만 원, 100000 for $100K); null if not stated in the input text"
+    )
+    department: Optional[str] = Field(
+        None,
+        description="The organizational department or business unit requesting or owning this decision (e.g. '마케팅팀', 'Marketing', 'R&D'); null if not stated"
+    )
+    headcount_change: Optional[int] = Field(
+        None,
+        description="Net number of people being hired (positive) or reduced (negative); null if not stated"
     )
 
     # Governance-ready fields (optional, Day 3+ usage)
@@ -166,7 +221,7 @@ class DecisionExtractionRequest(BaseModel):
 
 
 class DecisionExtractionResponse(BaseModel):
-    """Response from decision extraction endpoint."""
+    """Response from decision extraction endpoint with deterministic governance evaluation."""
     decision: Decision
     extraction_metadata: dict = Field(
         default_factory=dict,
@@ -175,6 +230,34 @@ class DecisionExtractionResponse(BaseModel):
     governance_applied: bool = Field(
         default=False,
         description="Whether governance rules were evaluated"
+    )
+    approval_chain: list[dict] = Field(
+        default_factory=list,
+        description="Required approval chain based on governance rules"
+    )
+    flags: list[str] = Field(
+        default_factory=list,
+        description="Governance flags (warnings/issues) identified"
+    )
+    triggered_rules: list[dict] = Field(
+        default_factory=list,
+        description="List of governance rules that were triggered"
+    )
+    requires_human_review: bool = Field(
+        default=False,
+        description="Whether human review is required before proceeding"
+    )
+    governance_status: str = Field(
+        default="needs_approval",
+        description="Final governance status: approved, needs_approval, blocked"
+    )
+    derived_attributes: dict = Field(
+        default_factory=dict,
+        description="Deterministically derived attributes (budget, EU scope, PII usage, etc.)"
+    )
+    completeness_issues: list[str] = Field(
+        default_factory=list,
+        description="List of completeness issues (missing fields)"
     )
 
 

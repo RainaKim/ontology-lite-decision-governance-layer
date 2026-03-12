@@ -1,0 +1,38 @@
+{
+  "companyId": "nexus_dynamics",
+  "version": "1.0.0",
+  "availableSources": {
+    "policies": "evidence_registry/policies.json",
+    "strategy": "evidence_registry/strategy_sources.json",
+    "budget": "evidence_registry/budget_sources.json",
+    "approvals": "evidence_registry/approval_sources.json"
+  },
+  "supportedRuleIds": ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"],
+  "supportedGoalIds": ["G1", "G2", "G3"],
+  "supportedRoles": [
+    "CEO",
+    "CFO",
+    "CCO",
+    "CISO",
+    "INTERNAL_AUDIT_DIRECTOR",
+    "HR_MANAGER",
+    "FINANCE_MANAGER"
+  ],
+  "roleKeyMapping": {
+    "CEO": "ceo_001",
+    "CFO": "cfo_001",
+    "CCO": "cco_001",
+    "CISO": "ciso_001",
+    "INTERNAL_AUDIT_DIRECTOR": "audit_001",
+    "HR_MANAGER": "hr_mgr_001",
+    "FINANCE_MANAGER": "finance_mgr_001"
+  },
+  "budgetSourceIds": [
+    "BS_DEPT_BUDGET",
+    "BS_QUARTERLY_SHEET",
+    "BS_SPEND_AUTHORITY",
+    "BS_OPEX_BASELINE"
+  ],
+  "notesKo": "본 레지스트리는 넥서스 다이나믹스의 내부 거버넌스 증거 출처를 구조화한 메타데이터 인덱스입니다. 런타임 추론이나 시나리오별 출력값을 포함하지 않습니다. 거버넌스 설명 생성 시 evidence_registry_service가 이 인덱스를 통해 해당 출처를 조회합니다.",
+  "notesEn": "This registry is a structured metadata index of internal governance evidence sources for Nexus Dynamics. It does not contain runtime reasoning or scenario-specific outputs. The evidence_registry_service uses this index to look up the relevant source when generating governance explanations."
+}
