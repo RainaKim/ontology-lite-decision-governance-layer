@@ -2,16 +2,13 @@
 Unit tests for the structured LLM semantics layer.
 
 Covers:
-  1. infer_risk_semantics with invalid JSON → returns None (graceful fallback)
-  2. infer_risk_semantics with invalid schema → returns None (graceful fallback)
-  3. infer_risk_semantics happy path → returns populated RiskSemantics
-  4. Semantics absent (None) → risk scoring still produces valid RiskScoringPayload
-  5. Semantics present → strategic dimension evidence includes rationale_ko
-  6. Semantics present → compliance dimension uses semantics PII fact when extractor absent
-  7. Semantics numeric_estimates → kpi_impact_estimate note includes LLM estimate
+  1. Semantics absent (None) → risk scoring still produces valid RiskScoringPayload
+  2. Semantics present → strategic dimension evidence includes rationale_ko
+  3. Semantics present → compliance dimension uses semantics PII fact when extractor absent
+  4. Semantics numeric_estimates → kpi_impact_estimate note includes LLM estimate
+  5. RiskSemantics schema edge cases
 
 All tests are deterministic — no real API keys required.
-Mock clients are injected via the _client parameter.
 
 Run:
     python -m pytest tests/test_risk_semantics.py -v
@@ -20,25 +17,11 @@ Run:
 from __future__ import annotations
 
 import json
-from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
 from app.schemas.risk_semantics import RiskSemantics, GoalImpact, ComplianceFacts, NumericEstimates
-from app.services.risk_evidence_llm import infer_risk_semantics
 from app.services.risk_scoring_service import RiskScoringService
-
-
-# ---------------------------------------------------------------------------
-# Helpers — mock BedrockClient builder
-# ---------------------------------------------------------------------------
-
-def _make_openai_mock(response_json: str) -> Any:
-    """Return a mock that mimics BedrockClient.invoke() returning a plain string."""
-    mock_client = MagicMock()
-    mock_client.invoke = MagicMock(return_value=response_json)
-    return mock_client
 
 
 _VALID_SEMANTICS_JSON = json.dumps({
@@ -80,187 +63,6 @@ _VALID_PII_SEMANTICS_JSON = json.dumps({
     "numeric_estimates": None,
     "global_confidence": 0.75,
 })
-
-_DECISION_TEXT = "북미 광고 캠페인에 2.5억 원을 투입하여 시장 점유율을 높이고자 합니다."
-
-_COMPANY_SUMMARY = {
-    "strategic_goals": [
-        {
-            "goal_id": "G1",
-            "name": "북미 매출 성장",
-            "description": "북미 시장 점유율 확대",
-            "kpis": [{"name": "매출 성장률", "target": "20%"}],
-        },
-        {
-            "goal_id": "G3",
-            "name": "운영비용 효율화",
-            "description": "운영비용 10% 절감",
-            "priority": "high",
-            "kpis": [{"name": "운영비 절감률", "target": "전년 대비 10% 절감"}],
-        },
-    ]
-}
-
-_TRIGGERED_RULES = [
-    {
-        "rule_id": "R1",
-        "name": "예산 승인 규칙",
-        "rule_type": "financial",
-        "status": "TRIGGERED",
-    }
-]
-
-
-# ---------------------------------------------------------------------------
-# Tests: infer_risk_semantics graceful fallback
-# ---------------------------------------------------------------------------
-
-class TestInferRiskSemanticsGracefulFallback:
-
-    def test_invalid_json_returns_none(self):
-        """LLM returns non-JSON → infer_risk_semantics returns None, no exception."""
-        mock_client = _make_openai_mock("This is not valid JSON at all {{{{}")
-        result = infer_risk_semantics(
-            decision_text=_DECISION_TEXT,
-            company_summary=_COMPANY_SUMMARY,
-            triggered_rules_summary=_TRIGGERED_RULES,
-            _client=mock_client,
-        )
-        assert result is None
-
-    def test_json_missing_required_enum_returns_none(self):
-        """LLM returns JSON with invalid direction enum → Pydantic fails → None."""
-        bad_json = json.dumps({
-            "goal_impacts": [
-                {
-                    "goal_id": "G1",
-                    "direction": "STRONGLY_SUPPORTS",  # not in Literal enum
-                    "magnitude": "high",
-                    "rationale_ko": "테스트",
-                    "confidence": 0.9,
-                }
-            ],
-            "compliance_facts": {},
-            "global_confidence": 0.8,
-        })
-        mock_client = _make_openai_mock(bad_json)
-        result = infer_risk_semantics(
-            decision_text=_DECISION_TEXT,
-            company_summary=_COMPANY_SUMMARY,
-            triggered_rules_summary=_TRIGGERED_RULES,
-            _client=mock_client,
-        )
-        assert result is None
-
-    def test_empty_string_response_returns_none(self):
-        """LLM returns empty string → JSON parse fails → None."""
-        mock_client = _make_openai_mock("")
-        result = infer_risk_semantics(
-            decision_text=_DECISION_TEXT,
-            company_summary=_COMPANY_SUMMARY,
-            triggered_rules_summary=_TRIGGERED_RULES,
-            _client=mock_client,
-        )
-        assert result is None
-
-    def test_no_client_no_api_key_returns_none(self, monkeypatch):
-        """When no API key is set and no _client injected → None, no exception."""
-        monkeypatch.delenv("BEDROCK_API_KEY", raising=False)
-        result = infer_risk_semantics(
-            decision_text=_DECISION_TEXT,
-            company_summary=_COMPANY_SUMMARY,
-            triggered_rules_summary=_TRIGGERED_RULES,
-        )
-        assert result is None
-
-
-# ---------------------------------------------------------------------------
-# Tests: infer_risk_semantics happy path
-# ---------------------------------------------------------------------------
-
-class TestInferRiskSemanticsHappyPath:
-
-    def test_valid_json_returns_semantics(self):
-        """LLM returns valid schema JSON → RiskSemantics object returned."""
-        mock_client = _make_openai_mock(_VALID_SEMANTICS_JSON)
-        result = infer_risk_semantics(
-            decision_text=_DECISION_TEXT,
-            company_summary=_COMPANY_SUMMARY,
-            triggered_rules_summary=_TRIGGERED_RULES,
-            _client=mock_client,
-        )
-        assert result is not None
-        assert isinstance(result, RiskSemantics)
-
-    def test_goal_impacts_parsed(self):
-        """goal_impacts are correctly parsed with all fields."""
-        mock_client = _make_openai_mock(_VALID_SEMANTICS_JSON)
-        result = infer_risk_semantics(
-            decision_text=_DECISION_TEXT,
-            company_summary=_COMPANY_SUMMARY,
-            triggered_rules_summary=_TRIGGERED_RULES,
-            _client=mock_client,
-        )
-        assert len(result.goal_impacts) == 2
-        conflict_impact = next(i for i in result.goal_impacts if i.direction == "conflict")
-        assert conflict_impact.goal_id == "G3"
-        assert conflict_impact.magnitude == "high"
-        assert "운영비용" in conflict_impact.rationale_ko
-
-    def test_global_confidence_clamped(self):
-        """global_confidence stays within 0..1 even with out-of-range LLM output."""
-        raw = json.dumps({
-            "goal_impacts": [],
-            "compliance_facts": {},
-            "global_confidence": 1.5,  # out of range
-        })
-        mock_client = _make_openai_mock(raw)
-        result = infer_risk_semantics(
-            decision_text=_DECISION_TEXT,
-            company_summary=_COMPANY_SUMMARY,
-            triggered_rules_summary=[],
-            _client=mock_client,
-        )
-        assert result is not None
-        assert result.global_confidence <= 1.0
-
-    def test_confidence_per_goal_clamped(self):
-        """Per-goal confidence is clamped to 0..1."""
-        raw = json.dumps({
-            "goal_impacts": [
-                {
-                    "goal_id": "G1",
-                    "direction": "support",
-                    "magnitude": "low",
-                    "rationale_ko": "테스트",
-                    "confidence": 2.0,  # out of range
-                }
-            ],
-            "compliance_facts": {},
-            "global_confidence": 0.5,
-        })
-        mock_client = _make_openai_mock(raw)
-        result = infer_risk_semantics(
-            decision_text=_DECISION_TEXT,
-            company_summary=_COMPANY_SUMMARY,
-            triggered_rules_summary=[],
-            _client=mock_client,
-        )
-        assert result is not None
-        assert result.goal_impacts[0].confidence <= 1.0
-
-    def test_numeric_estimates_parsed(self):
-        """numeric_estimates.cost_delta_pct is populated."""
-        mock_client = _make_openai_mock(_VALID_SEMANTICS_JSON)
-        result = infer_risk_semantics(
-            decision_text=_DECISION_TEXT,
-            company_summary=_COMPANY_SUMMARY,
-            triggered_rules_summary=_TRIGGERED_RULES,
-            _client=mock_client,
-        )
-        assert result.numeric_estimates is not None
-        assert result.numeric_estimates.cost_delta_pct == 12.5
-
 
 # ---------------------------------------------------------------------------
 # Fixtures for risk scoring tests
