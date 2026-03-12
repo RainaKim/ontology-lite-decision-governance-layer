@@ -3,16 +3,13 @@
 
 COMPANY_RULES_FILES: dict[str, dict[str, str]] = {
     "nexus_dynamics": {
-        "ko": "mock_company.json",
-        "en": "mock_company_en.json",
+        "merged": "mock_company_nexus.json",
     },
     "mayo_central": {
-        "ko": "mock_company_healthcare.json",
-        "en": "mock_company_healthcare_en.json",
+        "merged": "mock_company_healthcare_merged.json",
     },
     "sool_sool_icecream": {
-        "ko": "sool_sool_icecream_company.json",
-        "en": "sool_sool_icecream_company_en.json",
+        "merged": "sool_sool_icecream_merged.json",
     },
 }
 

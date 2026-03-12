@@ -2,8 +2,9 @@
 Company Service - Load and cache mock company data.
 
 Contract-compliant company IDs (api_contract_v1.md):
-  nexus_dynamics    → mock_company.json           (Nexus Dynamics)
-  mayo_central      → mock_company_healthcare.json (Mayo Central Hospital)
+  nexus_dynamics    → mock_company_nexus.json           (Nexus Dynamics)
+  mayo_central      → mock_company_healthcare_merged.json (Mayo Central Hospital)
+  sool_sool_icecream → sool_sool_icecream_merged.json
 
 No DB. In-memory cache loaded once at startup.
 """
@@ -18,18 +19,6 @@ from app.config.company_registry import COMPANY_RULES_FILES as _REGISTRY_BY_COMP
 
 logger = logging.getLogger(__name__)
 
-# ── Company registry ─────────────────────────────────────────────────────────
-# Derived from single source of truth in app/config/company_registry.py
-# Restructured to lang → company_id → filename for backward-compatible iteration
-_REGISTRY: dict[str, dict[str, str]] = {
-    lang: {
-        company_id: files[lang]
-        for company_id, files in _REGISTRY_BY_COMPANY.items()
-        if lang in files
-    }
-    for lang in ("ko", "en")
-}
-
 _cache: dict[str, dict] = {}           # key: "{lang}:{company_id}"
 _summaries_v1: dict[str, list[CompanySummaryResponse]] = {"ko": [], "en": []}
 _details_v1: dict[str, dict[str, CompanyDetailResponse]] = {"ko": {}, "en": {}}
@@ -39,64 +28,78 @@ def _load_all() -> None:
     """Load all companies (both langs) into cache. Called once at startup."""
     root = Path(__file__).parent.parent.parent  # project root
 
-    for lang, registry in _REGISTRY.items():
-        for company_id, filename in registry.items():
-            cache_key = f"{lang}:{company_id}"
-            path = root / filename
-            try:
-                with open(path, "r") as f:
-                    data = json.load(f)
-                data["_id"] = company_id
-                _cache[cache_key] = data
+    for company_id, files in _REGISTRY_BY_COMPANY.items():
+        filename = files.get("merged")
+        if not filename:
+            logger.warning(f"No 'merged' file for {company_id} — skipping")
+            continue
 
-                company_meta = data.get("company", {})
-                company_metadata = data.get("metadata", {})
+        path = root / filename
+        try:
+            with open(path, "r") as f:
+                raw = json.load(f)
+        except FileNotFoundError:
+            logger.warning(f"Company file not found: {path} — skipping {company_id}")
+            continue
+        except Exception as e:
+            logger.error(f"Failed to load {filename}: {e}")
+            continue
 
-                governance_framework = (
-                    company_metadata.get("governance_framework")
-                    or company_meta.get("industry", "")
-                )
+        for lang in ("ko", "en"):
+            translation = raw.get("translations", {}).get(lang, {})
 
-                _summaries_v1[lang].append(CompanySummaryResponse(
-                    id=company_id,
-                    name=company_meta.get("name", company_id),
-                    industry=company_meta.get("industry", ""),
-                    size=company_meta.get("size", ""),
-                    governance_framework=governance_framework,
-                ))
+            # Build a lang-specific view: translation fields override top-level
+            data = {**raw, **translation}
+            # Map 'rules' key back to 'governance_rules' for backward compatibility
+            if "rules" in translation:
+                data["governance_rules"] = translation["rules"]
+            data["_id"] = company_id
+            _cache[f"{lang}:{company_id}"] = data
 
-                approval_hierarchy = data.get("approval_hierarchy", {})
-                governance_rules = data.get("governance_rules", [])
-                strategic_goals = data.get("strategic_goals", [])
-                levels = approval_hierarchy.get("levels", [])
-                chain_summary = " > ".join([lvl.get("title", "") for lvl in levels[:4]])
+            company_meta = data.get("company", {})
+            company_metadata = data.get("metadata", {})
 
-                _details_v1[lang][company_id] = CompanyDetailResponse(
-                    id=company_id,
-                    name=company_meta.get("name", company_id),
-                    industry=company_meta.get("industry", ""),
-                    size=company_meta.get("size", ""),
-                    governance_framework=governance_framework,
-                    description=company_meta.get("description", ""),
-                    approval_chain_summary=chain_summary,
-                    total_governance_rules=len(governance_rules),
-                    strategic_goals=[
-                        {
-                            "goal_id": g.get("goal_id"),
-                            "name": g.get("name"),
-                            "owner_id": g.get("owner_id"),
-                            "priority": g.get("priority"),
-                        }
-                        for g in strategic_goals
-                    ],
-                    approval_hierarchy=approval_hierarchy,
-                )
+            governance_framework = (
+                company_metadata.get("governance_framework")
+                or company_meta.get("industry", "")
+            )
 
-                logger.info(f"Loaded company [{lang}]: {company_id} ({company_meta.get('name')})")
-            except FileNotFoundError:
-                logger.warning(f"Company file not found: {path} — skipping {company_id} [{lang}]")
-            except Exception as e:
-                logger.error(f"Failed to load {filename}: {e}")
+            _summaries_v1[lang].append(CompanySummaryResponse(
+                id=company_id,
+                name=company_meta.get("name", company_id),
+                industry=company_meta.get("industry", ""),
+                size=company_meta.get("size", ""),
+                governance_framework=governance_framework,
+            ))
+
+            approval_hierarchy = data.get("approval_hierarchy", {})
+            governance_rules = data.get("governance_rules", [])
+            strategic_goals = data.get("strategic_goals", [])
+            levels = approval_hierarchy.get("levels", [])
+            chain_summary = " > ".join([lvl.get("title", "") for lvl in levels[:4]])
+
+            _details_v1[lang][company_id] = CompanyDetailResponse(
+                id=company_id,
+                name=company_meta.get("name", company_id),
+                industry=company_meta.get("industry", ""),
+                size=company_meta.get("size", ""),
+                governance_framework=governance_framework,
+                description=company_meta.get("description", ""),
+                approval_chain_summary=chain_summary,
+                total_governance_rules=len(governance_rules),
+                strategic_goals=[
+                    {
+                        "goal_id": g.get("goal_id"),
+                        "name": g.get("name"),
+                        "owner_id": g.get("owner_id"),
+                        "priority": g.get("priority"),
+                    }
+                    for g in strategic_goals
+                ],
+                approval_hierarchy=approval_hierarchy,
+            )
+
+            logger.info(f"Loaded company [{lang}]: {company_id} ({company_meta.get('name')})")
 
 
 def init() -> None:
