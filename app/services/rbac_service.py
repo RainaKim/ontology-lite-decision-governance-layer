@@ -8,6 +8,8 @@ Usage in routers:
     async def submit_decision(...): ...
 """
 
+# Extension: add a new role to _ROLE_PERMISSIONS here — no other code changes needed.
+# See external_signal_service.py config table rules (structural dispatch only).
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, status

@@ -37,6 +37,27 @@ _MAX_SOURCES = 4
 # Company ID → profile file name mapping (handles cases where file name differs from ID)
 from app.config.company_registry import PROFILE_ALIASES as _PROFILE_ALIASES
 
+# --- Configuration tables (edit here to extend, not in function bodies) ---
+# Extension: append a (field, value) row to add a new type — function body never changes.
+# Rule: config tables handle structural dispatch only (field → enum). Semantic classification
+# (meaning-based routing) must go through an LLM structured call, not a keyword list.
+# See .claude/dev_rules.md rule #1. Other services with config tables follow the same rule.
+
+_DECISION_TYPE_PRIORITY: list[tuple[str, str]] = [
+    ("involves_hiring", "hiring"),
+    ("uses_pii", "privacy"),
+    ("new_product_development", "new_product"),
+]
+
+_FLAG_KEYWORD_THEMES: list[tuple[tuple[str, ...], str]] = [
+    (("FINANCIAL", "BUDGET", "COST"),             "risk_financial"),
+    (("PRIVACY", "PII", "PHI"),                   "privacy_compliance"),
+    (("COMPLIANCE", "REGULATORY", "VIOLATION"),   "regulatory_compliance"),
+    (("STRATEGIC", "CONFLICT", "MISALIGNMENT"),   "strategic_benchmark"),
+]
+
+_STRATEGIC_IMPACT_KEYWORDS: tuple[str, ...] = ("STRATEGIC", "CONFLICT", "MISALIGNMENT")
+
 
 # ── Live fetch provider interface ─────────────────────────────────────────────
 
@@ -234,14 +255,9 @@ def infer_external_signal_query_context(
     # From governance flags
     flags = governance_result.get("flags", []) if governance_result else []
     for flag in flags:
-        if any(kw in flag for kw in ("FINANCIAL", "BUDGET", "COST")):
-            themes.append("risk_financial")
-        if any(kw in flag for kw in ("PRIVACY", "PII", "PHI")):
-            themes.append("privacy_compliance")
-        if any(kw in flag for kw in ("COMPLIANCE", "REGULATORY", "VIOLATION")):
-            themes.append("regulatory_compliance")
-        if any(kw in flag for kw in ("STRATEGIC", "CONFLICT", "MISALIGNMENT")):
-            themes.append("strategic_benchmark")
+        for keywords, theme in _FLAG_KEYWORD_THEMES:
+            if any(kw in flag for kw in keywords):
+                themes.append(theme)
 
     # From risk scoring — add themes for HIGH/CRITICAL dimensions
     if risk_scoring:
@@ -356,14 +372,11 @@ def load_fallback_sources(
 def _infer_decision_type(decision: dict) -> str:
     """
     Derive decision type from structured LLM-extracted boolean fields.
-    Priority order: hiring > privacy > new_product > procurement > general.
+    Priority order driven by _DECISION_TYPE_PRIORITY config table.
     """
-    if decision.get("involves_hiring"):
-        return "hiring"
-    if decision.get("uses_pii"):
-        return "privacy"
-    if decision.get("new_product_development"):
-        return "new_product"
+    for field, dtype in _DECISION_TYPE_PRIORITY:
+        if decision.get(field):
+            return dtype
     cost = decision.get("cost")
     if cost and isinstance(cost, (int, float)) and cost > 0:
         return "procurement"
@@ -375,7 +388,6 @@ def _infer_strategic_impact(governance_result: Optional[dict]) -> str:
     if not governance_result:
         return "N/A"
     for flag in governance_result.get("flags", []):
-        flag_upper = flag.upper()
-        if "STRATEGIC" in flag_upper or "CONFLICT" in flag_upper or "MISALIGNMENT" in flag_upper:
+        if any(kw in flag.upper() for kw in _STRATEGIC_IMPACT_KEYWORDS):
             return "Potential strategic conflict"
     return "N/A"

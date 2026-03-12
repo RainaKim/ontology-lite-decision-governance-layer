@@ -5,6 +5,11 @@ Hybrid governance evaluation:
 - Rule matching (deterministic Python)
 - Conflict resolution (o1 reasoning)
 - Approval optimization (o1 reasoning)
+
+Extension pattern — pure function extraction:
+  When adding a new transformation, write it as a pure function (no I/O, no os.environ),
+  then call it from the I/O outer function. Keep it module-private (_name) unless there
+  is more than one caller. Test the pure function directly with in-memory data.
 """
 
 import json
@@ -90,23 +95,28 @@ _STRATEGIC_IMPACT_BONUS: dict[str, float] = {
 }
 
 
+def _apply_translation(raw: dict, lang: str) -> dict:
+    """Apply language overlay from a rules dict's 'translations' section.
+    Pure function — no I/O. Returns a merged dict with the translated fields."""
+    lang_key = lang if lang in ("ko", "en") else "ko"
+    if "translations" not in raw:
+        return raw
+    translation = raw.get("translations", {}).get(lang_key, {})
+    data = {**raw, **translation}
+    if "rules" in translation:
+        data["governance_rules"] = translation["rules"]
+    return data
+
+
 def load_rules(rules_path: str = None, company_id: str = None, lang: str = "ko") -> dict:
     """Load governance rules from JSON file, selecting by company_id and lang."""
-    lang_key = lang if lang in ("ko", "en") else "ko"
     if rules_path is None:
         files = _COMPANY_RULES_FILES.get(company_id, {})
         filename = files.get("merged") or _DEFAULT_RULES_FILE
         rules_path = Path(__file__).parent.parent / filename
     with open(rules_path, 'r') as f:
         raw = json.load(f)
-    # If this is a merged file with translations, extract the lang-specific view
-    if "translations" in raw:
-        translation = raw.get("translations", {}).get(lang_key, {})
-        data = {**raw, **translation}
-        if "rules" in translation:
-            data["governance_rules"] = translation["rules"]
-        return data
-    return raw
+    return _apply_translation(raw, lang)
 
 
 def compute_risk_score(decision: Decision) -> float:
