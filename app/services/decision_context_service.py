@@ -27,12 +27,12 @@ For testing, pass _client to inject a mock BedrockClient::
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
+
+from app.services.bedrock_extractor import BedrockStructuredExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -186,25 +186,20 @@ def extract_decision_context(
     Never raises.
     """
     try:
-        client = _client or _make_client()
-        if client is None:
-            logger.debug("extract_decision_context: no API key configured — skipping")
-            return None
-
         user_content = _USER_TEMPLATE.format(
             decision_text=decision_text[:3000],
             lang="Korean" if lang == "ko" else "English",
         )
 
-        raw = client.invoke(user_content, system_prompt=_SYSTEM_PROMPT)
-        logger.debug(f"extract_decision_context raw ({len(raw)} chars): {raw[:200]}")
-
-        parsed = json.loads(raw)
-        ctx = _ContextRaw.model_validate(parsed)
+        ctx = BedrockStructuredExtractor(_client=_client).extract(
+            user_content, _ContextRaw, system_prompt=_SYSTEM_PROMPT
+        )
+        if ctx is None:
+            logger.debug("extract_decision_context: extractor returned None — skipping")
+            return None
 
         safe_entities = filter_left_panel_entities(ctx.entities)
         is_en = lang == "en"
-
         src_label = (agent_name_en if is_en else agent_name) or "AI Agent"
 
         serialised: dict = {
@@ -232,25 +227,6 @@ def extract_decision_context(
         )
         return serialised
 
-    except json.JSONDecodeError as e:
-        logger.warning(f"extract_decision_context: JSON parse failed — {e}")
-        return None
-    except ValidationError as e:
-        logger.warning(f"extract_decision_context: Pydantic validation failed — {e}")
-        return None
     except Exception as e:
         logger.warning(f"extract_decision_context: unexpected error — {e}")
-        return None
-
-
-def _make_client() -> Any:
-    """Return a BedrockClient if BEDROCK_API_KEY is set, else None."""
-    api_key = os.environ.get("BEDROCK_API_KEY")
-    if not api_key:
-        return None
-    try:
-        from app.bedrock_client import BedrockClient
-        return BedrockClient()
-    except Exception as e:
-        logger.warning(f"extract_decision_context: failed to create BedrockClient — {e}")
         return None
