@@ -3,22 +3,23 @@ Decision Governance Layer - FastAPI Application
 
 All public API routes are mounted under /v1 prefix via routers.
 """
+# Load .env BEFORE any app imports so module-level os.environ.get() calls
+# in services (e.g. SSO_CALLBACK_BASE_URL in sso_service.py) pick up the
+# correct values rather than falling back to hard-coded defaults.
+from dotenv import load_dotenv
+load_dotenv()
 
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
 
 from app.llm_client import LLMClient
 from app.extractor import DecisionExtractor
 from app.graph_repository import InMemoryGraphRepository
 from app.services import company_service
 from app.routers import auth_router, companies_router, decisions_router, fixtures_router, sso_router, workspace_router
-
-# Load environment variables from .env file
-load_dotenv()
 
 # Configure logging
 logging.basicConfig(
