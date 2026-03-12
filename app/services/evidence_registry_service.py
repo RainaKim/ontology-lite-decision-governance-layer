@@ -31,6 +31,9 @@ _FIXTURES_ROOT = Path(__file__).parent.parent / "demo_fixtures" / "companies"
 _cache: dict[str, dict] = {}
 
 # ── Budget source selection thresholds (structural policy, not company-specific) ──
+# _CAPEX_THRESHOLD: triggers BS_SPEND_AUTHORITY evidence lookup (governance rule R1 / CAPEX_POLICY).
+# _BOARD_THRESHOLD: triggers board-level approval path (governance rule R3 / BOARD_APPROVAL_POLICY).
+# To change these, update the rule definitions in the company governance JSON files as well.
 _CAPEX_THRESHOLD = 50_000_000
 _BOARD_THRESHOLD = 1_000_000_000
 
