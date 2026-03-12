@@ -21,7 +21,6 @@ Public API:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -36,6 +35,7 @@ from app.schemas.external_signals import (
     ExternalSignalsPayload,
 )
 from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION
+from app.utils.llm_utils import extract_json
 
 logger = logging.getLogger(__name__)
 
@@ -329,15 +329,9 @@ def _parse_and_validate(
     Parse Nova raw output → validate → map to ExternalSignalsPayload.
     Returns None on parse error, validation failure, or empty signals.
     """
-    text = raw.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(line for line in lines if not line.startswith("```")).strip()
-
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        logger.warning(f"[nova_ext] JSON parse failed: {exc}")
+    data = extract_json(raw)
+    if data is None:
+        logger.warning("[nova_ext] JSON parse failed")
         return None
 
     try:

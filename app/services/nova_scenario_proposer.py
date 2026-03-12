@@ -12,7 +12,6 @@ Architecture contract:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Optional
@@ -26,6 +25,7 @@ from app.schemas.nova_scenarios import (
     NovaScenarioResponse,
 )
 from app.utils.formatters import format_krw
+from app.utils.llm_utils import extract_json
 from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION
 
 logger = logging.getLogger(__name__)
@@ -199,19 +199,9 @@ def _parse_and_validate(
     Returns filtered list (may be shorter than input) or None if nothing
     valid remains after filtering.
     """
-    # Strip markdown code fences if present
-    text = raw.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(
-            line for line in lines
-            if not line.startswith("```")
-        ).strip()
-
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        logger.warning(f"[nova] JSON parse failed: {exc} — using fallback scenarios")
+    data = extract_json(raw)
+    if data is None:
+        logger.warning("[nova] JSON parse failed — using fallback scenarios")
         return None
 
     try:
