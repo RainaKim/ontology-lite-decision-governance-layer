@@ -13,7 +13,9 @@ from app.services.risk_response_simulation_service import RiskResponseSimulation
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
-COMPANY = json.load(open("mock_company.json"))
+_raw = json.load(open("mock_company_nexus.json"))
+_trans = _raw.get("translations", {}).get("ko", {})
+COMPANY = {**_raw, **_trans, "governance_rules": _trans.get("rules", _raw.get("governance_rules", []))}
 COMPANY_ID = "nexus_dynamics"
 
 _BASE_DECISION = {

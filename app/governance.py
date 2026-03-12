@@ -92,13 +92,21 @@ _STRATEGIC_IMPACT_BONUS: dict[str, float] = {
 
 def load_rules(rules_path: str = None, company_id: str = None, lang: str = "ko") -> dict:
     """Load governance rules from JSON file, selecting by company_id and lang."""
+    lang_key = lang if lang in ("ko", "en") else "ko"
     if rules_path is None:
-        lang_key = lang if lang in ("ko", "en") else "ko"
         files = _COMPANY_RULES_FILES.get(company_id, {})
-        filename = files.get(lang_key) or _DEFAULT_RULES_FILE
+        filename = files.get("merged") or _DEFAULT_RULES_FILE
         rules_path = Path(__file__).parent.parent / filename
     with open(rules_path, 'r') as f:
-        return json.load(f)
+        raw = json.load(f)
+    # If this is a merged file with translations, extract the lang-specific view
+    if "translations" in raw:
+        translation = raw.get("translations", {}).get(lang_key, {})
+        data = {**raw, **translation}
+        if "rules" in translation:
+            data["governance_rules"] = translation["rules"]
+        return data
+    return raw
 
 
 def compute_risk_score(decision: Decision) -> float:
