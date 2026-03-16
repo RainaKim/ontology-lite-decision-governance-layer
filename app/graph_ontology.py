@@ -195,7 +195,7 @@ def create_policy_node(policy_id: str, name: str, description: Optional[str] = N
 
     return Node(
         id=policy_id,
-        type=NodeType.POLICY,
+        type=NodeType.RULE,
         label=name,
         properties=properties
     )

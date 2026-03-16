@@ -87,6 +87,17 @@
       "patchStrategy": "defer_hiring",
       "priority": 2,
       "applicabilityConditions": ["involves_hiring"]
+    },
+    {
+      "templateId": "reduce_headcount",
+      "issueType": "strategic",
+      "titleKo": "채용 규모 축소",
+      "titleEn": "Reduce Hiring Scale",
+      "descriptionKo": "채용 인원을 절반으로 줄여 비용 부담을 낮추면서 핵심 인력은 확보합니다",
+      "descriptionEn": "Halve the hiring count to reduce cost pressure while securing key personnel",
+      "patchStrategy": "reduce_headcount",
+      "priority": 3,
+      "applicabilityConditions": ["involves_hiring"]
     }
   ]
 }

@@ -10,7 +10,8 @@ import json
 import logging
 from typing import Optional, Dict, List
 
-from app.bedrock_client import BedrockClient, _DEFAULT_MODEL
+from app.bedrock_client import BedrockClient
+from app.config.bedrock_config import NOVA_PRO_MODEL_ID
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +21,17 @@ class NovaReasoner:
     Amazon Nova reasoning client for complex multi-step reasoning tasks.
     """
 
-    def __init__(self, api_key: Optional[str] = None, model: str = _DEFAULT_MODEL):
+    def __init__(self, api_key: Optional[str] = None, model: str = NOVA_PRO_MODEL_ID):
         """
         Initialize Nova reasoner.
 
+        Uses Nova Pro by default — graph contradiction analysis, governance
+        conflict resolution, and multi-step strategic reasoning benefit from
+        the stronger model. Extraction and classification use Lite elsewhere.
+
         Args:
             api_key: Unused (kept for API compatibility). BedrockClient reads BEDROCK_API_KEY.
-            model: Bedrock model ID to use (default: amazon.nova-2-lite)
+            model: Bedrock model ID to use (default: Nova Pro for complex reasoning)
         """
         self.client = BedrockClient(model_id=model)
         self.model = model

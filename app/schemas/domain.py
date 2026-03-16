@@ -6,7 +6,7 @@ Day 1-2 scope: Schema foundation for extraction and validation.
 Day 3+ readiness: Optional governance fields (risk_score, strategic_impact, approval_chain).
 """
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional
 from enum import Enum
 
@@ -137,9 +137,9 @@ class Decision(BaseModel):
         None,
         description="'retroactive' if decision involves retroactive policy changes; null otherwise"
     )
-    uses_pii: Optional[bool] = Field(
-        None,
-        description="true if the decision involves processing, sharing, or exposing personal/customer data (PII); null otherwise"
+    uses_pii: bool = Field(
+        default=False,
+        description="true if the decision involves processing, sharing, or exposing personal/customer data (PII); false otherwise"
     )
     cost: Optional[float] = Field(
         None,
@@ -157,13 +157,13 @@ class Decision(BaseModel):
         None,
         description="true if the decision involves a product launch, service deployment, or release; null otherwise"
     )
-    involves_hiring: Optional[bool] = Field(
-        None,
-        description="true if the decision involves hiring, onboarding, or significant headcount change; null otherwise"
+    involves_hiring: bool = Field(
+        default=False,
+        description="true if the decision involves hiring, onboarding, or significant headcount change; false otherwise"
     )
-    involves_compliance_risk: Optional[bool] = Field(
-        None,
-        description="true if the decision explicitly involves anti-bribery risk, ethics code violation, entertainment/gift policy breach, or similar compliance/integrity concerns; null otherwise"
+    involves_compliance_risk: bool = Field(
+        default=False,
+        description="true if the decision explicitly involves anti-bribery risk, ethics code violation, entertainment/gift policy breach, or similar compliance/integrity concerns; false otherwise"
     )
     remaining_budget: Optional[float] = Field(
         None,
@@ -195,6 +195,14 @@ class Decision(BaseModel):
         None,
         description="Computed approval sequence based on governance rules"
     )
+
+    @field_validator('uses_pii', 'involves_hiring', 'involves_compliance_risk', mode='before')
+    @classmethod
+    def coerce_null_to_false(cls, v):
+        """LLM may return null for boolean governance flags — treat as False."""
+        if v is None:
+            return False
+        return v
 
     @field_validator('goals', 'kpis', 'risks', 'assumptions')
     @classmethod

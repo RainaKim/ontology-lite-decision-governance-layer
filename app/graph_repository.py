@@ -643,7 +643,7 @@ class InMemoryGraphRepository(BaseGraphRepository):
 
         decision_node = self._nodes.get(decision_id)
         actors = [self._nodes[nid] for nid in visited_nodes if self._nodes[nid].type == NodeType.ACTOR]
-        policies = [self._nodes[nid] for nid in visited_nodes if self._nodes[nid].type == NodeType.POLICY]
+        policies = [self._nodes[nid] for nid in visited_nodes if self._nodes[nid].type == NodeType.RULE]
         risks = [self._nodes[nid] for nid in visited_nodes if self._nodes[nid].type == NodeType.RISK]
 
         return {

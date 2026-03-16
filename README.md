@@ -1,647 +1,404 @@
-# Ontology-lite Decision Governance Layer
+# Decision Governance Layer
 
-**Graph-native enterprise decision governance with deterministic rule evaluation and swappable storage.**
+Autonomous AI agents are beginning to make real operational decisions: hiring employees, allocating budgets, launching products, or processing sensitive data. Enterprises cannot allow these decisions to execute without governance. This system sits between AI agents and action execution — when an agent proposes a decision, the platform transforms it into an auditable governance artifact called a **Decision Pack**.
 
-[![Demo Stable](https://img.shields.io/badge/demo-stable-brightgreen)]()
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
-[![Architecture](https://img.shields.io/badge/architecture-graph--native-blue)]()
-
----
-
-## 🎯 What This Is
-
-An **Ontology-lite Decision Governance Layer** that transforms unstructured business decisions into validated, graph-stored, governance-ready artifacts.
-
-**NOT:**
-- ❌ A summarization tool
-- ❌ An AI auditor
-- ❌ A full knowledge graph
-- ❌ GraphRAG
-
-**IS:**
-- ✅ Decision structuring engine
-- ✅ Deterministic governance evaluator
-- ✅ Graph-native memory system
-- ✅ Template-based Decision Pack generator
-
----
-
-## 🏗️ Architecture
-
-### Three-Layer Design
+Every AI decision is evaluated against company policy, aligned with strategic goals, quantified for risk across three dimensions, routed through approval chains, and backed by traceable evidence. Amazon Nova powers the intelligence layer (8 call sites across the pipeline) while deterministic engines enforce policy and compute final governance outcomes.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│          Decision Pack (Human Layer)                │
-│  ┌─────────────────────────────────────────────┐   │
-│  │ • Title & Summary                           │   │
-│  │ • Goals, KPIs, Risks                        │   │
-│  │ • Approval Chain                            │   │
-│  │ • Recommended Next Actions                  │   │
-│  │ • Audit Trail & Rationales                  │   │
-│  └─────────────────────────────────────────────┘   │
-│           ▲ Template-based generation               │
-└───────────┼─────────────────────────────────────────┘
-            │
-┌───────────┼─────────────────────────────────────────┐
-│           │   Governance Engine (Logic Layer)       │
-│  ┌────────▼────────────────────────────────────┐   │
-│  │ • Risk Scoring (deterministic)              │   │
-│  │ • Flag Detection (keyword + structural)     │   │
-│  │ • Rule Evaluation (priority-based)          │   │
-│  │ • Approval Chain Computation                │   │
-│  └─────────────────────────────────────────────┘   │
-│           ▲ Pure Python, NO LLMs                    │
-└───────────┼─────────────────────────────────────────┘
-            │
-┌───────────┼─────────────────────────────────────────┐
-│           │  Graph Repository (Memory Layer)        │
-│  ┌────────▼────────────────────────────────────┐   │
-│  │ Graph Ontology:                             │   │
-│  │                                              │   │
-│  │  Nodes:  Actor  Action  Policy  Risk        │   │
-│  │          Resource                            │   │
-│  │                                              │   │
-│  │  Edges:  OWNS                               │   │
-│  │          REQUIRES_APPROVAL_BY                │   │
-│  │          GOVERNED_BY                         │   │
-│  │          TRIGGERS                            │   │
-│  │          IMPACTS                             │   │
-│  │          MITIGATES                           │   │
-│  └─────────────────────────────────────────────┘   │
-│           Storage: InMemory (MVP) → Neo4j (Prod)    │
-└─────────────────────────────────────────────────────┘
+"Aggressive hiring of 20 R&D staff under cost-saving guidelines"
+                              |
+                    [ Amazon Nova extracts ]
+                              |
+            Decision { involves_hiring: true, headcount_change: 20 }
+                              |
+              [ Rule Engine evaluates against company policy ]
+                              |
+          Triggered: R7 (Workforce Hiring Review), R8 (Large-Scale Approval)
+                              |
+                [ Knowledge Graph builds relationships ]
+                              |
+     Decision --CONFLICTS_WITH--> Cost Stability Goal
+     Decision --SUPPORTS------> Revenue Growth Goal
+     R7 --REQUIRES_APPROVAL_BY--> HR Director
+     R8 --REQUIRES_APPROVAL_BY--> CEO
+                              |
+              [ Risk Scoring quantifies across 3 dimensions ]
+                              |
+         Financial: 35  |  Compliance: 0  |  Strategic: 68
+                    Aggregate: 52 (MEDIUM)
+                              |
+               [ Simulation proposes remediation ]
+                              |
+     Scenario 1: Defer hiring → risk drops to 28 (LOW)
+     Scenario 2: Reduce to 10 hires → risk drops to 41 (MEDIUM)
 ```
 
 ### End-to-End Flow
 
 ```
-1. Decision Input
-   ↓
-2. Governance Evaluation
-   • Load rules from company context JSON (mock_company*.json)
-   • Compute risk score (severity-weighted)
-   • Evaluate conditions (>=, ==, contains, OR)
-   • Select approval chain (priority-based)
-   • Detect flags (PRIVACY, FINANCIAL, HIGH_RISK, etc.)
-   ↓
-3. Graph Storage
-   • Create Action node (decision)
-   • Create Actor nodes (owners, approvers)
-   • Create Risk nodes (from decision.risks)
-   • Create Policy nodes (from triggered rules)
-   • Create edges (OWNS, REQUIRES_APPROVAL_BY, GOVERNED_BY, TRIGGERS)
-   ↓
-4. Decision Pack Generation
-   • Build title (with strategic impact prefix)
-   • Generate summary (risk level, status, confidence)
-   • Compile goals/KPIs/risks
-   • Detect missing items
-   • Generate next actions (deterministic rules)
-   • Extract rationales (from rules + approval chain)
-   ↓
-5. Return to Human
+AI Decision → Nova Extraction → Rule Evaluation → Ontology Graph Reasoning → Risk Scoring → Remediation Simulation → Decision Pack
 ```
 
 ---
 
-## 🚀 Quick Start
+## System Architecture
 
-### Prerequisites
-
-- Python 3.11+
-- No database required (uses in-memory graph)
-- No API keys required (deterministic governance)
-
-### Installation
-
-```bash
-# Clone repository
-git clone <repo-url>
-cd decision-governance-layer
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+```
+                          ┌──────────────────────────────────┐
+                          │         Frontend (React)         │
+                          │    SSE streaming + REST API      │
+                          └──────────┬───────────────────────┘
+                                     │
+                    POST /v1/decisions (202 Accepted)
+                    GET  /v1/decisions/{id}/stream (SSE)
+                    GET  /v1/decisions/{id} (full result)
+                                     │
+┌────────────────────────────────────┼────────────────────────────────────────┐
+│                          FastAPI Application                               │
+│                                                                            │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                     5-Step Async Pipeline                            │  │
+│  │                                                                      │  │
+│  │  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────┐   ┌──────┐  │  │
+│  │  │ 1. Nova   │──▶│ 2. Rule  │──▶│ 3. Graph │──▶│4.Risk│──▶│5.Pack│  │  │
+│  │  │ Extract   │   │ Engine   │   │ Builder  │   │Score │   │Build │  │  │
+│  │  │ (Lite)    │   │          │   │          │   │      │   │      │  │  │
+│  │  └──────────┘   └──────────┘   └──────────┘   └──────┘   └──────┘  │  │
+│  │    LLM            Deterministic   Ontology      Quant.    Template   │  │
+│  │                                                                      │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐   │  │
+│  │  │ Nova Pro      │  │ Simulation   │  │ External Signals         │   │  │
+│  │  │ Graph Reason  │  │ + Nova       │  │ + Nova Summarization     │   │  │
+│  │  │ (Contradicts, │  │ Rationale    │  │ (Market/Regulatory)      │   │  │
+│  │  │  Ownership)   │  │              │  │                          │   │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────────────────┘   │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                            │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌─────────────────────────┐  │
+│  │  Auth / RBAC      │  │  SQLite + Alembic │  │  In-Memory Stores      │  │
+│  │  JWT + SSO        │  │  Users, Companies │  │  DecisionRecord        │  │
+│  │  Google, Azure AD │  │  Agents, Decisions│  │  GraphRepository       │  │
+│  └──────────────────┘  └──────────────────┘  └─────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────┘
+                                     │
+                    ┌────────────────┴────────────────┐
+                    │        Amazon Bedrock            │
+                    │   ┌────────────────────────┐    │
+                    │   │ Nova 2 Lite             │    │
+                    │   │ 7 call sites: extract,  │    │
+                    │   │ classify, translate,     │    │
+                    │   │ propose, summarize       │    │
+                    │   └────────────────────────┘    │
+                    │   ┌────────────────────────┐    │
+                    │   │ Nova Pro                │    │
+                    │   │ 1 call site: graph      │    │
+                    │   │ contradiction analysis  │    │
+                    │   │ (multi-step reasoning)  │    │
+                    │   └────────────────────────┘    │
+                    │          us-east-1              │
+                    └─────────────────────────────────┘
 ```
 
-### Run E2E Tests (Validate Demo Stability)
+### Pipeline Step Detail
 
-```bash
-python -m app.e2e_runner
-```
+| Step | Component | Input | Output | Nova Model |
+|------|-----------|-------|--------|------------|
+| 1 | **LLM Extraction** | Raw decision text | Structured Decision object (goals, KPIs, risks, owners, cost, boolean flags) | Lite |
+| 1b | **Decision Context** | Raw text + agent info | Left-panel entities (filtered for safety) | Lite |
+| 2 | **Governance Evaluation** | Decision + company rules JSON | Triggered rules, approval chain, flags, risk score | — |
+| 3 | **Graph Construction** | Decision + governance + company goals | Knowledge graph (nodes + edges with strategic alignment) | — |
+| 2d | **Risk Semantics** | Decision + goals + rules | Goal impacts, compliance facts (fallback for scoring) | Lite |
+| 2c | **Risk Scoring** | Decision + governance + graph edges | 3-dimension scores with evidence provenance | — |
+| 4 | **Graph Reasoning** | Subgraph + company context | Contradictions, ownership inference, next actions | **Pro** |
+| 4b | **Risk Simulation** | Decision + governance + risk scores | 2-3 remediation scenarios with re-evaluated outcomes | Lite (proposals + rationale) |
+| 4c | **External Signals** | Company profile + decision context | Market/regulatory/operational benchmarks (additive — never modifies governance outcomes) | Lite |
+| 5 | **Decision Pack** | All above (governance + graph reasoning + risk scores + simulation + external signals) | Execution-ready governance artifact with audit trail | — |
 
-**Expected output:**
-```
-================================================================================
-E2E GOVERNANCE VALIDATION — FULL PIPELINE (with subgraph extraction)
-================================================================================
+The final output of the system is a **Decision Pack** — an approval-ready governance artifact containing rule triggers, approval chains, quantified risk analysis across three dimensions, remediation simulation results, and traceable evidence linking every score back to its source. This is the atomic unit that enables an enterprise to audit, approve, or reject any AI-proposed decision.
 
-...
-
-================================================================================
-VALIDATION SUMMARY
-================================================================================
-
-Total checks: 180
-Passed: 180 ✓
-Failed: 0 ✗
-Success rate: 100.0%
-
-================================================================================
-✅ DEMO STABLE — All checks passed
-```
-
-### Run Demo with Fixtures
-
-```python
-import asyncio
-from app.demo_fixtures import get_demo_fixture, get_company_context
-from app.decision_pipeline import process_decision_with_graph_reasoning
-
-# Load a scenario by key
-decision = get_demo_fixture("C03_core_ip_protection")
-company = get_company_context()
-
-async def run():
-    result = await process_decision_with_graph_reasoning(
-        decision=decision,
-        company_context=company,
-        use_nova_governance=False,
-        use_nova_graph=False,
-    )
-    pack = result["decision_pack"]
-    print(f"Status: {pack['summary']['governance_status']}")
-    print(f"Risk Level: {pack['summary']['risk_level']}")
-    print(f"Approval Chain: {len(pack['approval_chain'])} steps")
-
-asyncio.run(run())
-```
+External signals (step 4c) provide supplementary benchmarks — industry data, regulatory guidelines, operational studies — that give decision-makers additional context. They flow into the Decision Pack as a separate `external_context` section but **never influence** risk scores, approval chains, or governance status. This separation is intentional: governance decisions must be deterministic and auditable, while external context is advisory.
 
 ---
 
-## 📦 Graph Ontology
+## Why Ontology
 
-### Node Types
+AI agents can make decisions — approve budgets, hire staff, process customer data. But enterprises can't let agents act without governance. The problem: governance requires understanding **relationships** between a decision and its organizational context. A hiring decision isn't risky in isolation — it's risky because it conflicts with a cost-stability goal, triggers a workforce review rule, and requires CEO approval.
 
-| Node Type | Description | Example |
-|-----------|-------------|---------|
-| **Actor** | People, roles, departments | `Sarah Chen (VP Strategy)` |
-| **Action** | Decisions, tasks | `Acquire TechCorp for $2.5M` |
-| **Policy** | Rules, constraints | `Financial Threshold Rule` |
-| **Risk** | Threats, concerns | `Integration challenges` |
-| **Resource** | Budget, systems, assets | `Cloud Infrastructure Budget` |
+Relational databases can store these facts. But they can't represent the reasoning chain: *this decision triggers this rule, which requires this approver, because it conflicts with this goal, which generates this risk.* That's a graph problem.
 
-### Edge Predicates
-
-| Edge | Direction | Meaning |
-|------|-----------|---------|
-| **OWNS** | Actor → Action | Actor owns/is accountable for Action |
-| **REQUIRES_APPROVAL_BY** | Action → Actor | Action requires Actor's approval |
-| **GOVERNED_BY** | Action → Policy | Action is governed by Policy |
-| **TRIGGERS** | Action → Risk | Action triggers Risk |
-| **IMPACTS** | Action → Resource | Action impacts Resource |
-| **MITIGATES** | Action → Risk | Action mitigates Risk |
-
-### Example Graph
+This system applies an **ontology-lite** approach — a typed vocabulary of nodes and edges that captures governance relationships structurally, not as flat records:
 
 ```
-[Sarah Chen (Actor)]
-       │ OWNS
-       ▼
-[Acquire TechCorp (Action)]
-       │ REQUIRES_APPROVAL_BY
-       ├──→ [CFO (Actor)]
-       ├──→ [CEO (Actor)]
-       │ GOVERNED_BY
-       ├──→ [Financial Threshold Rule (Policy)]
-       │ TRIGGERS
-       ├──→ [Integration Risk (Risk)]
-       └──→ [Retention Risk (Risk)]
+                          ┌─────────────────────┐
+                          │ DECISION             │
+                          │ "Hire 20 R&D staff"  │
+                          └──┬──────────┬────────┘
+                             │          │
+                   TRIGGERS_RULE    CONFLICTS_WITH
+                             │          │
+                    ┌────────▼──┐   ┌───▼──────────────────┐
+                    │ RULE      │   │ GOAL_STRATEGIC        │
+                    │ R7: Work- │   │ G3: Cost Efficiency   │
+                    │ force Rev │   └───┬──────────────────┘
+                    └────┬──────┘       │
+                         │         GENERATES_RISK
+              REQUIRES_APPROVAL_BY      │
+                         │       ┌──────▼──────────────┐
+                    ┌────▼────┐  │ RISK                 │
+                    │ ACTOR   │  │ "Strategic conflict:  │
+                    │ HR Dir  │  │  cost efficiency"     │
+                    └─────────┘  └──────────────────────┘
 ```
+
+The vocabulary is small (8 node types, 12 edge predicates) but sufficient to answer governance questions through graph traversal:
+- **Why was this blocked?** → Follow TRIGGERS_RULE → GENERATES_RISK edges
+- **Who needs to approve?** → Follow REQUIRES_APPROVAL_BY edges from triggered rules
+- **Does this align with strategy?** → Check SUPPORTS vs. CONFLICTS_WITH edges to strategic goals
+- **What if we change the decision?** → Rebuild the subgraph with patched inputs, compare
+
+This is not a full formal ontology — it's a governance-specific vocabulary designed to make AI agent decisions auditable and traversable. The graph is the system's memory of *why* it made each governance determination.
+
+### Current State → Production Roadmap
+
+| Layer | MVP (Current) | Production |
+|-------|--------------|------------|
+| **Graph Storage** | In-memory (`InMemoryGraphRepository`) | Neo4j via `BaseGraphRepository` interface — same service code, persistent storage |
+| **Cross-Decision Queries** | Single-decision subgraph only | "Show all decisions that conflicted with cost-stability goal this quarter" — shared nodes (Policy, Actor, Goal) create natural links between decisions |
+| **Graph RAG** | Nova reasons over extracted subgraph per request | Retrieve relevant past decisions + outcomes via graph traversal, feed as context to Nova — enables "a similar hiring decision was blocked last quarter because..." |
+| **Ontology** | Ontology-lite (8 node types, 12 edge predicates, typed enums) | Formal OWL/SHACL ontology — enables inference rules (e.g., "any decision that TRIGGERS a RULE with severity=critical automatically REQUIRES_APPROVAL_BY the board"), SPARQL validation of graph consistency |
+| **External Signals** | Advisory context (curated demo fixtures) | Live market data feeds promoted to risk scoring inputs — when a real pricing signal contradicts the decision, it raises the strategic risk score with evidence provenance |
+
+The architecture is designed for this migration. `BaseGraphRepository` is an abstract class — Neo4j replaces `InMemoryGraphRepository` without changing any service code. The NovaReasoner's subgraph extraction method documents the exact Cypher queries that replace the mock matching logic. External signals already have typed schemas (`ExternalSignalsPayload`) ready to carry real-time data.
 
 ---
 
-## 🧪 Demo Fixtures
+## Core Design Decisions
 
-30 production-ready scenarios across three governance frameworks:
+### 1. LLM extracts, rules decide
 
-### Corporate Finance — Nexus Dynamics (C01–C10)
+Amazon Nova extracts structured fields from free-form text — boolean governance flags (`uses_pii`, `involves_hiring`, `involves_compliance_risk`), financial amounts, strategic impact, headcount changes. Every extraction output is Pydantic-validated.
 
-| Key | Scenario | Status |
-|-----|----------|--------|
-| `C01_marketing_budget_overrun` | Marketing Budget Overrun | needs_review |
-| `C02_related_party_transaction` | Related Party Transaction | needs_review |
-| `C03_core_ip_protection` | Core IP Protection | **blocked** |
-| `C04_shadow_it_saas` | Shadow IT SaaS Adoption | **blocked** |
-| `C05_goal_mismatch_hiring` | Strategic Goal Mismatch Hiring | needs_review |
-| `C06_entertainment_expense` | Excessive Entertainment Expense | needs_review |
-| `C07_subsidiary_loan` | Subsidiary Financial Support | needs_review |
-| `C08_cloud_overprovisioning` | Cloud Infrastructure Over-provisioning | needs_review |
-| `C09_esg_supply_chain` | ESG Supply Chain Violation | needs_review |
-| `C10_retroactive_bonus` | Retroactive Bonus Application | **blocked** |
-
-### Healthcare & Data Privacy — Mayo Central Hospital (H01–H10)
-
-| Key | Scenario | Status |
-|-----|----------|--------|
-| `H01_unauthorized_patient_data_access` | Unauthorized Patient Data Access | **blocked** |
-| `H02_off_label_prescription_risk` | Off-label Prescription Risk | **blocked** |
-| `H03_equipment_maintenance_gap` | Critical Equipment Maintenance Gap | **blocked** |
-| `H04_clinical_trial_conflict_of_interest` | Clinical Trial Conflict of Interest | **blocked** |
-| `H05_telemedicine_data_leakage` | Telemedicine Data Leakage | **blocked** |
-| `H06_nurse_patient_ratio_violation` | Nurse-to-Patient Ratio Violation | **blocked** |
-| `H07_redundant_equipment_purchase` | Redundant Medical Equipment Purchase | needs_review |
-| `H08_ai_training_without_consent` | AI Training without Consent | **blocked** |
-| `H09_er_golden_hour_protocol_failure` | ER Golden Hour Protocol Failure | **blocked** |
-| `H10_controlled_substance_inventory_gap` | Controlled Substance Inventory Gap | **blocked** |
-
-### Public Sector & Procurement — State of Delaware GSA (G01–G10)
-
-| Key | Scenario | Status |
-|-----|----------|--------|
-| `G01_sole_source_procurement` | Sole Source Procurement Violation | needs_review |
-| `G02_budget_dumping` | End-of-Year Budget Dumping | needs_review |
-| `G03_lobbyist_vendor_conflict` | Lobbyist-Linked Vendor Conflict | **blocked** |
-| `G04_double_dipping_grant` | Double Dipping Grant Detection | **blocked** |
-| `G05_emergency_fund_misappropriation` | Emergency Fund Misappropriation | **blocked** |
-| `G06_missing_environmental_assessment` | Missing Environmental Assessment | **blocked** |
-| `G07_public_official_ethics_violation` | Public Official Ethics Violation | **blocked** |
-| `G08_legacy_system_overexpenditure` | Legacy System Over-expenditure | needs_review |
-| `G09_mwbe_quota_noncompliance` | MWBE Quota Non-compliance | needs_review |
-| `G10_sensitive_data_open_access` | Sensitive Data Open-Access Risk | **blocked** |
-
----
-
-## 🔧 Governance Rules
-
-Rules are embedded in each company context JSON (`mock_company*.json`) under the `governance_rules` key. Each company file represents a different governance framework:
-
-| File | Framework | Approval Chain |
-|------|-----------|----------------|
-| `mock_company.json` | Corporate Finance (Nexus Dynamics) | CFO > Compliance > CEO |
-| `mock_company_healthcare.json` | Healthcare & Data Privacy (Mayo Central Hospital) | Security > Compliance > Medical Director |
-| `mock_company_public.json` | Public Sector & Procurement (State of Delaware GSA) | Legal > Compliance > Board |
-
-**Rule structure example:**
+The governance engine evaluates these fields against company-specific rules using generic condition operators (`>`, `>=`, `==`, `contains`, `OR`). No rule IDs or company names are hardcoded in application logic — rules live in JSON configuration:
 
 ```json
 {
-  "rule_id": "R1",
-  "name": "Capital Expenditure Approval",
-  "type": "financial",
-  "description": "Decisions with expenditure over budget threshold require CFO approval",
+  "rule_id": "R4",
+  "name": "Strategic Alignment Rule",
   "condition": {
-    "field": "cost",
-    "operator": ">",
-    "value": 50000000
+    "field": "involves_hiring",
+    "operator": "==",
+    "value": true
   },
   "consequence": {
     "action": "require_approval",
-    "approver_role": "CFO",
-    "approver_id": "cfo_001",
-    "severity": "high"
-  },
-  "active": true
-}
-```
-
-**Condition operators supported:**
-- `==` (equals)
-- `>` (greater than)
-- `contains` (text contains substring)
-- `OR` (top-level logical OR over multiple sub-conditions)
-
----
-
-## 🏛️ Repository Pattern
-
-### Abstract Interface
-
-```python
-from app.graph_repository import BaseGraphRepository
-
-class BaseGraphRepository(ABC):
-    @abstractmethod
-    async def add_node(self, node: Node) -> Node: ...
-
-    @abstractmethod
-    async def add_edge(self, edge: Edge) -> Edge: ...
-
-    @abstractmethod
-    async def upsert_decision_graph(self, decision, governance) -> DecisionGraph: ...
-
-    @abstractmethod
-    async def get_governance_context(self, decision_id, depth=2) -> dict: ...
-```
-
-### Implementations
-
-**MVP: InMemoryGraphRepository**
-- Dict-based storage
-- Fast, no dependencies
-- Demo-stable
-
-**Production: Neo4jGraphRepository** (Day 3+)
-- Persistent storage
-- Cypher queries
-- Drop-in replacement
-
----
-
-## 📊 Decision Pack Output
-
-```json
-{
-  "title": "[HIGH] Acquire TechStartup Inc for $2.5M to expand AI capabilities",
-  "summary": {
-    "decision_statement": "Acquire TechStartup Inc for $2.5M...",
-    "human_approval_required": true,
-    "risk_level": "high",
-    "governance_status": "needs_review",
-    "confidence_score": 0.75,
-    "strategic_impact": "high"
-  },
-  "goals_kpis": {
-    "goals": [...],
-    "kpis": [...]
-  },
-  "risks": [...],
-  "owners": [...],
-  "missing_items": [],
-  "approval_chain": [
-    {
-      "level": "c_level",
-      "role": "CFO",
-      "required": true,
-      "rationale": "Major financial decision approval"
-    }
-  ],
-  "recommended_next_actions": [
-    "Request approvals: Budget Owner, VP Finance, CFO, CEO",
-    "Confirm budget justification with CFO"
-  ],
-  "audit": {
-    "flags": ["HIGH_RISK", "FINANCIAL_THRESHOLD_EXCEEDED"],
-    "triggered_rules": [...],
-    "rationales": [...],
-    "computed_risk_score": 7.5
+    "approver_role": "HR Director"
   }
 }
 ```
 
+This separation means governance outcomes are deterministic, reproducible, and auditable. The same decision text produces the same approval chain every time.
+
+### 2. Graph-native ontology (not a visualization layer)
+
+The ontology described above isn't a UI feature — it drives actual system behavior. Strategic risk scoring reads SUPPORTS/CONFLICTS_WITH edges from the graph to compute the strategic dimension score. The simulation engine rebuilds subgraphs for each counterfactual scenario. The decision pack traces approval chains by traversing REQUIRES_APPROVAL_BY edges from triggered rules.
+
+Strategic alignment is determined by goal category, not keyword matching. Hiring decisions conflict with cost-stability goals and support revenue-growth goals — derived from the goal's `category` field in company config, not from scanning for budget-related words.
+
+The repository pattern (`BaseGraphRepository` → `InMemoryGraphRepository`) makes the backend swappable. Neo4j enables persistent cross-decision queries ("show me all decisions that conflicted with our cost-stability goal this quarter") without changing service logic.
+
+### 3. Risk scoring with evidence provenance
+
+Three independent dimensions, each scored 0-100:
+
+| Dimension | Weight | Inputs |
+|-----------|--------|--------|
+| **Financial** | 0.40 | Cost vs. remaining budget (log-scale), threshold bonuses, triggered financial rules |
+| **Compliance/Privacy** | 0.35 | PII usage (+60), compliance risk flag, triggered compliance rules. Healthcare: weight increases to 0.50 |
+| **Strategic** | 0.25 | Graph edge analysis: SUPPORTS vs. CONFLICTS_WITH edges against company strategic goals |
+
+Risk band: 0-39 LOW, 40-69 MEDIUM, 70-84 HIGH, 85-100 CRITICAL.
+
+Every score carries evidence — human-readable labels, source attribution (`"Rule Engine"`, `"Graph Analysis"`, `"Input Text"`), and confidence. No score is a black box.
+
+### 4. Counterfactual simulation via deterministic re-evaluation
+
+The simulation engine doesn't estimate what would happen — it runs each scenario through the same governance + risk-scoring pipeline and shows the actual result.
+
+**Flow**: Copy decision → apply template patch → re-run `evaluate_governance()` → re-run `RiskScoringService.score()` → compute delta.
+
+9 config-driven templates cover financial, compliance, and strategic remediation strategies. Nova proposes which templates to apply (template selection only — never score computation). If Nova is unavailable, the system falls through to deterministic template matching based on issue classification.
+
+```
+Baseline:  Risk 52 (MEDIUM), 2 approvals required
+Scenario 1 (defer_hiring):     Risk 28 (LOW),    0 approvals  ← Recommended
+Scenario 2 (reduce_headcount): Risk 41 (MEDIUM), 1 approval
+```
+
 ---
 
-## 🎯 Key Features
+## Amazon Nova Integration
 
-### ✅ Deterministic Governance
-- **No LLM in critical path** (core governance is 100% deterministic)
-- Same input → same output
-- Reproducible, auditable
-- Pure Python logic
-- **Optional Nova enhancement:** When `use_nova=True` and 2+ rules trigger, Nova can optimize approval chains (disabled by default in tests)
+Amazon Nova is the reasoning backbone of the governance pipeline. It performs four distinct roles: **structured decision extraction** (converting free-form text into Pydantic-validated governance objects), **ontology-aware graph reasoning** (analyzing contradictions, ownership gaps, and strategic conflicts across the knowledge graph), **remediation scenario proposal** (selecting and explaining counterfactual templates), and **external signal summarization** (synthesizing market and regulatory context). Nova provides intelligence and reasoning; deterministic engines enforce every governance outcome. This separation ensures that the system produces complete, auditable results even when Nova is unavailable.
 
-### ✅ Graph-Native Architecture
-- Nodes: Actor, Action, Policy, Risk, Resource
-- Edges: OWNS, REQUIRES_APPROVAL_BY, GOVERNED_BY, TRIGGERS, IMPACTS, MITIGATES
-- Swappable backend (InMemory → Neo4j)
-- Repository pattern (no framework lock-in)
+Nova is deeply integrated across the entire pipeline — **8 distinct call sites**, each with strict boundaries separating LLM intelligence from deterministic governance logic.
 
-### ✅ Template-Based Decision Packs
-- Fixed JSON structure
-- No generative text
-- Deterministic formatting
-- Legal-safe output
+### Tiered Model Selection
 
-### ✅ Demo Stability
-- E2E test coverage
-- Invariant enforcement
-- 100% pass rate
-- No external dependencies
+| Model | Role | Why |
+|-------|------|-----|
+| **Nova Pro** (`us.amazon.nova-pro-v1:0`) | Graph contradiction analysis, governance conflict resolution, strategic reasoning | Complex multi-step reasoning over subgraph structure |
+| **Nova 2 Lite** (`us.amazon.nova-2-lite-v1:0`) | Extraction, classification, translation, scenario proposals, signal summarization | Fast structured I/O where latency matters |
+
+### Nova Call Sites (8 total)
+
+| # | Call Site | Model | Purpose | Fallback |
+|---|----------|-------|---------|----------|
+| 1 | **Decision Extraction** | Lite | Free-text → Pydantic schema (goals, risks, owners, governance flags) | 3 retries → blocked fallback decision |
+| 2 | **Decision Context** | Lite | Entity extraction for left-panel display (filtered for safety) | Skip (non-fatal) |
+| 3 | **Risk Semantics** | Lite | Classify goal impacts + compliance facts as structured JSON | Skip — risk scoring uses extractor fields |
+| 4 | **Graph Contradiction Analysis** | **Pro** | Multi-step reasoning over ontology subgraph — finds strategic conflicts, ownership gaps, authority issues | Deterministic subgraph analysis |
+| 5 | **Scenario Proposal** | Lite | Select remediation templates + generate Korean copy | Config-driven template matching |
+| 6 | **Simulation Rationale** | Lite | Generate natural-language explanation of WHY each remediation works | Scenarios remain valid without rationale |
+| 7 | **External Signal Summarization** | Lite | Synthesize market/regulatory context from curated sources | Curated deterministic signals |
+| 8 | **Node Label Translation** | Lite | Korean graph node labels → English | Labels remain Korean-only |
+
+### Architecture Contract
+
+Nova is the **classifier and extractor** — it never computes final scores, governance outcomes, or approval chains. All quantitative outputs come from deterministic engines (rule evaluation, risk scoring, graph algorithms). This separation means:
+
+- Every Nova call has a **deterministic fallback** — the system produces complete governance artifacts with or without Nova
+- Nova outputs are always **Pydantic-validated** before use — invalid JSON or schema violations trigger fallback
+- Nova **proposes**, deterministic engines **decide** — e.g., Nova suggests which remediation template to apply, but the simulation re-evaluates the patched decision through the same governance pipeline
 
 ---
 
-## 📁 Project Structure
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Runtime** | Python 3.12, FastAPI, Uvicorn |
+| **AI/LLM** | Amazon Nova Pro + Nova 2 Lite via AWS Bedrock (8 call sites, tiered model selection) |
+| **Validation** | Pydantic v2 (schema contracts, LLM output validation) |
+| **Database** | SQLite (dev) + SQLAlchemy ORM + Alembic (11 migrations) |
+| **Auth** | JWT Bearer tokens, RBAC (User/Manager/Admin), Google OAuth2, Azure AD OIDC |
+| **HTTP** | httpx (async, Bedrock API calls) |
+| **Streaming** | Server-Sent Events (SSE) for real-time pipeline progress |
+| **Graph** | Custom ontology-lite graph (abstract repository, in-memory MVP, Neo4j-ready) |
+
+---
+
+## Key Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/decisions` | Submit decision for async governance analysis (202) |
+| GET | `/v1/decisions/{id}/stream` | SSE stream — real-time pipeline progress |
+| GET | `/v1/decisions/{id}` | Full governance result after completion |
+
+Additional endpoints cover workspace dashboard (metrics, decision feed, agent management), agent registry with escalation rules, auth (JWT + Google/Azure SSO), and company management — 25+ endpoints total.
+
+---
+
+## Project Structure
 
 ```
 decision-governance-layer/
 ├── app/
-│   ├── schemas.py                 # Pydantic v2 models (Decision, Owner, Goal, etc.)
-│   ├── governance.py              # Deterministic governance engine
-│   ├── graph_ontology.py          # Graph schema (Node, Edge, NodeType, EdgePredicate)
-│   ├── graph_repository.py        # Repository pattern (BaseGraphRepository, InMemory)
-│   ├── graph_reasoning.py         # Graph analysis orchestration + deterministic fallback
-│   ├── decision_pack.py           # Template-based pack generator
-│   ├── decision_pipeline.py       # End-to-end 5-step pipeline orchestration
-│   ├── nova_reasoner.py           # Nova API integration + subgraph extraction
-│   ├── demo_fixtures.py           # 30 scenarios across 3 governance frameworks
-│   ├── e2e_runner.py              # End-to-end validation (180 checks, 30 scenarios)
-│   └── __init__.py
-├── docs/
-│   ├── README_VISION.md           # Project philosophy & vision
-│   ├── BUILD_PLAN.md              # Hackathon build plan
-│   ├── ARCHITECTURE.md            # Technical architecture details
-│   └── QA_SUMMARY.md             # Test results & demo stability
-├── mock_company.json              # Corporate Finance governance context (Nexus Dynamics)
-├── mock_company_healthcare.json   # Healthcare governance context (Mayo Central Hospital)
-├── mock_company_public.json       # Public Sector governance context (State of Delaware GSA)
-├── GRAPH_REASONING_SUMMARY.md    # Graph reasoning implementation notes
-├── requirements.txt               # Python dependencies
-└── README.md                      # This file
+│   ├── main.py                          # FastAPI app, lifespan, CORS, routers
+│   ├── extractor.py                     # LLM extraction with retry + fallback
+│   ├── llm_client.py                    # Nova prompt engineering
+│   ├── bedrock_client.py                # AWS Bedrock HTTP client
+│   ├── governance.py                    # Generic rule engine (no hardcoded rules)
+│   ├── graph_ontology.py                # Node types, edge predicates, schema
+│   ├── graph_repository.py              # Abstract repo + InMemory implementation
+│   ├── graph_enrichment.py              # Strategic goals, rules, alignment edges
+│   ├── decision_pack.py                 # Template-based decision artifact assembly
+│   ├── nova_reasoner.py                 # Nova graph reasoning + goal alignment
+│   ├── config/
+│   │   ├── bedrock_config.py            # Tiered model IDs (Pro + Lite), region, timeouts
+│   │   └── risk_config.py               # Dimension weights, band thresholds
+│   ├── models/                          # SQLAlchemy ORM (User, Company, Agent, Decision)
+│   ├── routers/                         # FastAPI endpoints
+│   │   ├── decisions.py                 # Pipeline submission + SSE streaming
+│   │   ├── workspace.py                 # Dashboard + agent management
+│   │   ├── agents.py                    # Agent registry + escalation rules
+│   │   └── normalizers.py               # Response shape enforcement
+│   ├── services/
+│   │   ├── pipeline_service.py          # 5-step async pipeline orchestrator
+│   │   ├── risk_scoring_service.py      # 3-dimension quantified risk scoring
+│   │   ├── risk_response_simulation_service.py  # Counterfactual scenario engine
+│   │   ├── nova_scenario_proposer.py    # Nova template proposal
+│   │   ├── external_signal_service.py   # Market/regulatory signal orchestrator
+│   │   ├── rbac_service.py              # Role-based access control
+│   │   └── sso_service.py              # Google OAuth2, Azure AD OIDC
+│   ├── schemas/                         # Pydantic v2 request/response contracts
+│   ├── repositories/                    # Data access (decision_store, agent_store, DB repos)
+│   ├── demo_fixtures/                   # 2 companies with governance rules, evidence, signals
+│   │   ├── companies/{nexus_dynamics,mayo_central}/
+│   │   ├── external_profiles/           # Company-specific signal categories
+│   │   ├── external_sources/            # Curated industry benchmarks
+│   │   └── simulation_templates.json    # 9 remediation scenario templates
+│   └── db/                              # SQLAlchemy session, base
+├── alembic/versions/                    # 11 migrations (users → companies → decisions → agents)
+├── tests/                               # 276 tests (pytest)
+└── requirements.txt
 ```
 
 ---
 
-## 🧪 Testing
-
-### Run All E2E Tests
+## Quick Start
 
 ```bash
-python -m app.e2e_runner
+# Setup
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# Environment
+cp .env.example .env
+# Set BEDROCK_API_KEY (AWS Bedrock Bearer token)
+# Set JWT_SECRET
+
+# Database
+alembic upgrade head
+
+# Run
+uvicorn app.main:app --reload --port 8000
+
+# Test
+python -m pytest tests/ -v    # 276 tests
 ```
 
-**Test Coverage:**
-- ✅ Governance evaluation (deterministic)
-- ✅ Graph storage (nodes + edges)
-- ✅ Decision Pack generation (all sections)
-- ✅ Graph reasoning section (when enabled)
-- ✅ Invariant enforcement (never null, never empty)
-- ✅ Scenario validation (30 scenarios across 3 frameworks)
+---
 
-### Invariants Enforced
+## Demo Companies
 
-1. **Decision Pack NEVER null**
-2. **Graph NEVER empty after governance**
-3. **Approval chain exists when rules triggered**
-4. **Action node always created**
+Two company profiles with distinct governance frameworks:
 
-**Exit codes:**
-- `0` = All tests passed, demo stable ✅
-- `1` = Tests failed, DO NOT DEMO ❌
+| Company | Industry | Governance Focus | Rules |
+|---------|----------|-----------------|-------|
+| **Nexus Dynamics** | Finance/Tech | Capital expenditure, strategic alignment, workforce changes | R1-R8 |
+| **Mayo Central Hospital** | Healthcare | HIPAA compliance, patient data, clinical equipment | R1-R8 |
+
+Each company has: governance rules (JSON-configurable), strategic goals with categories, approval hierarchies, evidence registries, and external signal profiles. No company-specific logic exists in application code.
 
 ---
 
-## 🧠 Optional Nova Enhancement Layer
+## Test Coverage
 
-### When is Nova Used?
+276 unit tests + 8 integration tests across 15 test files:
 
-**Nova is OPTIONAL** and only used when:
-1. `use_nova=True` (defaults to True in production, False in tests)
-2. Multiple rules trigger (2+ rules)
-3. Conflict resolution is needed
+| Area | Tests | Coverage |
+|------|-------|----------|
+| Risk Scoring (3 dimensions, bands, evidence) | 26 | Dimension formulas, edge cases, confidence |
+| Risk Response Simulation (templates, re-evaluation) | 21 | 3-pass architecture, patch strategies |
+| Governance Evidence Integration | 18 | Evidence registry, signal assembly |
+| External Signals (Nova + curated fallback) | 23 | Profile loading, source matching |
+| Nova External Signal Summarizer | 19 | Prompt construction, response parsing |
+| Risk Semantics (LLM fallback layer) | 16 | Goal impacts, compliance facts |
+| Decision Context Extraction | 12 | Entity extraction, proposal generation |
+| Bedrock Extractor | 5 | Nova integration, markdown stripping |
+| **Bedrock Integration** (live API) | **8** | **End-to-end Nova Lite + Pro, extraction roundtrip, scenario proposals, graph reasoning** |
+| RBAC | 14 | Role enforcement, tenant isolation |
+| SSO | 15 | Google OAuth2, Azure AD OIDC flows |
+| Auth | 12 | Signup, login, token validation |
 
-### What Does Nova Do?
-
-```python
-# Deterministic path (always runs)
-governance_result = evaluate_governance(decision, use_nova=False)
-# ✅ Uses: Pure Python rule evaluation
-# ✅ Output: Deterministic, reproducible
-
-# Nova-enhanced path (optional)
-governance_result = evaluate_governance(decision, use_nova=True)
-# ✅ Uses: Deterministic evaluation + Nova conflict resolution
-# ✅ Output: Optimized approval chain when 2+ rules conflict
-```
-
-### Three Nova Reasoning Functions
-
-From `app/nova_reasoner.py`:
-
-1. **`reason_about_goal_alignment()`**
-   - Maps decisions to company strategic goals
-   - Analyzes KPI/owner/semantic alignment
-   - **Status:** Implemented, not currently called
-
-2. **`reason_about_ownership_validity()`**
-   - Validates owners against org hierarchy
-   - Checks authority levels
-   - **Status:** Implemented, not currently called
-
-3. **`reason_about_governance_conflicts()`**
-   - Resolves conflicts when multiple rules trigger
-   - Optimizes approval chain sequence
-   - **Status:** Implemented, called when `use_nova=True` and 2+ rules
-
-### MVP Design Decision
-
-**Day 1-2 (Current):**
-- Nova disabled in E2E tests (`use_nova=False`)
-- 100% deterministic governance
-- No API keys required
-- Demo-stable
-
-**Day 3+ (Future):**
-- Enable Nova for complex scenarios
-- Use for goal mapping and ownership validation
-- Optional enhancement, not required
-
-### Why This Design?
-
-✅ **Deterministic Core:** Governance always works without LLM
-✅ **Optional Enhancement:** Nova improves complex edge cases
-✅ **Test Stability:** Tests run without API dependencies
-✅ **Production Ready:** Can enable Nova when needed
-
----
-
-## 🔬 Design Principles
-
-### 1. Governance is Deterministic
-**Why?**
-- Enterprises can't deploy non-deterministic governance
-- Legal/compliance requires explainability
-- Debugging AI governance is impossible
-
-**How?**
-- Pure Python rule evaluation
-- Boolean conditions (>=, ==, contains)
-- Priority-based matching
-- No LLM calls
-
-### 2. Graph is Memory
-**Why?**
-- Governance is inherently relational (who approves what)
-- Traversal queries are natural
-- Schema evolution is easier than relational
-- Future: graph algorithms (pagerank, path analysis)
-
-**How?**
-- 5 node types (Actor, Action, Policy, Risk, Resource)
-- 6 edge predicates (OWNS, REQUIRES_APPROVAL_BY, etc.)
-- Repository pattern (swappable backend)
-- BFS traversal for context retrieval
-
-### 3. Decision Pack is Last
-**Why?**
-- Single source of truth (graph)
-- Always current (re-compute with latest rules)
-- No sync issues
-
-**How?**
-- Template-based generation
-- Deterministic formatting
-- Derived from graph + governance
-- Never stored (computed on-demand)
-
----
-
-## 🛣️ Evolution Path
-
-### Completed
-- ✅ Pydantic schemas
-- ✅ Deterministic governance (100% rule-based)
-- ✅ Graph ontology (5 nodes, 6 edges)
-- ✅ InMemory repository
-- ✅ Decision Pack generator
-- ✅ Graph reasoning (deterministic + optional Nova)
-- ✅ End-to-end pipeline (`decision_pipeline.py`)
-- ✅ 30 demo scenarios across 3 governance frameworks
-- ✅ E2E tests (180 checks, 100% pass rate)
-- ✅ Multi-company governance contexts (Corporate Finance, Healthcare, Public Sector)
-
-### Next Steps
-- [ ] REST API (FastAPI)
-- [ ] Neo4j integration (replace InMemory)
-- [ ] LLM extraction endpoint (GPT-4o for decision parsing)
-- [ ] Enable Nova graph reasoning in production (`use_nova_graph=True`)
-
-### Week 2
-- [ ] Graph analytics (approval bottlenecks)
-- [ ] Real-time policy updates
-- [ ] Audit dashboards
-
-### Month 2
-- [ ] Multi-tenant support
-- [ ] Policy versioning
-- [ ] Decision history/rollback
-
----
-
-## 📚 Documentation
-
-- **Vision:** [docs/README_VISION.md](docs/README_VISION.md)
-- **Build Plan:** [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)
-- **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- **QA Summary:** [docs/QA_SUMMARY.md](docs/QA_SUMMARY.md)
-
----
-
-## 🎯 One-Line Summary
-
-> **Graph-native decision governance with deterministic rules, swappable storage, and template-based human outputs — optimized for hackathon speed and enterprise evolution.**
-
----
-
-## 📄 License
-
-MIT
-
----
-
-## 🤝 Contributing
-
-Hackathon MVP — contributions welcome after initial demo.

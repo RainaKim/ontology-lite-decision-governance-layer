@@ -55,7 +55,7 @@ class User(Base):
 
     # RBAC
     role: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="USER"
+        String(20), nullable=False, default="ADMIN"
     )  # ADMIN | MANAGER | USER
 
     # Lifecycle

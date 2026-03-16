@@ -186,6 +186,7 @@ class RiskDimension:
     label: str
     score: int    # 0-100
     band: str
+    label_en: Optional[str] = None
     signals: list[RiskSignal] = field(default_factory=list)
     evidence: list[RiskEvidence] = field(default_factory=list)  # kept for compat, empty now
     kpi_impact_estimate: Optional[dict[str, Any]] = None
@@ -241,6 +242,7 @@ class RiskScoringResult:
                 {
                     "id":     d.id,
                     "label":  d.label,
+                    **({"label_en": d.label_en} if d.label_en is not None else {}),
                     "score":  d.score,
                     "band":   d.band,
                     "signals": [_sig_dict(s) for s in d.signals],
@@ -758,6 +760,7 @@ class RiskScoringService:
         return RiskDimension(
             id="financial",
             label="재무 위험",
+            label_en="Financial Risk",
             score=score,
             band=band,
             signals=final_signals,
@@ -970,6 +973,7 @@ class RiskScoringService:
         return RiskDimension(
             id="compliance",
             label="컴플라이언스 / 개인정보 위험",
+            label_en="Compliance / Privacy Risk",
             score=score,
             band=band,
             signals=final_signals,
@@ -1141,6 +1145,7 @@ class RiskScoringService:
             return RiskDimension(
                 id="strategic",
                 label="전략 정합성 / 충돌",
+                label_en="Strategic Alignment / Conflict",
                 score=50,
                 band="MEDIUM",
                 signals=final_signals,
@@ -1235,6 +1240,7 @@ class RiskScoringService:
         return RiskDimension(
             id="strategic",
             label="전략 정합성 / 충돌",
+            label_en="Strategic Alignment / Conflict",
             score=dim_score,
             band=band,
             signals=final_signals,
@@ -1254,7 +1260,7 @@ class RiskScoringService:
     ) -> tuple[Optional[RiskDimension], int]:
         """
         Procurement risk dimension — fires only when the company registry has
-        procurementTriggers configured (e.g. sool_sool_icecream).
+        procurementTriggers configured.
 
         Data sources (registry-driven, no hardcoded source IDs in scoring logic):
           All constants are read from whichever sources appear in procurementTriggers.
@@ -1418,6 +1424,7 @@ class RiskScoringService:
         return RiskDimension(
             id="procurement",
             label="구매·조달 위험",
+            label_en="Procurement / Inventory Risk",
             score=score,
             band=band,
             signals=final_signals,

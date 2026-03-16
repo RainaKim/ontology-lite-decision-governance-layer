@@ -13,10 +13,8 @@ Architecture contract:
 from __future__ import annotations
 
 import logging
-import os
 from typing import Optional
 
-import httpx
 from pydantic import ValidationError
 
 from app.schemas.nova_scenarios import (
@@ -25,19 +23,12 @@ from app.schemas.nova_scenarios import (
     NovaScenarioResponse,
 )
 from app.utils.llm_utils import extract_json
-from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION
+from app.bedrock_client import BedrockClient
 
 logger = logging.getLogger(__name__)
 
-_MODEL_ID = NOVA_MODEL_ID
 _MAX_TOKENS = 1024
-_REGION = BEDROCK_REGION
-
-# Bedrock Runtime REST endpoint — API key passed as Bearer token
-_BEDROCK_ENDPOINT = (
-    f"https://bedrock-runtime.{_REGION}.amazonaws.com"
-    f"/model/{_MODEL_ID}/invoke"
-)
+_bedrock = BedrockClient()
 
 # Prompt template — instructs Nova to pick from allowed templateIds only
 _PROMPT_TEMPLATE = """\
@@ -97,18 +88,14 @@ def propose_scenarios_with_nova(
     """
     try:
         prompt = _build_prompt(decision, governance_result, risk_scoring)
-        raw = _call_nova(prompt)
+        raw = _bedrock.invoke(prompt, max_tokens=_MAX_TOKENS)
+        logger.debug(f"[nova] Raw scenario proposal output: {raw[:300]}")
         proposals = _parse_and_validate(raw)
         if proposals:
-            logger.info(
-                f"[nova] Nova scenario proposals generated — {len(proposals)} proposal(s)"
-            )
+            logger.info(f"[nova] Nova scenario proposals generated — {len(proposals)} proposal(s)")
         return proposals
     except Exception as exc:
-        logger.warning(
-            f"[nova] Nova proposal failed (non-fatal): {exc} — "
-            "using fallback scenarios"
-        )
+        logger.warning(f"[nova] Nova proposal failed (non-fatal): {exc} — using deterministic candidates")
         return None
 
 
@@ -140,50 +127,9 @@ def _build_prompt(decision: dict, governance_result: dict, risk_scoring: dict) -
         aggregate_score=agg.get("score", 0),
         aggregate_band=agg.get("band", "LOW"),
         financial_score=dims.get("financial", {}).get("score", 0),
-        compliance_score=dims.get("compliance", {}).get("score", 0),
+        compliance_score=dims.get("compliance_privacy", {}).get("score", 0),
         strategic_score=dims.get("strategic", {}).get("score", 0),
     )
-
-
-# ── Nova call ─────────────────────────────────────────────────────────────────
-
-def _call_nova(prompt: str) -> str:
-    """
-    Invoke Amazon Nova via AWS Bedrock Runtime REST API.
-
-    Authentication: BEDROCK_API_KEY from environment, passed as Bearer token.
-    Raises on missing key, network error, or non-2xx response —
-    caller (propose_scenarios_with_nova) handles via try/except.
-    """
-    api_key = os.environ.get("BEDROCK_API_KEY")
-    if not api_key:
-        raise RuntimeError("BEDROCK_API_KEY not set in environment")
-
-    payload = {
-        "messages": [
-            {"role": "user", "content": [{"text": prompt}]}
-        ],
-        "inferenceConfig": {
-            "temperature": 0,
-            "maxTokens": _MAX_TOKENS,
-        },
-    }
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-    response = httpx.post(
-        _BEDROCK_ENDPOINT,
-        headers=headers,
-        json=payload,
-        timeout=30.0,
-    )
-    response.raise_for_status()
-    response_body = response.json()
-
-    # Nova converse-style response: output.message.content[0].text
-    return response_body["output"]["message"]["content"][0]["text"]
 
 
 # ── JSON parse + validation ───────────────────────────────────────────────────
@@ -200,26 +146,23 @@ def _parse_and_validate(
     """
     data = extract_json(raw)
     if data is None:
-        logger.warning("[nova] JSON parse failed — using fallback scenarios")
+        logger.warning("[nova] JSON parse failed")
         return None
 
     try:
         validated = NovaScenarioResponse(**data)
     except ValidationError as exc:
-        logger.warning(f"[nova] Nova output invalid — using fallback scenarios: {exc}")
+        logger.warning(f"[nova] Nova output schema invalid: {exc}")
         return None
 
     # Filter to known templateIds only
     known = [p for p in validated.scenarios if p.templateId in ALLOWED_TEMPLATE_IDS]
     unknown = [p.templateId for p in validated.scenarios if p.templateId not in ALLOWED_TEMPLATE_IDS]
     if unknown:
-        logger.warning(
-            f"[nova] Ignoring unknown templateId(s): {unknown} — using fallback scenarios "
-            "for those entries"
-        )
+        logger.warning(f"[nova] Ignoring unknown templateId(s): {unknown}")
 
     if not known:
-        logger.warning("[nova] Nova output invalid — using fallback scenarios")
+        logger.warning("[nova] No valid templateIds in Nova output")
         return None
 
     return known

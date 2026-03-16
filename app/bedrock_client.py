@@ -20,7 +20,7 @@ import os
 
 import httpx
 
-from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION, BEDROCK_TIMEOUT
+from app.config.bedrock_config import NOVA_MODEL_ID, NOVA_PRO_MODEL_ID, BEDROCK_REGION, BEDROCK_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
