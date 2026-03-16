@@ -1,0 +1,78 @@
+{
+  "companyId": "sool_sool_icecream",
+  "version": "1.0.0",
+  "budgetSources": [
+    {
+      "sourceId": "BS_BANK_STATEMENT",
+      "sourceType": "finance_system",
+      "documentNameKo": "최근 은행 잔액 증명서 (당월 기준)",
+      "documentNameEn": "Current Bank Account Balance Statement (Current Month)",
+      "ownerRole": "재무 담당",
+      "summaryKo": "당월 기준 회사 당좌 계좌 잔액을 확인하는 은행 잔액 증명서입니다. 신규 지출 의사결정이 현재 가용 현금을 초과하는지 여부를 평가하는 기준 문서로 활용됩니다. 소규모 식음료 기업 특성상 현금 유동성이 구매·채용 결정의 핵심 제약 요인입니다.",
+      "summaryEn": "Bank account balance statement confirming the company's current account balance as of the current month. Used as the reference document for assessing whether new expenditure decisions exceed currently available cash. Given the nature of small F&B businesses, cash liquidity is a critical constraint for purchase and hiring decisions.",
+      "relevantFields": ["cost", "remaining_budget", "current_account_balance"],
+      "constants": {
+        "bank_balance_usd": 8500,
+        "as_of": "2026-03-08"
+      },
+      "citationTemplateKo": "당월 은행 잔액 증명서(2026-03-08 기준), 현재 계좌 잔액 ${{bank_balance_usd}} 대비 요청 금액({{cost}})은 {{verdict}}입니다.",
+      "citationTemplateEn": "Per the current bank account balance statement (as of 2026-03-08), the requested amount ({{cost}}) relative to the current account balance (${{bank_balance_usd}}) is {{verdictEn}}."
+    },
+    {
+      "sourceId": "BS_CASHFLOW_PLAN",
+      "sourceType": "budget_sheet",
+      "documentNameKo": "현금 흐름 계획서 (향후 3개월 미지급금·미수금 일정)",
+      "documentNameEn": "Cash-Flow Plan (3-Month Forward Accounts Payable and Receivable Schedule)",
+      "ownerRole": "재무 담당",
+      "summaryKo": "향후 3개월간 예정된 지급 의무(미지급금)와 수취 예정 매출(미수금) 일정을 기록한 현금 흐름 계획서입니다. 신규 지출이 현금 흐름에 미치는 충격을 사전에 평가하는 데 사용됩니다.",
+      "summaryEn": "Cash-flow plan recording scheduled payment obligations (accounts payable) and expected sales receipts (accounts receivable) for the next 3 months. Used to pre-assess the cash-flow impact of new expenditures.",
+      "relevantFields": ["cost", "monthly_cash_outflow", "monthly_cash_inflow"],
+      "constants": {
+        "upcoming_payables_3m_usd": 5200,
+        "payables_breakdown": "임대료, 재료비, 유틸리티 포함 / Includes rent, ingredients, utilities",
+        "free_cash_after_payables_usd": 3300
+      },
+      "citationTemplateKo": "현금 흐름 계획서(향후 3개월) 기준, 확정 미지급금 ${{upcoming_payables_3m_usd}} 차감 후 가용 현금 ${{free_cash_after_payables_usd}} 대비 추가 지출({{cost}})은 {{verdict}}입니다.",
+      "citationTemplateEn": "Per the 3-month forward cash-flow plan, the additional expenditure ({{cost}}) relative to free cash after confirmed payables (${{free_cash_after_payables_usd}} remaining after ${{upcoming_payables_3m_usd}} in payables) is {{verdictEn}}."
+    },
+    {
+      "sourceId": "BS_INVENTORY_STATUS",
+      "sourceType": "budget_sheet",
+      "documentNameKo": "재고 현황 및 발주 계획서 (아이스크림 용기 기준)",
+      "documentNameEn": "Inventory Status and Order Plan (Ice Cream Container Basis)",
+      "ownerRole": "구매 리드",
+      "summaryKo": "현재 보유 아이스크림 컵·용기 재고 수량, 배송 중인 기존 주문 물량 및 도착 예정일, 창고 보관 가능 용량을 기록한 재고 현황 문서입니다. 추가 주문 결정 시 재고 과잉 및 보관 공간 부족 여부를 판단하는 기준 자료로 사용됩니다.",
+      "summaryEn": "Inventory status document recording current ice cream cup/container stock count, quantity and expected arrival date of existing in-transit orders, and warehouse storage capacity. Used as the reference for determining whether additional orders would result in excess inventory or insufficient storage space.",
+      "relevantFields": ["current_inventory_units", "in_transit_units", "storage_capacity_units", "order_quantity"],
+      "constants": {
+        "on_hand_units": 200,
+        "in_transit_units": 500,
+        "in_transit_arrival_days": 14,
+        "storage_capacity_units": 800,
+        "available_storage_after_transit": 100,
+        "combined_units": 700,
+        "note": "배송 중 물량 도착 후 잔여 보관 가능 용량 100개 / Only 100 units of storage remain after in-transit order arrives"
+      },
+      "citationTemplateKo": "재고 현황 및 발주 계획서 기준, 현재 보유 {{on_hand_units}}개 + 배송 중 {{in_transit_units}}개({{in_transit_arrival_days}}일 내 도착) = 합계 {{combined_units}}개로 창고 용량({{storage_capacity_units}}개) 대비 여유 용량이 {{available_storage_after_transit}}개에 불과합니다.",
+      "citationTemplateEn": "Per the inventory status and order plan, current stock ({{on_hand_units}} units) + in-transit ({{in_transit_units}} units, arriving within {{in_transit_arrival_days}} days) = {{combined_units}} total, leaving only {{available_storage_after_transit}} units of remaining storage capacity (max {{storage_capacity_units}})."
+    },
+    {
+      "sourceId": "BS_HEADCOUNT_BUDGET",
+      "sourceType": "finance_system",
+      "documentNameKo": "연간 재무 예측 및 헤드카운트 예산 계획서",
+      "documentNameEn": "Annual Financial Projection and Headcount Budget Plan",
+      "ownerRole": "재무 담당",
+      "summaryKo": "올해 잔여 기간의 재무 예측(매출·비용·현금 흐름)과 신규 인력 충원 가능 여부를 검토하는 헤드카운트 예산 계획서입니다. 신규 채용 결정 시 연간 추가 인건비가 재무 예측 상의 가용 예산 내에 있는지 여부를 확인하는 기준 자료입니다.",
+      "summaryEn": "Headcount budget plan reviewing the financial projections (revenue, cost, cash flow) for the remainder of the year and the feasibility of adding new staff. Reference document for confirming whether the annual additional labor cost from new hires falls within the available budget in the financial projection.",
+      "relevantFields": ["annual_labor_cost_per_headcount", "remaining_headcount_budget"],
+      "constants": {
+        "annual_labor_cost_per_hire_usd": 42000,
+        "fy_profitability_outlook": "uncertain",
+        "approved_headcount_budget_usd": 0,
+        "note": "현재 회계연도 신규 채용 승인 예산 없음 / No approved headcount budget for current fiscal year"
+      },
+      "citationTemplateKo": "연간 재무 예측 및 헤드카운트 예산 계획서 기준, 생산직 신규 채용 1인당 연간 인건비 ${{annual_labor_cost_per_hire_usd}}이며, 당해 연도 흑자 전환 여부 불확실({{fy_profitability_outlook}}) 상황에서 승인된 채용 예산은 ${{approved_headcount_budget_usd}}입니다.",
+      "citationTemplateEn": "Per the annual financial projection and headcount budget plan, annual labor cost per production hire is ${{annual_labor_cost_per_hire_usd}}. With full-year profitability outlook classified as {{fy_profitability_outlook}}, the currently approved headcount budget is ${{approved_headcount_budget_usd}}."
+    }
+  ]
+}
