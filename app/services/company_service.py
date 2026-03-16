@@ -4,7 +4,6 @@ Company Service - Load and cache mock company data.
 Contract-compliant company IDs (api_contract_v1.md):
   nexus_dynamics    → mock_company_nexus.json           (Nexus Dynamics)
   mayo_central      → mock_company_healthcare_merged.json (Mayo Central Hospital)
-  sool_sool_icecream → sool_sool_icecream_merged.json
 
 No DB. In-memory cache loaded once at startup.
 """

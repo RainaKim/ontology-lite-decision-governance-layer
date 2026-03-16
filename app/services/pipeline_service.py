@@ -268,7 +268,12 @@ async def run_pipeline(
         )
         decision_store.store_results(decision_id, reasoning=reasoning)
         decision_store.update_status(decision_id, "processing", current_step=3)
-        logger.info(f"[{decision_id}] Step 3 complete → reasoning_complete")
+        logger.info(
+            f"[{decision_id}] Step 3 complete → reasoning_complete "
+            f"(source={reasoning.get('source')}, "
+            f"nova_available={reasoning.get('nova_available')}, "
+            f"graph_reasoning_keys={list((reasoning.get('graph_reasoning') or {}).keys())})"
+        )
 
         # ── Step 4b: Risk Response Simulation ────────────────────────────────
         # Non-fatal: generates counterfactual remediation scenarios by re-running
@@ -342,10 +347,15 @@ async def run_pipeline(
 
         from app.decision_pack import build_decision_pack
 
+        # Pass graph reasoning insights to decision pack so it can use
+        # Nova-generated next actions and detect strategic misalignments.
+        _graph_insights = (reasoning or {}).get("graph_reasoning")
+
         decision_pack = build_decision_pack(
             decision=decision_obj.model_dump(),
             governance=gov_dict,
             company=company_data or {},
+            graph_insights=_graph_insights,
             lang=record.lang,
             risk_scoring=record.risk_scoring,
             external_signals=_ext_payload.model_dump() if _ext_payload else None,

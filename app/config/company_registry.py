@@ -9,13 +9,9 @@ COMPANY_RULES_FILES: dict[str, dict[str, str]] = {
     "mayo_central": {
         "merged": "mock_company_healthcare_merged.json",
     },
-    "sool_sool_icecream": {
-        "merged": "sool_sool_icecream_merged.json",
-    },
 }
 
 PROFILE_ALIASES: dict[str, str] = {
     "mayo_central": "mayo_central_hospital",
     "nexus_dynamics": "nexus_dynamics",
-    "sool_sool_icecream": "sool_sool_icecream",
 }

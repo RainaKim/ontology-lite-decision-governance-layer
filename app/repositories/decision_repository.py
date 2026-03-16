@@ -24,6 +24,7 @@ def create(
     db: Session,
     *,
     company_id: str,
+    agent_id: Optional[str] = None,
     agent_name: str,
     department: str,
     proposed_text: str,
@@ -36,6 +37,7 @@ def create(
     """Create and persist a new workspace decision record (status=pending)."""
     record = Decision(
         company_id=company_id,
+        agent_id=agent_id,
         agent_name=agent_name,
         agent_name_en=agent_name_en,
         department=department,

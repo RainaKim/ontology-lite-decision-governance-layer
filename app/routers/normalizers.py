@@ -815,55 +815,38 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
         )
 
     # Build reasoning payload (available after step 4)
-    # Prefer Nova Reasoner output if present
+    # Nova pipeline stores: {"source": "nova", "graph_reasoning": <formatted>, "nova_available": True}
     reasoning = None
     if record.reasoning:
         r = record.reasoning
-        nova = r.get("nova_reasoner")
-        if nova:
-            # Nova Reasoner output present
-            contradictions = [
-                c.get("description", str(c)) if isinstance(c, dict) else str(c)
-                for c in nova.get("contradictions_found", [])
-            ]
-            recommendations = [
-                rec.get("action", str(rec)) if isinstance(rec, dict) else str(rec)
-                for rec in nova.get("graph_based_recommendations", [])
-            ]
-            for issue in nova.get("ownership_validation", []):
-                if isinstance(issue, dict):
-                    desc = issue.get("description", "")
-                    if desc:
-                        recommendations.append(desc)
+        gr = r.get("graph_reasoning") or {}
+        is_nova = r.get("source") == "nova" and gr
+        graph_analysis = gr.get("graph_analysis") or {}
+
+        contradictions = [
+            c.get("description", str(c)) if isinstance(c, dict) else str(c)
+            for c in gr.get("contradictions_found", [])
+        ]
+        recommendations = [
+            rec.get("action", str(rec)) if isinstance(rec, dict) else str(rec)
+            for rec in gr.get("graph_based_recommendations", [])
+        ]
+        for issue in gr.get("ownership_validation", []):
+            if isinstance(issue, dict):
+                desc = issue.get("description", "")
+                if desc:
+                    recommendations.append(desc)
+
+        if is_nova:
             reasoning = ReasoningPayload(
                 analysis_method="nova_reasoner",
                 logical_contradictions=contradictions,
                 graph_recommendations=recommendations,
-                confidence=nova.get("confidence", 0.0),
-                raw_analysis=nova,
+                confidence=graph_analysis.get("confidence", 0.0),
+                raw_analysis=gr,
             )
         else:
-            # Fallback to graph_reasoning
-            gr = r.get("graph_reasoning") or {}
-            graph_analysis = gr.get("graph_analysis") or {}
-            contradictions = [
-                c.get("description", str(c)) if isinstance(c, dict) else str(c)
-                for c in gr.get("contradictions_found", [])
-            ]
-            recommendations = [
-                rec.get("action", str(rec)) if isinstance(rec, dict) else str(rec)
-                for rec in gr.get("graph_based_recommendations", [])
-            ]
-            for issue in gr.get("ownership_validation", []):
-                if isinstance(issue, dict):
-                    desc = issue.get("description", "")
-                    if desc:
-                        recommendations.append(desc)
-
-            # For deterministic reasoning, graph_analysis has no confidence value.
-            # Use the decision's extraction confidence instead: it reflects how
-            # completely the LLM understood the input, which determines how
-            # reliably the deterministic rules can be applied.
+            # Deterministic fallback — use extraction confidence as proxy
             extraction_confidence = (
                 record.decision.get("confidence", 1.0)
                 if record.decision else 1.0
@@ -920,6 +903,7 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
                 RiskDimensionResponse(
                     id=d.get("id", ""),
                     label=d.get("label", ""),
+                    label_en=d.get("label_en"),
                     score=d.get("score", 0),
                     band=d.get("band", "LOW"),
                     signals=[
@@ -1031,6 +1015,8 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
                     remainingIssuesEn=s.get("remainingIssuesEn", []),
                     confidence=s.get("confidence"),
                     isRecommended=s.get("isRecommended", False),
+                    rationaleKo=s.get("rationaleKo"),
+                    rationaleEn=s.get("rationaleEn"),
                 )
                 for s in sim.get("scenarios", [])
             ]

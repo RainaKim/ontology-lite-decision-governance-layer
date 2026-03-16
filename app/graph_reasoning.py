@@ -68,6 +68,12 @@ async def analyze_decision_graph_with_nova(
                 lang=lang,
             )
         except Exception as e:
+            import logging as _logging
+            _logging.getLogger(__name__).error(
+                f"[graph_reasoning] Nova reasoning failed for {decision_id}: "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
             # Fallback to deterministic analysis if Nova fails
             nova_insights = {
                 "error": str(e),
@@ -199,7 +205,7 @@ async def _reason_about_graph_with_nova(
     Returns:
         Nova analysis with contradictions, ownership issues, risk gaps, recommendations
     """
-    reasoner = NovaReasoner(model="o4-mini")
+    reasoner = NovaReasoner()
 
     # Nova API is sync, run in executor
     result = await asyncio.get_event_loop().run_in_executor(

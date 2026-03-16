@@ -21,6 +21,8 @@ ALLOWED_TEMPLATE_IDS: frozenset[str] = frozenset({
     "add_compliance_review",
     "add_goal_mapping",
     "reduce_strategic_conflict",
+    "defer_hiring",
+    "reduce_headcount",
 })
 
 

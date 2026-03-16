@@ -93,7 +93,7 @@ async def get_company(
     GET /v1/companies/{company_id} — Full company governance context.
 
     Path params:
-        company_id: nexus_dynamics | mayo_central | sool_sool_icecream
+        company_id: nexus_dynamics | mayo_central
 
     Returns full company data including approval hierarchy and governance rules.
     """

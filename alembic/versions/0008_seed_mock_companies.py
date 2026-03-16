@@ -1,6 +1,6 @@
 """Seed mock companies into companies table.
 
-Uses governance keys as PKs (nexus_dynamics, mayo_central, sool_sool_icecream)
+Uses governance keys as PKs (nexus_dynamics, mayo_central)
 so no UUID translation is needed when loading governance context from JSON.
 
 Revision ID: 0008
@@ -37,15 +37,6 @@ _COMPANIES = [
         "company_name_en": "Mayo Central Hospital",
         "domain_url": "mayo-central.governance.internal",
         "license_tier": "ENTERPRISE",
-        "auth_type": "LOCAL",
-        "status": "ACTIVE",
-    },
-    {
-        "id": "sool_sool_icecream",
-        "company_name": "Sool Sool Ice Cream",
-        "company_name_en": "Sool Sool Ice Cream",
-        "domain_url": "sool-sool.governance.internal",
-        "license_tier": "BASIC",
         "auth_type": "LOCAL",
         "status": "ACTIVE",
     },

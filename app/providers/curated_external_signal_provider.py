@@ -59,7 +59,7 @@ def get_fallback_signals(
     Build deterministic external signals from curated sources.
 
     Args:
-        company_id:      Company ID (e.g. "sool_sool_icecream").
+        company_id:      Company ID (e.g. "nexus_dynamics").
         decision_context: Structured context dict:
                           decision_text, decision_type, cost, risk_band.
         triggered_rules: Optional list of triggered governance rule dicts.
