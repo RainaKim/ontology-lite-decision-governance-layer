@@ -3,8 +3,8 @@ Decision Governance Layer - Rule Engine
 
 Hybrid governance evaluation:
 - Rule matching (deterministic Python)
-- Conflict resolution (o1 reasoning)
-- Approval optimization (o1 reasoning)
+- Conflict resolution (Nova reasoning)
+- Approval optimization (Nova reasoning)
 
 Extension pattern — pure function extraction:
   When adding a new transformation, write it as a pure function (no I/O, no os.environ),
@@ -19,7 +19,7 @@ from typing import Optional
 from enum import Enum
 
 from app.schemas import Decision, ApprovalChainStep, ApprovalLevel
-from app.o1_reasoner import O1Reasoner
+from app.nova_reasoner import NovaReasoner
 
 logger = logging.getLogger(__name__)
 
@@ -542,14 +542,14 @@ def detect_flags(decision: Decision, company_context: dict, computed_risk_score:
     return list(dict.fromkeys(flags))
 
 
-def evaluate_governance(decision: Decision, company_context: dict = None, use_o1: bool = True, company_id: str = None, lang: str = "ko") -> GovernanceResult:
+def evaluate_governance(decision: Decision, company_context: dict = None, use_nova: bool = True, company_id: str = None, lang: str = "ko") -> GovernanceResult:
     """
-    Main governance evaluation function with o1 reasoning.
+    Main governance evaluation function with Nova reasoning.
 
     Args:
         decision: Decision object to evaluate
         company_context: Optional company-specific context (policies, thresholds, etc.)
-        use_o1: Whether to use o1 for conflict resolution (default: True)
+        use_nova: Whether to use Nova for conflict resolution (default: True)
         company_id: Which company to select rules for
 
     Returns:
@@ -571,9 +571,9 @@ def evaluate_governance(decision: Decision, company_context: dict = None, use_o1
     # Select approval chain based on rules
     approval_chain, triggered_rules = select_approval_chain(decision, rules_data, company_context)
 
-    # If multiple rules triggered and o1 enabled, use o1 for conflict resolution
-    if use_o1 and len(triggered_rules) >= 2:
-        approval_chain = optimize_approval_chain_with_o1(
+    # If multiple rules triggered and Nova enabled, use Nova for conflict resolution
+    if use_nova and len(triggered_rules) >= 2:
+        approval_chain = optimize_approval_chain_with_nova(
             approval_chain, triggered_rules, decision, rules_data
         )
 
@@ -605,10 +605,10 @@ def evaluate_governance(decision: Decision, company_context: dict = None, use_o1
     )
 
 
-def optimize_approval_chain_with_o1(approval_chain: list, triggered_rules: list,
-                                    decision: Decision, company_data: dict) -> list:
+def optimize_approval_chain_with_nova(approval_chain: list, triggered_rules: list,
+                                     decision: Decision, company_data: dict) -> list:
     """
-    Use o1 to optimize approval chain when multiple rules trigger.
+    Use Nova to optimize approval chain when multiple rules trigger.
 
     Resolves conflicts and determines optimal approval sequence.
     """
@@ -620,18 +620,18 @@ def optimize_approval_chain_with_o1(approval_chain: list, triggered_rules: list,
         'risk_score': decision.risk_score
     }
 
-    # Initialize o1 reasoner
-    o1_reasoner = O1Reasoner(model="o4-mini")
+    # Initialize Nova reasoner
+    nova_reasoner = NovaReasoner(model="o4-mini")
 
-    # Call o1 for governance reasoning
-    o1_result = o1_reasoner.reason_about_governance_conflicts(
+    # Call Nova for governance reasoning
+    nova_result = nova_reasoner.reason_about_governance_conflicts(
         triggered_rules, decision_data, company_data
     )
 
-    # If o1 provided optimized chain, use it
-    optimized = o1_result.get('optimized_approval_chain', [])
+    # If Nova provided optimized chain, use it
+    optimized = nova_result.get('optimized_approval_chain', [])
     if optimized:
-        # Convert o1 format to ApprovalChainStep
+        # Convert Nova format to ApprovalChainStep
         new_chain = []
         for step in optimized:
             # Map level number to ApprovalLevel enum
@@ -653,7 +653,7 @@ def optimize_approval_chain_with_o1(approval_chain: list, triggered_rules: list,
 
         return new_chain
 
-    # Fallback to original chain if o1 didn't optimize
+    # Fallback to original chain if Nova didn't optimize
     return approval_chain
 
 

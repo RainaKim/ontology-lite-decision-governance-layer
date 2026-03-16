@@ -10,8 +10,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import BigInteger, DateTime, Float, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -32,7 +32,17 @@ class Decision(Base):
     # Org scoping
     company_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
 
-    # Agent metadata (ko / en)
+    # Agent reference — replaces flat agent_name/department strings
+    agent_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    agent = relationship("Agent", lazy="joined")
+
+    # Agent metadata (ko / en) — kept for backwards compat with existing rows
     agent_name: Mapped[str] = mapped_column(String(200), nullable=False)
     agent_name_en: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     department: Mapped[str] = mapped_column(String(100), nullable=False)

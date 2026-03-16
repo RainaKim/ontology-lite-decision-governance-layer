@@ -67,8 +67,8 @@ async def submit_decision(
     record = decision_store.create(
         company_id=request.company_id,
         input_text=request.input_text,
-        use_o1_governance=request.use_o1_governance,
-        use_o1_graph=request.use_o1_graph,
+        use_nova_governance=request.use_nova_governance,
+        use_nova_graph=request.use_nova_graph,
         lang=request.lang,
         agent_name=request.agent_name,
         agent_name_en=request.agent_name_en,
@@ -85,8 +85,8 @@ async def submit_decision(
         decision_id=record.decision_id,
         extractor=extractor,
         graph_repo=graph_repo,
-        use_o1_governance=request.use_o1_governance,
-        use_o1_graph=request.use_o1_graph,
+        use_nova_governance=request.use_nova_governance,
+        use_nova_graph=request.use_nova_graph,
     )
 
     logger.info(f"Decision submitted: {record.decision_id} (company={request.company_id})")

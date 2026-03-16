@@ -76,15 +76,15 @@ def build_decision_pack(
     )
 
     # Generate recommended next actions
-    # When o1 graph reasoning ran successfully, use its company-context-aware guidance.
+    # When Nova graph reasoning ran successfully, use its company-context-aware guidance.
     # It has access to the actual governance rules, thresholds, and personnel hierarchy,
     # so it can generate accurate guidance for any company — not just hardcoded thresholds.
-    # Fall back to deterministic generation when o1 was not used or failed.
-    o1_next_actions = (graph_insights or {}).get("next_actions", []) if graph_insights else []
-    o1_was_used = (graph_insights or {}).get("analysis_method") == "o1-reasoning"
+    # Fall back to deterministic generation when Nova was not used or failed.
+    nova_next_actions = (graph_insights or {}).get("next_actions", []) if graph_insights else []
+    nova_was_used = (graph_insights or {}).get("analysis_method") == "nova-reasoning"
 
-    if o1_was_used and o1_next_actions:
-        recommended_next_actions = o1_next_actions
+    if nova_was_used and nova_next_actions:
+        recommended_next_actions = nova_next_actions
     else:
         recommended_next_actions = _generate_next_actions(
             missing_items, approval_chain, flags, governance_status, triggered_rules, decision, lang
@@ -333,12 +333,12 @@ def _map_strategic_goals(company: dict, graph_insights: dict = None) -> list[dic
     """
     Map decision to company strategic goals with alignment/conflict indicators.
 
-    Uses o1 graph reasoning results to determine which strategic goals are relevant
+    Uses Nova graph reasoning results to determine which strategic goals are relevant
     and whether the decision aligns or conflicts with them.
 
     Args:
         company: Company data with strategic_goals
-        graph_insights: O1 graph reasoning results with strategic_goal_conflicts
+        graph_insights: Nova graph reasoning results with strategic_goal_conflicts
 
     Returns:
         List of strategic goals with alignment status:
@@ -363,7 +363,7 @@ def _map_strategic_goals(company: dict, graph_insights: dict = None) -> list[dic
     # Build goal map
     goal_map = {g["goal_id"]: g for g in strategic_goals}
 
-    # Extract conflicts from o1 insights
+    # Extract conflicts from Nova insights
     conflicts_by_goal = {}
     if graph_insights and graph_insights.get("strategic_goal_conflicts"):
         for conflict in graph_insights["strategic_goal_conflicts"]:
@@ -390,8 +390,8 @@ def _map_strategic_goals(company: dict, graph_insights: dict = None) -> list[dic
             })
         # If no explicit conflict, only show goals that are likely relevant
         # (otherwise we'd show all 3 goals for every decision)
-        # For now, we'll rely on o1 to only include relevant goals in the subgraph
-        # Future: Add heuristic alignment detection for non-o1 path
+        # For now, we'll rely on Nova to only include relevant goals in the subgraph
+        # Future: Add heuristic alignment detection for non-Nova path
 
     return mapped_goals
 

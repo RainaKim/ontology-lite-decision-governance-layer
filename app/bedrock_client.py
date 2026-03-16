@@ -1,7 +1,7 @@
 """
 app/bedrock_client.py — Shared AWS Bedrock Runtime HTTP client.
 
-Used by all LLM call sites: extraction (llm_client), reasoning (o1_reasoner),
+Used by all LLM call sites: extraction (llm_client), reasoning (nova_reasoner),
 risk semantics (risk_evidence_llm), and scenario proposals (nova_scenario_proposer).
 
 Authentication: BEDROCK_API_KEY from .env — passed as Bearer token.
@@ -20,7 +20,7 @@ import os
 
 import httpx
 
-from app.config.bedrock_config import NOVA_MODEL_ID, BEDROCK_REGION, BEDROCK_TIMEOUT
+from app.config.bedrock_config import NOVA_MODEL_ID, NOVA_PRO_MODEL_ID, BEDROCK_REGION, BEDROCK_TIMEOUT
 
 logger = logging.getLogger(__name__)
 

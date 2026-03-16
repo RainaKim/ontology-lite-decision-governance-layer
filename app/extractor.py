@@ -135,7 +135,7 @@ class DecisionExtractor:
 
                 # Step 4: Deterministic governance evaluation
                 logger.info(f"[{request_id}] Running deterministic governance evaluation")
-                governance_result = evaluate_governance(decision, company_context=None, use_o1=False, company_id=company_id)
+                governance_result = evaluate_governance(decision, company_context=None, use_nova=False, company_id=company_id)
 
                 # Success!
                 return DecisionExtractionResponse(
@@ -175,7 +175,7 @@ class DecisionExtractor:
         fallback_decision = self._create_fallback_decision(decision_text, request_id, last_error)
 
         # Still evaluate deterministic governance on fallback
-        governance_result = evaluate_governance(fallback_decision, company_context=None, use_o1=False, company_id=company_id)
+        governance_result = evaluate_governance(fallback_decision, company_context=None, use_nova=False, company_id=company_id)
 
         return DecisionExtractionResponse(
             decision=fallback_decision,

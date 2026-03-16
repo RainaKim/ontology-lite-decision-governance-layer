@@ -32,8 +32,8 @@ class DecisionRecord:
     updated_at: str
     current_step: int = 0    # 0-6, maps to STEP_LABELS
     # Request flags (captured at submission, control pipeline behavior)
-    use_o1_governance: bool = False
-    use_o1_graph: bool = False
+    use_nova_governance: bool = False
+    use_nova_graph: bool = False
     lang: str = "ko"  # "ko" | "en"
     agent_name: str = "AI Agent"
     agent_name_en: str = "AI Agent"
@@ -66,8 +66,8 @@ def _now() -> str:
 def create(
     company_id: str,
     input_text: str,
-    use_o1_governance: bool = False,
-    use_o1_graph: bool = False,
+    use_nova_governance: bool = False,
+    use_nova_graph: bool = False,
     lang: str = "ko",
     agent_name: str = "AI Agent",
     agent_name_en: str = "AI Agent",
@@ -83,8 +83,8 @@ def create(
         input_text=input_text,
         created_at=now,
         updated_at=now,
-        use_o1_governance=use_o1_governance,
-        use_o1_graph=use_o1_graph,
+        use_nova_governance=use_nova_governance,
+        use_nova_graph=use_nova_graph,
         lang=lang,
         agent_name=agent_name,
         agent_name_en=agent_name_en,

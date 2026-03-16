@@ -7,7 +7,7 @@ Execution order (strict):
   3. Graph upsert + retrieval (graph_repository)
   2d. Semantics inference     (risk_evidence_llm — OPTIONAL, non-fatal)
   2c. Risk Scoring            (risk_scoring_service — non-fatal, consumes semantics if available)
-  4. o1 Reasoning             (decision_pipeline — MANDATORY, graceful on API error)
+  4. Nova Reasoning           (decision_pipeline — MANDATORY, graceful on API error)
   5. Decision Pack            (decision_pack.build_decision_pack)
 
 Updates DecisionRecord at each step so the polling endpoint reflects progress.
@@ -28,8 +28,8 @@ async def run_pipeline(
     decision_id: str,
     extractor,
     graph_repo,
-    use_o1_governance: bool = False,
-    use_o1_graph: bool = False,
+    use_nova_governance: bool = False,
+    use_nova_graph: bool = False,
 ) -> None:
     """
     Full async pipeline. Designed to run as a BackgroundTask.
@@ -38,8 +38,8 @@ async def run_pipeline(
         decision_id:      ID of the DecisionRecord to process
         extractor:        DecisionExtractor instance from app globals
         graph_repo:       InMemoryGraphRepository instance from app globals
-        use_o1_governance: Use o1 for governance evaluation (default: False)
-        use_o1_graph:     Use o1 for graph reasoning (default: False)
+        use_nova_governance: Use Nova for governance evaluation (default: False)
+        use_nova_graph:     Use Nova for graph reasoning (default: False)
     """
     record = decision_store.get(decision_id)
     if not record:
@@ -124,7 +124,7 @@ async def run_pipeline(
         gov_result = evaluate_governance(
             decision=decision_obj,
             company_context=company_data or {},
-            use_o1=False,  # Deterministic governance for pipeline
+            use_nova=False,  # Deterministic governance for pipeline
             company_id=record.company_id,
             lang=record.lang,
         )
@@ -253,22 +253,27 @@ async def run_pipeline(
                 exc_info=True,
             )
 
-        # ── Step 3: o1 Reasoning ─────────────────────────────────────────────
+        # ── Step 3: Nova Reasoning ───────────────────────────────────────────
         # Set to 3 AFTER reasoning stores results → SSE emits "reasoning_complete"
-        logger.info(f"[{decision_id}] Step 3: o1 Reasoning (use_o1_graph={use_o1_graph})")
+        logger.info(f"[{decision_id}] Step 3: Nova Reasoning (use_nova_graph={use_nova_graph})")
 
-        reasoning = await _run_o1_reasoning(
+        reasoning = await _run_nova_reasoning(
             decision_id=decision_id,
             decision_obj=decision_obj,
             gov_dict=gov_dict,
             company_data=company_data,
             graph_repo=graph_repo,
-            use_o1_graph=use_o1_graph,
+            use_nova_graph=use_nova_graph,
             lang=record.lang,
         )
         decision_store.store_results(decision_id, reasoning=reasoning)
         decision_store.update_status(decision_id, "processing", current_step=3)
-        logger.info(f"[{decision_id}] Step 3 complete → reasoning_complete")
+        logger.info(
+            f"[{decision_id}] Step 3 complete → reasoning_complete "
+            f"(source={reasoning.get('source')}, "
+            f"nova_available={reasoning.get('nova_available')}, "
+            f"graph_reasoning_keys={list((reasoning.get('graph_reasoning') or {}).keys())})"
+        )
 
         # ── Step 4b: Risk Response Simulation ────────────────────────────────
         # Non-fatal: generates counterfactual remediation scenarios by re-running
@@ -342,10 +347,15 @@ async def run_pipeline(
 
         from app.decision_pack import build_decision_pack
 
+        # Pass graph reasoning insights to decision pack so it can use
+        # Nova-generated next actions and detect strategic misalignments.
+        _graph_insights = (reasoning or {}).get("graph_reasoning")
+
         decision_pack = build_decision_pack(
             decision=decision_obj.model_dump(),
             governance=gov_dict,
             company=company_data or {},
+            graph_insights=_graph_insights,
             lang=record.lang,
             risk_scoring=record.risk_scoring,
             external_signals=_ext_payload.model_dump() if _ext_payload else None,
@@ -411,57 +421,57 @@ async def run_pipeline(
         decision_store.store_error(decision_id, str(e))
 
 
-async def _run_o1_reasoning(
+async def _run_nova_reasoning(
     decision_id: str,
     decision_obj,
     gov_dict: dict,
     company_data: Optional[dict],
     graph_repo=None,
-    use_o1_graph: bool = False,
+    use_nova_graph: bool = False,
     lang: str = "ko",
 ) -> dict:
     """
     Run graph reasoning for step 4.
 
-    When use_o1_graph=True: calls analyze_decision_graph_with_o1 against graph_repo.
-    When use_o1_graph=False: returns deterministic stub immediately — o1 is NOT called.
+    When use_nova_graph=True: calls analyze_decision_graph_with_nova against graph_repo.
+    When use_nova_graph=False: returns deterministic stub immediately — Nova is NOT called.
     """
-    if not use_o1_graph:
-        logger.info(f"[{decision_id}] o1 reasoning skipped (use_o1_graph=False)")
+    if not use_nova_graph:
+        logger.info(f"[{decision_id}] Nova reasoning skipped (use_nova_graph=False)")
         return {
             "source": "deterministic",
             "graph_reasoning": None,
-            "o1_available": False,
+            "nova_available": False,
         }
 
     try:
-        from app.graph_reasoning import analyze_decision_graph_with_o1, format_graph_insights_for_pack
+        from app.graph_reasoning import analyze_decision_graph_with_nova, format_graph_insights_for_pack
 
-        graph_insights = await analyze_decision_graph_with_o1(
+        graph_insights = await analyze_decision_graph_with_nova(
             decision_id=decision_id,
             governance=gov_dict,
             repository=graph_repo,
             decision_data=decision_obj.model_dump(),
             company_data=company_data or {},
-            use_o1=True,
+            use_nova=True,
             lang=lang,
         )
         formatted = format_graph_insights_for_pack(graph_insights)
 
         return {
-            "source": "o1",
+            "source": "nova",
             "graph_reasoning": formatted,
-            "o1_available": True,
+            "nova_available": True,
         }
 
     except Exception as e:
         logger.warning(
-            f"[{decision_id}] o1 reasoning failed: {e} — returning deterministic fallback"
+            f"[{decision_id}] Nova reasoning failed: {e} — returning deterministic fallback"
         )
         return {
             "source": "deterministic_fallback",
             "graph_reasoning": None,
-            "o1_available": False,
+            "nova_available": False,
         }
 
 

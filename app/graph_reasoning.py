@@ -1,7 +1,7 @@
 """
-Graph Reasoning with o1 - Logical Contradiction Detection
+Graph Reasoning with Nova - Logical Contradiction Detection
 
-Uses o1 to analyze graph structure and find:
+Uses Nova to analyze graph structure and find:
 - Logical contradictions (conflicting goals/KPIs)
 - Ownership inconsistencies
 - Risk coverage gaps
@@ -12,29 +12,29 @@ Uses o1 to analyze graph structure and find:
 from typing import Optional
 from app.graph_repository import BaseGraphRepository
 from app.graph_ontology import NodeType, EdgePredicate
-from app.o1_reasoner import O1Reasoner
+from app.nova_reasoner import NovaReasoner
 import asyncio
 
 
-async def analyze_decision_graph_with_o1(
+async def analyze_decision_graph_with_nova(
     decision_id: str,
     governance: dict,
     repository: BaseGraphRepository,
     decision_data: dict = None,
     company_data: dict = None,
-    use_o1: bool = True,
+    use_nova: bool = True,
     lang: str = "ko",
 ) -> dict:
     """
-    Use o1 to analyze decision graph for contradictions and insights.
+    Use Nova to analyze decision graph for contradictions and insights.
 
     Flow:
     1. Retrieve stored graph context from repository (policies, actors, risks)
-    2. O1Reasoner._extract_mock_subgraph builds a rich subgraph by combining:
+    2. NovaReasoner._extract_mock_subgraph builds a rich subgraph by combining:
        - decision_data + company_data (owner matching, KPI overlap, goal alignment)
        - graph_context from repository (stored policies, approval actors)
-    3. O1Reasoner._build_contradiction_prompt serializes the subgraph for o1
-    4. o1 reasons about contradictions, ownership issues, risk gaps
+    3. NovaReasoner._build_contradiction_prompt serializes the subgraph for Nova
+    4. Nova reasons about contradictions, ownership issues, risk gaps
 
     When Neo4j replaces InMemoryGraphRepository, step 2 becomes a real
     Cypher traversal and the mock matching logic can be removed.
@@ -45,10 +45,10 @@ async def analyze_decision_graph_with_o1(
         repository: Graph repository instance
         decision_data: Decision dict (statement, goals, KPIs, owners, risks)
         company_data: Company context (strategic_goals, personnel, risk_tolerance)
-        use_o1: Whether to use o1 for deep analysis
+        use_nova: Whether to use Nova for deep analysis
 
     Returns:
-        Dict with graph insights and o1 reasoning
+        Dict with graph insights and Nova reasoning
     """
     # Step 1: Retrieve stored graph context from repository
     graph_context = await repository.get_governance_context(
@@ -56,10 +56,10 @@ async def analyze_decision_graph_with_o1(
         depth=2  # 2-hop traversal
     )
 
-    # Step 2: Use o1 with mock subgraph extraction (if enabled)
-    if use_o1:
+    # Step 2: Use Nova with mock subgraph extraction (if enabled)
+    if use_nova:
         try:
-            o1_insights = await _reason_about_graph_with_o1(
+            nova_insights = await _reason_about_graph_with_nova(
                 decision_id=decision_id,
                 decision_data=decision_data or {},
                 company_data=company_data or {},
@@ -68,20 +68,26 @@ async def analyze_decision_graph_with_o1(
                 lang=lang,
             )
         except Exception as e:
-            # Fallback to deterministic analysis if o1 fails
-            o1_insights = {
+            import logging as _logging
+            _logging.getLogger(__name__).error(
+                f"[graph_reasoning] Nova reasoning failed for {decision_id}: "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            # Fallback to deterministic analysis if Nova fails
+            nova_insights = {
                 "error": str(e),
                 "fallback": True,
                 "contradictions": [],
-                "warnings": ["o1 analysis unavailable - using deterministic fallback"]
+                "warnings": ["Nova analysis unavailable - using deterministic fallback"]
             }
     else:
         # Deterministic fallback uses the serialized graph structure
-        graph_structure = _serialize_graph_for_o1(graph_context, governance)
-        o1_insights = _deterministic_graph_analysis(graph_structure)
+        graph_structure = _serialize_graph_for_nova(graph_context, governance)
+        nova_insights = _deterministic_graph_analysis(graph_structure)
 
-    # Step 3: Extract subgraph metadata (from o1 result or graph_context)
-    subgraph_meta = o1_insights.get("subgraph_metadata", {})
+    # Step 3: Extract subgraph metadata (from Nova result or graph_context)
+    subgraph_meta = nova_insights.get("subgraph_metadata", {})
     nodes_analyzed = subgraph_meta.get("nodes_total", graph_context.get("metadata", {}).get("node_count", 0))
     edges_analyzed = subgraph_meta.get("edges_total", graph_context.get("metadata", {}).get("edge_count", 0))
 
@@ -95,24 +101,24 @@ async def analyze_decision_graph_with_o1(
             "matched_personnel": subgraph_meta.get("matched_personnel", []),
             "selection_criteria": subgraph_meta.get("selection_criteria", []),
         },
-        "logical_analysis": o1_insights.get("contradictions", []),
-        "strategic_goal_conflicts": o1_insights.get("strategic_goal_conflicts", []),
-        "inferred_owners": o1_insights.get("inferred_owners", []),
-        "ownership_validation": o1_insights.get("ownership_issues", []),
-        "risk_coverage": o1_insights.get("risk_gaps", []),
-        "policy_conflicts": o1_insights.get("policy_conflicts", []),
-        "recommendations": o1_insights.get("recommendations", []),
-        "next_actions": o1_insights.get("next_actions", []),
-        "confidence": o1_insights.get("confidence", 0.0),
-        "analysis_method": "o1-reasoning" if use_o1 and not o1_insights.get("fallback") else "deterministic"
+        "logical_analysis": nova_insights.get("contradictions", []),
+        "strategic_goal_conflicts": nova_insights.get("strategic_goal_conflicts", []),
+        "inferred_owners": nova_insights.get("inferred_owners", []),
+        "ownership_validation": nova_insights.get("ownership_issues", []),
+        "risk_coverage": nova_insights.get("risk_gaps", []),
+        "policy_conflicts": nova_insights.get("policy_conflicts", []),
+        "recommendations": nova_insights.get("recommendations", []),
+        "next_actions": nova_insights.get("next_actions", []),
+        "confidence": nova_insights.get("confidence", 0.0),
+        "analysis_method": "nova-reasoning" if use_nova and not nova_insights.get("fallback") else "deterministic"
     }
 
     return insights
 
 
-def _serialize_graph_for_o1(graph_context: dict, governance: dict) -> dict:
+def _serialize_graph_for_nova(graph_context: dict, governance: dict) -> dict:
     """
-    Convert graph context into structured format for o1 analysis.
+    Convert graph context into structured format for Nova analysis.
 
     Returns serialized graph with nodes, edges, and governance context.
     """
@@ -172,7 +178,7 @@ def _serialize_graph_for_o1(graph_context: dict, governance: dict) -> dict:
     }
 
 
-async def _reason_about_graph_with_o1(
+async def _reason_about_graph_with_nova(
     decision_id: str,
     decision_data: dict,
     company_data: dict,
@@ -181,13 +187,13 @@ async def _reason_about_graph_with_o1(
     lang: str = "ko",
 ) -> dict:
     """
-    Use o1 to reason about graph structure and find contradictions.
+    Use Nova to reason about graph structure and find contradictions.
 
-    Delegates to O1Reasoner.reason_about_graph_contradictions which:
+    Delegates to NovaReasoner.reason_about_graph_contradictions which:
     1. Builds a mock subgraph from decision_data + company_data
     2. Enriches it with graph_context from the repository
     3. Serializes the subgraph into a structured prompt
-    4. Calls o1 for deep reasoning
+    4. Calls Nova for deep reasoning
 
     Args:
         decision_id: Decision identifier (root of subgraph)
@@ -197,11 +203,11 @@ async def _reason_about_graph_with_o1(
         governance: Governance evaluation result (for logging/fallback)
 
     Returns:
-        o1 analysis with contradictions, ownership issues, risk gaps, recommendations
+        Nova analysis with contradictions, ownership issues, risk gaps, recommendations
     """
-    reasoner = O1Reasoner(model="o4-mini")
+    reasoner = NovaReasoner()
 
-    # o1 API is sync, run in executor
+    # Nova API is sync, run in executor
     result = await asyncio.get_event_loop().run_in_executor(
         None,
         lambda: reasoner.reason_about_graph_contradictions(
@@ -221,7 +227,7 @@ def _normalize_graph_context(graph_context: dict) -> dict:
     Normalize graph_context from repository into plain dicts.
 
     The repository returns Pydantic Node/Edge objects but the
-    O1Reasoner._merge_graph_context expects either objects with
+    NovaReasoner._merge_graph_context expects either objects with
     .id/.label/.properties attributes or plain dicts. This normalizer
     ensures compatibility regardless of the source.
     """
@@ -264,9 +270,9 @@ def _format_graph_for_prompt(graph_structure: dict) -> str:
     """
     Format graph structure as readable text for prompt construction.
 
-    Note: Previously used for building the o1 prompt directly in this module.
+    Note: Previously used for building the Nova prompt directly in this module.
     Now kept as a utility for debugging / deterministic fallback logging.
-    The o1 prompt is built by O1Reasoner._build_contradiction_prompt instead.
+    The Nova prompt is built by NovaReasoner._build_contradiction_prompt instead.
     """
     lines = []
 
@@ -316,7 +322,7 @@ def _format_graph_for_prompt(graph_structure: dict) -> str:
 
 def _deterministic_graph_analysis(graph_structure: dict) -> dict:
     """
-    Fallback deterministic analysis when o1 is not available.
+    Fallback deterministic analysis when Nova is not available.
 
     Returns basic contradiction detection without deep reasoning.
     """

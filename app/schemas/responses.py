@@ -346,7 +346,7 @@ class ReasoningPayload(BaseModel):
     logical_contradictions: list[str] = Field(default_factory=list)
     graph_recommendations: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
-    raw_analysis: Optional[str] = None
+    raw_analysis: Optional[dict] = None
 
 
 class DecisionPackPayload(BaseModel):
@@ -416,6 +416,7 @@ class RiskDimensionResponse(BaseModel):
     """One risk dimension — e.g. Financial Risk."""
     id: str
     label: str
+    label_en: Optional[str] = None
     score: int = Field(ge=0, le=100)
     band: str = Field(description="LOW | MEDIUM | HIGH | CRITICAL")
     signals: list[RiskSignalResponse] = Field(default_factory=list)
@@ -479,6 +480,8 @@ class SimulationScenarioResponse(BaseModel):
     remainingIssuesEn: list[str] = Field(default_factory=list)
     confidence: Optional[float] = None
     isRecommended: bool = False
+    rationaleKo: Optional[str] = Field(default=None, description="Nova-generated Korean rationale explaining why this remediation reduces risk")
+    rationaleEn: Optional[str] = Field(default=None, description="Nova-generated English rationale explaining why this remediation reduces risk")
 
 
 class RiskResponseSimulationPayload(BaseModel):

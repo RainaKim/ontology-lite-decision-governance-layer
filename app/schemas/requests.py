@@ -39,19 +39,19 @@ class CreateDecisionRequest(BaseModel):
         examples=["Acquire DataCorp for $3.5M to expand analytics capabilities"],
     )
 
-    use_o1_governance: bool = Field(
+    use_nova_governance: bool = Field(
         default=False,
         description=(
-            "Use OpenAI o1 for governance evaluation. Requires OPENAI_API_KEY. "
-            "Falls back to deterministic engine if key is missing."
+            "Use Nova for governance evaluation. "
+            "Falls back to deterministic engine if unavailable."
         ),
     )
 
-    use_o1_graph: bool = Field(
+    use_nova_graph: bool = Field(
         default=True,
         description=(
-            "Use OpenAI o1 for graph reasoning. Requires OPENAI_API_KEY. "
-            "Falls back to deterministic subgraph analysis if key is missing."
+            "Use Nova for graph reasoning. "
+            "Falls back to deterministic subgraph analysis if unavailable."
         ),
     )
 

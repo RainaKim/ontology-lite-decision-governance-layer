@@ -200,8 +200,8 @@ class InMemoryGraphRepository(BaseGraphRepository):
        This returns all past decisions that triggered the same Risk nodes.
     3. Outcome tracking — add Outcome node type:
          (Decision)-[:RESULTED_IN]->(Outcome {status, actual_risk, lesson})
-       so o1 can reason about "last time we took this risk, it materialized."
-    4. The o1 prompt already asks for historical pattern analysis. It just
+       so Nova can reason about "last time we took this risk, it materialized."
+    4. The Nova prompt already asks for historical pattern analysis. It just
        needs the data, which only persistence can provide.
     """
 
@@ -256,7 +256,7 @@ class InMemoryGraphRepository(BaseGraphRepository):
 
         # 2. Create Actor nodes for explicitly stated owners only.
         # If owners is empty (not stated in input), no Actor nodes are added here.
-        # Ownership inference is delegated to the o1 reasoning step (step 4),
+        # Ownership inference is delegated to the Nova reasoning step (step 4),
         # which has full access to company personnel and governance signals.
         for idx, owner in enumerate(decision.get("owners", [])):
             actor_id = f"{decision_id}_owner_{idx}"
@@ -643,7 +643,7 @@ class InMemoryGraphRepository(BaseGraphRepository):
 
         decision_node = self._nodes.get(decision_id)
         actors = [self._nodes[nid] for nid in visited_nodes if self._nodes[nid].type == NodeType.ACTOR]
-        policies = [self._nodes[nid] for nid in visited_nodes if self._nodes[nid].type == NodeType.POLICY]
+        policies = [self._nodes[nid] for nid in visited_nodes if self._nodes[nid].type == NodeType.RULE]
         risks = [self._nodes[nid] for nid in visited_nodes if self._nodes[nid].type == NodeType.RISK]
 
         return {
