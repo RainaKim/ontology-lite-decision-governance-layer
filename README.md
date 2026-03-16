@@ -370,6 +370,10 @@ python -m pytest tests/ -v    # 276 tests
 
 ---
 
+## Frontend Repo
+
+https://github.com/RainaKim/Sentra
+
 ## Demo Companies
 
 Two company profiles with distinct governance frameworks:
