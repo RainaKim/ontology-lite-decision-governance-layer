@@ -1,0 +1,42 @@
+{
+  "companyId": "sool_sool_icecream",
+  "version": "1.0.0",
+  "productionSources": [
+    {
+      "sourceId": "PROD_CAPACITY",
+      "sourceType": "operations_report",
+      "documentNameKo": "생산 용량 및 인력 가동률 보고서 (당월 기준)",
+      "documentNameEn": "Production Capacity and Workforce Utilization Report (Current Month)",
+      "ownerRole": "운영 매니저",
+      "summaryKo": "현재 생산 라인 가동률, 인력 활용률, 잔여 생산 용량을 기록한 운영 보고서입니다. 채용·생산량 증가 등 운영 변화를 수반하는 의사결정이 현재 생산 역량 내에서 처리 가능한지 평가하는 기준 자료입니다.",
+      "summaryEn": "Operations report recording current production line utilization rate, workforce utilization, and remaining production capacity. Used as the reference for assessing whether decisions involving operational changes (hiring, production volume increases) can be absorbed within current production capacity.",
+      "constants": {
+        "utilization_rate_pct": 68,
+        "current_headcount_production": 4,
+        "max_capacity_units_per_day": 150,
+        "current_output_units_per_day": 102,
+        "available_capacity_pct": 32,
+        "note": "현재 가동률 68% — 추가 인력 없이 현재 주문량 충족 가능. 향후 6개월 내 생산 병목 발생 가능성 낮음 / Utilization at 68% — current order volume is met without additional headcount. Production bottleneck unlikely within 6 months."
+      },
+      "citationTemplateKo": "생산 용량 및 인력 가동률 보고서(당월) 기준, 현재 생산 가동률은 {{utilization_rate_pct}}%로 잔여 용량 {{available_capacity_pct}}%가 존재합니다. 현재 주문량은 추가 인력 없이 충족 가능합니다.",
+      "citationTemplateEn": "Per the current production capacity and workforce utilization report, production utilization is at {{utilization_rate_pct}}% with {{available_capacity_pct}}% capacity remaining. Current order volume can be met without additional headcount."
+    },
+    {
+      "sourceId": "PROD_HEADCOUNT_NEED",
+      "sourceType": "operations_report",
+      "documentNameKo": "생산 인력 수요 예측 보고서 (향후 6개월)",
+      "documentNameEn": "Production Headcount Demand Forecast (6-Month Forward)",
+      "ownerRole": "운영 매니저",
+      "summaryKo": "향후 6개월 매출 예측을 기반으로 생산 인력 추가 수요가 발생하는 시점과 규모를 예측한 보고서입니다. 채용 결정의 적정 시기를 판단하는 기준 자료로 활용됩니다.",
+      "summaryEn": "Report forecasting when and how much additional production headcount will be needed, based on 6-month forward revenue projections. Used as the reference for determining the appropriate timing of hiring decisions.",
+      "constants": {
+        "headcount_needed_within_6m": false,
+        "earliest_headcount_need_month": "2026-Q4",
+        "trigger_utilization_pct": 85,
+        "note": "현재 가동률이 85%를 초과해야 추가 채용 검토 필요. 현재 68% 수준에서 추가 채용 시기상조 / Hiring review warranted only when utilization exceeds 85%. At current 68%, additional hire is premature."
+      },
+      "citationTemplateKo": "생산 인력 수요 예측 보고서 기준, 향후 6개월 내 생산 인력 추가 필요 여부: {{headcount_needed_within_6m}}. 추가 채용 검토 기준 가동률({{trigger_utilization_pct}}%)에 도달하는 최초 예상 시점은 {{earliest_headcount_need_month}}입니다.",
+      "citationTemplateEn": "Per the production headcount demand forecast, additional production headcount needed within 6 months: {{headcount_needed_within_6m}}. Earliest projected date to reach the hiring review threshold ({{trigger_utilization_pct}}% utilization) is {{earliest_headcount_need_month}}."
+    }
+  ]
+}
