@@ -467,7 +467,8 @@ class ValidationPayload(BaseModel):
     )
     similar_decisions: Optional[list[dict[str, Any]]] = Field(
         default=None,
-        description="Similar past decisions found via vector search (top 3)",
+        description="Similar past decisions found via vector search (top 3 max)",
+        max_length=3,
     )
 
 

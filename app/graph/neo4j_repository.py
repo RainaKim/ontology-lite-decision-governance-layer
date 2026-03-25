@@ -67,7 +67,7 @@ class Neo4jGraphRepository(BaseGraphRepository):
             NEO4J_URI,
             auth=(NEO4J_USERNAME, NEO4J_PASSWORD),
         )
-        logger.info(f"Neo4jGraphRepository connected to {NEO4J_URI}")
+        logger.info("Neo4jGraphRepository connected to %s", NEO4J_URI)
 
     async def close(self) -> None:
         """Close the driver and release all connections."""
@@ -102,7 +102,7 @@ class Neo4jGraphRepository(BaseGraphRepository):
                     "CREATE INDEX global_id_index IF NOT EXISTS FOR (n) ON (n.id)"
                 )
             except Exception as exc:
-                logger.warning(f"Global id index creation skipped: {exc}")
+                logger.warning("Global id index creation skipped: %s", exc)
 
         logger.info(
             f"Schema initialized for company={company_id!r} "

@@ -105,7 +105,7 @@
       "name": "HR and Department Head Approval for Hiring",
       "description": "All hiring decisions require both HR and the relevant department head approval",
       "conditions": [{"field": "involves_hiring", "operator": "is_true"}],
-      "consequence": {"action": "require_approval", "approver_role": "CTO", "message": "Hiring requires HR + department head approval"},
+      "consequence": {"action": "require_approval", "approver_role": "Department Head", "message": "Hiring requires HR + department head approval"},
       "source": "documented",
       "confidence": "high",
       "governed_by_goal_ids": ["G4", "G2"]

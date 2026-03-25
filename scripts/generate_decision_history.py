@@ -204,11 +204,12 @@ async def write_decisions_to_neo4j(
             await repo.write_node(node, company_id)
             written += 1
             logger.info(
-                f"Wrote decision {decision_id} ({decision.get('decision_type')}) "
-                f"— embedding={'yes' if embedding else 'no'}"
+                "[%d/%d] Wrote decision %s (%s) — embedding=%s",
+                i + 1, len(decisions), decision_id,
+                decision.get("decision_type"), "yes" if embedding else "no",
             )
         except Exception as exc:
-            logger.error(f"Failed to write decision {decision_id}: {exc}")
+            logger.error("Failed to write decision %s: %s", decision_id, exc)
 
     return written
 

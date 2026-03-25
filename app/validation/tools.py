@@ -44,7 +44,7 @@ def create_tools(repo: BaseGraphRepository) -> list:
         try:
             return await repo.get_all_rules(company_id)
         except Exception as exc:
-            logger.warning(f"search_governance_rules failed: {exc}")
+            logger.warning("search_governance_rules failed: %s", exc)
             return []
 
     @tool
@@ -68,7 +68,7 @@ def create_tools(repo: BaseGraphRepository) -> list:
         except NotImplementedError:
             return [{"note": "Vector search not available in this environment"}]
         except Exception as exc:
-            logger.warning(f"search_similar_decisions failed: {exc}")
+            logger.warning("search_similar_decisions failed: %s", exc)
             return []
 
     @tool
@@ -84,7 +84,7 @@ def create_tools(repo: BaseGraphRepository) -> list:
         try:
             return await repo.get_goal_conflicts(goal_ids, company_id)
         except Exception as exc:
-            logger.warning(f"get_goal_conflicts failed: {exc}")
+            logger.warning("get_goal_conflicts failed: %s", exc)
             return []
 
     @tool
@@ -100,7 +100,7 @@ def create_tools(repo: BaseGraphRepository) -> list:
         try:
             return await repo.get_gaps_for_rules(rule_ids, company_id)
         except Exception as exc:
-            logger.warning(f"get_governance_gaps failed: {exc}")
+            logger.warning("get_governance_gaps failed: %s", exc)
             return []
 
     @tool
@@ -127,7 +127,7 @@ def create_tools(repo: BaseGraphRepository) -> list:
         except ValueError as exc:
             return [{"error": str(exc)}]
         except Exception as exc:
-            logger.warning(f"query_graph failed: {exc}")
+            logger.warning("query_graph failed: %s", exc)
             return []
 
     @tool

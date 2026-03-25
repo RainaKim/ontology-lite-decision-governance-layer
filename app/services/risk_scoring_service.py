@@ -278,7 +278,7 @@ def _priority_weight(priority: Optional[str]) -> int:
 # ---------------------------------------------------------------------------
 
 def _make_evidence(
-    id: str,
+    evidence_id: str,
     label_text: str,
     source_text: str,
     confidence: Optional[float] = None,
@@ -294,7 +294,7 @@ def _make_evidence(
     """
     return RiskEvidence(
         type="evidence",
-        ref={"id": id},
+        ref={"id": evidence_id},
         label=label_text,
         source=source_text,
         confidence=confidence,
@@ -330,7 +330,7 @@ def _fetch_registry_evidence(
             ev = ers.get_policy_evidence(company_id, rid)
             if ev:
                 result.append(_make_evidence(
-                    id=f"registry_policy_{rid.lower()}",
+                evidence_id=f"registry_policy_{rid.lower()}",
                     label_text=(ev.get("citationEn") or ev.get("summaryEn") or ev.get("citationKo") or ev.get("summaryKo") or "")[:120],
                     source_text="Internal policy",
                     note=ev.get("documentNameEn") or ev.get("documentNameKo"),
@@ -340,7 +340,7 @@ def _fetch_registry_evidence(
             ev = ers.get_strategy_evidence(company_id, gid)
             if ev:
                 result.append(_make_evidence(
-                    id=f"registry_strategy_{gid.lower()}",
+                evidence_id=f"registry_strategy_{gid.lower()}",
                     label_text=(ev.get("citationEn") or ev.get("summaryEn") or ev.get("citationKo") or ev.get("summaryKo") or "")[:120],
                     source_text="Internal strategy document",
                     note=ev.get("documentNameEn") or ev.get("documentNameKo"),
@@ -351,7 +351,7 @@ def _fetch_registry_evidence(
             if evs:
                 b = evs[0]
                 result.append(_make_evidence(
-                    id=f"registry_budget_{bid.lower()}",
+                evidence_id=f"registry_budget_{bid.lower()}",
                     label_text=(b.get("summaryEn") or b.get("summaryKo") or "")[:120],
                     source_text="Internal budget document",
                     note=b.get("documentNameEn") or b.get("documentNameKo"),
@@ -449,7 +449,7 @@ def _summarize_dimension_evidence(
     # Build SUMMARY signal
     summary_label = _build_summary_label(dimension_key, raw_signals, band)
     summary_ev = _make_evidence(
-        id="summary_source",
+                evidence_id="summary_source",
         label_text=_DIM_SUMMARY_SOURCE.get(dimension_key, "Comprehensive analysis"),
         source_text=_DIM_SUMMARY_SOURCE.get(dimension_key, "System analysis"),
     )
@@ -691,7 +691,7 @@ class RiskScoringService:
                 severity=overspend_sev,
                 evidence=[
                     _make_evidence(
-                        id="overspend_ratio_calc",
+                evidence_id="overspend_ratio_calc",
                         label_text="Overspend ratio calculated by comparing requested amount to remaining budget",
                         source_text=_signal_source("OVERSPEND_RATIO"),
                     )
@@ -726,7 +726,7 @@ class RiskScoringService:
             severity=thresh_sev,
             evidence=[
                 _make_evidence(
-                    id="threshold_policy",
+                evidence_id="threshold_policy",
                     label_text="Determined threshold breach by comparing against company financial policy",
                     source_text=_signal_source("THRESHOLD_BREACH"),
                 )
@@ -758,7 +758,7 @@ class RiskScoringService:
                 severity=rule_sev,
                 evidence=[
                     _make_evidence(
-                        id="fin_rule_engine",
+                evidence_id="fin_rule_engine",
                         label_text=f"Governance rule triggered: {rule_name}",
                         source_text=_signal_source("FIN_RULE_TRIGGERED"),
                     )
@@ -857,14 +857,14 @@ class RiskScoringService:
                 # Semantics filled the gap — use its Korean rationale in evidence
                 sem_rationale = _first_matching_rationale(rs, direction_filter=None, fallback="LLM analysis identified personal data processing relevance")
                 pii_ev = _make_evidence(
-                    id="pii_semantics",
+                evidence_id="pii_semantics",
                     label_text=sem_rationale,
                     source_text="LLM (structured)",
                     confidence=rs.get("global_confidence"),
                 )
             else:
                 pii_ev = _make_evidence(
-                    id="pii_field",
+                evidence_id="pii_field",
                     label_text="Personal data processing explicitly stated in decision content",
                     source_text=_signal_source("PII_DETECTED"),
                 )
@@ -897,7 +897,7 @@ class RiskScoringService:
                 severity="HIGH",
                 evidence=[
                     _make_evidence(
-                        id="anon_missing",
+                evidence_id="anon_missing",
                         label_text="Anonymization processing has not been confirmed",
                         source_text=_signal_source("ANONYMIZATION_MISSING"),
                     )
@@ -914,7 +914,7 @@ class RiskScoringService:
                 severity="MEDIUM",
                 evidence=[
                     _make_evidence(
-                        id="cross_border",
+                evidence_id="cross_border",
                         label_text="Cross-border data transfer may be involved",
                         source_text=_signal_source("CROSS_BORDER_TRANSFER"),
                     )
@@ -948,7 +948,7 @@ class RiskScoringService:
                 severity=sev_upper,
                 evidence=[
                     _make_evidence(
-                        id="compliance_rule_engine",
+                evidence_id="compliance_rule_engine",
                         label_text=f"Governance rule triggered: {rule_name}",
                         source_text=_signal_source("COMPLIANCE_RULE_TRIGGERED"),
                     )
@@ -1081,7 +1081,7 @@ class RiskScoringService:
                 supported_goal_ids.add(tgt)
                 if len(support_edge_ev) < 2:
                     support_edge_ev.append(_make_evidence(
-                        id=f"graph_support_{tgt}",
+                evidence_id=f"graph_support_{tgt}",
                         label_text=f"Graph analysis: alignment with goal '{tgt_label}' confirmed",
                         source_text="Graph analysis",
                     ))
@@ -1089,7 +1089,7 @@ class RiskScoringService:
                 conflicted_goal_ids.add(tgt)
                 if len(conflict_edge_ev) < 2:
                     conflict_edge_ev.append(_make_evidence(
-                        id=f"graph_conflict_{tgt}",
+                evidence_id=f"graph_conflict_{tgt}",
                         label_text=f"Graph analysis: conflict with goal '{tgt_label}' confirmed",
                         source_text="Graph analysis",
                     ))
@@ -1127,7 +1127,7 @@ class RiskScoringService:
                     supported_goal_ids.add(gid)
                     if len(_sem_support_ev) < 2:
                         _sem_support_ev.append(_make_evidence(
-                            id=f"sem_support_{gid}",
+                evidence_id=f"sem_support_{gid}",
                             label_text=rationale or f"LLM analysis: alignment with goal '{gid}'",
                             source_text="LLM (structured)",
                             confidence=conf,
@@ -1136,7 +1136,7 @@ class RiskScoringService:
                     conflicted_goal_ids.add(gid)
                     if len(_sem_conflict_ev) < 2:
                         _sem_conflict_ev.append(_make_evidence(
-                            id=f"sem_conflict_{gid}",
+                evidence_id=f"sem_conflict_{gid}",
                             label_text=rationale or f"LLM analysis: conflict with goal '{gid}'",
                             source_text="LLM (structured)",
                             confidence=conf,
@@ -1183,7 +1183,7 @@ class RiskScoringService:
                 severity="MEDIUM",
                 evidence=[
                     _make_evidence(
-                        id="no_goal_mapping",
+                evidence_id="no_goal_mapping",
                         label_text="No goal mapping found in graph or governance results",
                         source_text="System analysis",
                         note="Cannot quantify strategic alignment — medium baseline applied",
@@ -1208,7 +1208,7 @@ class RiskScoringService:
                 conflict_edge_ev[:2]
                 or _sem_conflict_ev[:2]
                 or [_make_evidence(
-                    id="conflict_governance",
+                evidence_id="conflict_governance",
                     label_text="Goal conflict identified through governance rule analysis",
                     source_text="Rule engine",
                 )]
@@ -1227,7 +1227,7 @@ class RiskScoringService:
                 support_edge_ev[:2]
                 or _sem_support_ev[:2]
                 or [_make_evidence(
-                    id="support_graph",
+                evidence_id="support_graph",
                     label_text="Strategic goal alignment confirmed through graph analysis",
                     source_text="Graph analysis",
                 )]
@@ -1249,7 +1249,7 @@ class RiskScoringService:
                 severity="HIGH",
                 evidence=[
                     _make_evidence(
-                        id="strat_rule_engine",
+                evidence_id="strat_rule_engine",
                         label_text=f"Governance rule triggered: {rule_name}",
                         source_text=_signal_source("STRAT_RULE_TRIGGERED"),
                     )
@@ -1363,7 +1363,7 @@ class RiskScoringService:
                 severity=storage_sev,
                 evidence=[
                     _make_evidence(
-                        id="storage_registry",
+                evidence_id="storage_registry",
                         label_text=(
                             f"On-hand {int(on_hand)} units + in-transit {int(in_transit)} units = "
                             f"{int(on_hand + in_transit)} units, utilizing {utilization*100:.0f}% "
@@ -1398,7 +1398,7 @@ class RiskScoringService:
                 severity="MEDIUM",
                 evidence=[
                     _make_evidence(
-                        id="in_transit_registry",
+                evidence_id="in_transit_registry",
                         label_text=f"{int(in_transit_val)} units of same item currently in transit{rule_note} — duplicate order risk",
                         source_text=_signal_source("IN_TRANSIT_OVERLAP"),
                     )
@@ -1447,7 +1447,7 @@ class RiskScoringService:
                 severity=demand_sev,
                 evidence=[
                     _make_evidence(
-                        id="demand_registry",
+                evidence_id="demand_registry",
                         label_text="; ".join(demand_notes) if demand_notes else "Demand forecast uncertainty factors detected",
                         source_text=_signal_source("DEMAND_UNCERTAINTY"),
                     )

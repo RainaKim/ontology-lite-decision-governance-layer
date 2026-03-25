@@ -285,7 +285,7 @@ async def run_governance_agent(
             approval_chain=governance_result.get("approval_chain", []),
         )
     except Exception as exc:
-        logger.error(f"Governance agent failed: {exc}", exc_info=True)
+        logger.error("Governance agent failed: %s", exc, exc_info=True)
         return ValidationResult(
             verdict="REVIEW",
             confidence=0.3,
