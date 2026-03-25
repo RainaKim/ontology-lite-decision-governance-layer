@@ -14,9 +14,9 @@ Dimensions (v1):
 Aggregate uses industry-adjusted weights and confidence decay for missing data.
 
 UI output contract (enforced by _summarize_dimension_evidence):
-  signals[0]   SUMMARY signal — Korean 핵심 근거 one-liner, severity = band
+  signals[0]   SUMMARY signal — key rationale one-liner, severity = band
   signals[1..] detail signals — up to 3, sorted by severity desc then value desc
-  Each signal carries evidence[]: 1-2 items, each with Korean label + source.
+  Each signal carries evidence[]: 1-2 items, each with label + source.
   Dimension-level evidence[] is kept empty (evidence lives on signals now).
 """
 
@@ -67,68 +67,68 @@ _SEVERITY_ORDER: dict[Optional[str], int] = {
     "CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, None: 4,
 }
 
-_BAND_KO: dict[str, str] = {
-    "LOW": "낮음", "MEDIUM": "보통", "HIGH": "높음", "CRITICAL": "매우 높음",
+_BAND_LABEL: dict[str, str] = {
+    "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "CRITICAL": "Critical",
 }
 
 
 # ---------------------------------------------------------------------------
-# Signal code → Korean label (generic mapping table; no scenario values)
+# Signal code → label (generic mapping table; no scenario values)
 # ---------------------------------------------------------------------------
 
-_SIGNAL_LABEL_KO: dict[str, str] = {
+_SIGNAL_LABEL: dict[str, str] = {
     # Financial
-    "OVERSPEND_RATIO":           "잔여 예산 대비 초과 배수",
-    "THRESHOLD_BREACH":          "회사 예산 기준 초과",
-    "FIN_RULE_TRIGGERED":        "재무 승인 규칙 적용",
+    "OVERSPEND_RATIO":           "Overspend ratio vs remaining budget",
+    "THRESHOLD_BREACH":          "Company budget threshold exceeded",
+    "FIN_RULE_TRIGGERED":        "Financial approval rule triggered",
     # Compliance / Privacy
-    "PII_DETECTED":              "PII/PHI 포함 가능성",
-    "COMPLIANCE_RULE_TRIGGERED": "개인정보 보호 규칙 적용",
-    "ANONYMIZATION_MISSING":     "비식별화 조치 미확인",
-    "CROSS_BORDER_TRANSFER":     "국경 간 데이터 이전",
+    "PII_DETECTED":              "PII/PHI detected",
+    "COMPLIANCE_RULE_TRIGGERED": "Privacy/compliance rule triggered",
+    "ANONYMIZATION_MISSING":     "Anonymization not confirmed",
+    "CROSS_BORDER_TRANSFER":     "Cross-border data transfer",
     # Strategic
-    "GOAL_SUPPORT":              "전략 목표 기여",
-    "GOAL_CONFLICT":             "전략 목표 충돌",
-    "NO_GOAL_MAPPING":           "전략 목표 연결 불충분",
-    "STRAT_RULE_TRIGGERED":      "전략 검토 규칙 적용",
+    "GOAL_SUPPORT":              "Strategic goal alignment",
+    "GOAL_CONFLICT":             "Strategic goal conflict",
+    "NO_GOAL_MAPPING":           "Insufficient strategic goal mapping",
+    "STRAT_RULE_TRIGGERED":      "Strategic review rule triggered",
     # Procurement / Inventory
-    "STORAGE_UTILIZATION":       "보관 용량 사용률",
-    "IN_TRANSIT_OVERLAP":        "배송 중 기존 주문 중복",
-    "DEMAND_UNCERTAINTY":        "수요 예측 불확실성",
+    "STORAGE_UTILIZATION":       "Storage capacity utilization",
+    "IN_TRANSIT_OVERLAP":        "In-transit order overlap",
+    "DEMAND_UNCERTAINTY":        "Demand forecast uncertainty",
     # Special
-    "SUMMARY":                   "핵심 근거",
+    "SUMMARY":                   "Key rationale",
 }
 
-# Signal code → Korean provenance badge
-_SIGNAL_SOURCE_KO: dict[str, str] = {
-    "OVERSPEND_RATIO":           "입력 텍스트",
-    "THRESHOLD_BREACH":          "회사 정책",
-    "FIN_RULE_TRIGGERED":        "규칙 엔진",
-    "PII_DETECTED":              "입력 텍스트",
-    "COMPLIANCE_RULE_TRIGGERED": "규칙 엔진",
-    "ANONYMIZATION_MISSING":     "입력 텍스트",
-    "CROSS_BORDER_TRANSFER":     "입력 텍스트",
-    "GOAL_SUPPORT":              "그래프 분석",
-    "GOAL_CONFLICT":             "그래프 분석",
-    "NO_GOAL_MAPPING":           "시스템 분석",
-    "STRAT_RULE_TRIGGERED":      "규칙 엔진",
-    "STORAGE_UTILIZATION":       "재고·구매 데이터",
-    "IN_TRANSIT_OVERLAP":        "재고·구매 데이터",
-    "DEMAND_UNCERTAINTY":        "재고·구매 데이터",
+# Signal code → provenance badge
+_SIGNAL_SOURCE: dict[str, str] = {
+    "OVERSPEND_RATIO":           "Input text",
+    "THRESHOLD_BREACH":          "Company policy",
+    "FIN_RULE_TRIGGERED":        "Rule engine",
+    "PII_DETECTED":              "Input text",
+    "COMPLIANCE_RULE_TRIGGERED": "Rule engine",
+    "ANONYMIZATION_MISSING":     "Input text",
+    "CROSS_BORDER_TRANSFER":     "Input text",
+    "GOAL_SUPPORT":              "Graph analysis",
+    "GOAL_CONFLICT":             "Graph analysis",
+    "NO_GOAL_MAPPING":           "System analysis",
+    "STRAT_RULE_TRIGGERED":      "Rule engine",
+    "STORAGE_UTILIZATION":       "Inventory/procurement data",
+    "IN_TRANSIT_OVERLAP":        "Inventory/procurement data",
+    "DEMAND_UNCERTAINTY":        "Inventory/procurement data",
 }
 
-# Dimension key → Korean provenance for the SUMMARY signal
-_DIM_SUMMARY_SOURCE_KO: dict[str, str] = {
-    "financial":   "재무 분석 (규칙 엔진 + 회사 정책)",
-    "compliance":  "컴플라이언스 분석 (규칙 엔진 + 입력 텍스트)",
-    "strategic":   "전략 분석 (그래프 + 거버넌스)",
-    "procurement": "구매·조달 분석 (재고 데이터 + 판매 예측)",
+# Dimension key → provenance for the SUMMARY signal
+_DIM_SUMMARY_SOURCE: dict[str, str] = {
+    "financial":   "Financial analysis (rule engine + company policy)",
+    "compliance":  "Compliance analysis (rule engine + input text)",
+    "strategic":   "Strategic analysis (graph + governance)",
+    "procurement": "Procurement analysis (inventory data + sales forecast)",
 }
 
 
 def _signal_label(code: str) -> str:
-    """Return Korean label for signal code; safe fallback if code unknown."""
-    return _SIGNAL_LABEL_KO.get(code, f"위험 지표 ({code})")
+    """Return label for signal code; safe fallback if code unknown."""
+    return _SIGNAL_LABEL.get(code, f"Risk indicator ({code})")
 
 
 def _first_matching_rationale(
@@ -137,21 +137,21 @@ def _first_matching_rationale(
     fallback: str,
 ) -> str:
     """
-    Return the first rationale_ko from semantics goal_impacts matching direction.
+    Return the first rationale from semantics goal_impacts matching direction.
     If direction_filter is None, return any non-empty rationale.
     Falls back to `fallback` if nothing is found.
     """
     for impact in (rs.get("goal_impacts") or []):
         if direction_filter is not None and impact.get("direction") != direction_filter:
             continue
-        rationale = (impact.get("rationale_ko") or "").strip()
+        rationale = (impact.get("rationale") or impact.get("rationale_ko") or "").strip()
         if rationale:
             return rationale
     return fallback
 
 
 def _signal_source(code: str) -> str:
-    return _SIGNAL_SOURCE_KO.get(code, "시스템 분석")
+    return _SIGNAL_SOURCE.get(code, "System analysis")
 
 
 # ---------------------------------------------------------------------------
@@ -164,8 +164,8 @@ class RiskEvidence:
     """Internal evidence item — carries both audit ref and UI-friendly fields."""
     type: str                    # internal: "field"|"rule"|"graph_edge"|"note"
     ref: dict[str, Any] = field(default_factory=dict)
-    label: Optional[str] = None  # Korean user-facing description
-    source: Optional[str] = None # Korean provenance badge
+    label: Optional[str] = None  # User-facing description
+    source: Optional[str] = None # Provenance badge
     confidence: Optional[float] = None
     note: Optional[str] = None
 
@@ -173,7 +173,7 @@ class RiskEvidence:
 @dataclass
 class RiskSignal:
     id: str                      # signal code, e.g. "OVERSPEND_RATIO"
-    label: str                   # Korean label
+    label: str                   # Display label
     value: float
     unit: Optional[str] = None
     severity: Optional[str] = None        # LOW|MEDIUM|HIGH|CRITICAL
@@ -279,24 +279,24 @@ def _priority_weight(priority: Optional[str]) -> int:
 
 def _make_evidence(
     id: str,
-    label_ko: str,
-    source_ko: str,
+    label_text: str,
+    source_text: str,
     confidence: Optional[float] = None,
     note: Optional[str] = None,
 ) -> RiskEvidence:
     """
     Construct a UI-friendly evidence item.
 
-    label_ko  — Korean sentence shown in "근거 보기". Must NOT contain
-                internal key names like "field:", "rule_id:", etc.
-    source_ko — Korean provenance badge: "규칙 엔진", "그래프 분석",
-                "입력 텍스트", "회사 정책", "시스템 분석"
+    label_text  — Sentence shown in evidence view. Must NOT contain
+                  internal key names like "field:", "rule_id:", etc.
+    source_text — Provenance badge: "Rule engine", "Graph analysis",
+                  "Input text", "Company policy", "System analysis"
     """
     return RiskEvidence(
         type="evidence",
         ref={"id": id},
-        label=label_ko,
-        source=source_ko,
+        label=label_text,
+        source=source_text,
         confidence=confidence,
         note=note,
     )
@@ -317,7 +317,7 @@ def _fetch_registry_evidence(
     given rule/goal/budget source IDs.
 
     Non-fatal: returns [] if company_id is absent, registry is missing, or any
-    lookup fails.  Evidence items use source_ko="내부 정책" to distinguish
+    lookup fails.  Evidence items use source="Internal policy" to distinguish
     registry-backed items from generic signal evidence.
     """
     if not company_id:
@@ -331,9 +331,9 @@ def _fetch_registry_evidence(
             if ev:
                 result.append(_make_evidence(
                     id=f"registry_policy_{rid.lower()}",
-                    label_ko=(ev.get("citationKo") or ev.get("summaryKo") or "")[:120],
-                    source_ko="내부 정책",
-                    note=ev.get("documentNameKo"),
+                    label_text=(ev.get("citationEn") or ev.get("summaryEn") or ev.get("citationKo") or ev.get("summaryKo") or "")[:120],
+                    source_text="Internal policy",
+                    note=ev.get("documentNameEn") or ev.get("documentNameKo"),
                 ))
 
         for gid in goal_ids:
@@ -341,9 +341,9 @@ def _fetch_registry_evidence(
             if ev:
                 result.append(_make_evidence(
                     id=f"registry_strategy_{gid.lower()}",
-                    label_ko=(ev.get("citationKo") or ev.get("summaryKo") or "")[:120],
-                    source_ko="내부 전략 문서",
-                    note=ev.get("documentNameKo"),
+                    label_text=(ev.get("citationEn") or ev.get("summaryEn") or ev.get("citationKo") or ev.get("summaryKo") or "")[:120],
+                    source_text="Internal strategy document",
+                    note=ev.get("documentNameEn") or ev.get("documentNameKo"),
                 ))
 
         for bid in budget_source_ids:
@@ -352,9 +352,9 @@ def _fetch_registry_evidence(
                 b = evs[0]
                 result.append(_make_evidence(
                     id=f"registry_budget_{bid.lower()}",
-                    label_ko=(b.get("summaryKo") or "")[:120],
-                    source_ko="내부 예산 문서",
-                    note=b.get("documentNameKo"),
+                    label_text=(b.get("summaryEn") or b.get("summaryKo") or "")[:120],
+                    source_text="Internal budget document",
+                    note=b.get("documentNameEn") or b.get("documentNameKo"),
                 ))
     except Exception as _e:
         logger.debug(f"[risk_scoring] registry evidence lookup failed (non-fatal): {_e}")
@@ -371,45 +371,45 @@ def _build_summary_label(
     band: str,
 ) -> str:
     """
-    Produce a one-line Korean 핵심 근거 from computed signal values.
+    Produce a one-line key rationale from computed signal values.
     Branches on dimension_key (structural enum), not on scenario text.
     All inserted values come from the already-computed signals.
     """
-    band_ko = _BAND_KO.get(band, band)
+    band_label = _BAND_LABEL.get(band, band)
 
     if dimension_key == "financial":
         overspend = next((s for s in signals if s.id == "OVERSPEND_RATIO"), None)
         if overspend and overspend.value >= 1.0:
             return (
-                f"핵심 근거: 요청 금액이 잔여 예산의 {overspend.value:.1f}배로 "
-                f"초과 — 재무 위험 {band_ko}"
+                f"Key rationale: Requested amount is {overspend.value:.1f}x "
+                f"the remaining budget — financial risk {band_label}"
             )
         threshold = next((s for s in signals if s.id == "THRESHOLD_BREACH"), None)
         if threshold:
-            return f"핵심 근거: 지출 금액이 회사 예산 기준 초과 — 재무 위험 {band_ko}"
-        return f"핵심 근거: 재무 위험 수준 {band_ko}"
+            return f"Key rationale: Expenditure exceeds company budget threshold — financial risk {band_label}"
+        return f"Key rationale: Financial risk level {band_label}"
 
     if dimension_key == "compliance":
         has_pii = any(s.id == "PII_DETECTED" for s in signals)
         anon_missing = any(s.id == "ANONYMIZATION_MISSING" for s in signals)
         if has_pii and anon_missing:
             return (
-                "핵심 근거: 개인정보(PII/PHI) 포함 및 비식별화 조치 미확인 "
-                f"— 컴플라이언스 위험 {band_ko}"
+                "Key rationale: PII/PHI detected and anonymization not confirmed "
+                f"— compliance risk {band_label}"
             )
         if has_pii:
-            return f"핵심 근거: 개인정보(PII/PHI) 처리 포함 — 컴플라이언스 검토 필요"
-        return f"핵심 근거: 규정 준수 위험 수준 {band_ko}"
+            return f"Key rationale: PII/PHI processing detected — compliance review required"
+        return f"Key rationale: Compliance risk level {band_label}"
 
     if dimension_key == "strategic":
         conflict = next((s for s in signals if s.id == "GOAL_CONFLICT"), None)
         no_mapping = any(s.id == "NO_GOAL_MAPPING" for s in signals)
         if conflict and conflict.value > 0:
             n = int(conflict.value)
-            return f"핵심 근거: {n}개 전략 목표와 충돌 확인 — 전략 위험 {band_ko}"
+            return f"Key rationale: Conflict with {n} strategic goal(s) detected — strategic risk {band_label}"
         if no_mapping:
-            return "핵심 근거: 전략 목표 연결 정보 부족 — 중간 수준 위험으로 처리"
-        return f"핵심 근거: 전략 정합성 위험 수준 {band_ko}"
+            return "Key rationale: Insufficient strategic goal mapping — treated as medium risk"
+        return f"Key rationale: Strategic alignment risk level {band_label}"
 
     if dimension_key == "procurement":
         storage = next((s for s in signals if s.id == "STORAGE_UTILIZATION"), None)
@@ -418,15 +418,15 @@ def _build_summary_label(
         if storage and storage.value >= 0.80:
             pct = int(storage.value * 100)
             return (
-                f"핵심 근거: 창고 보관 용량 {pct}% 사용 중"
-                + (" + 배송 중 주문 중복" if in_transit else "")
-                + f" — 구매·조달 위험 {band_ko}"
+                f"Key rationale: Storage capacity at {pct}% utilization"
+                + (" + in-transit order overlap" if in_transit else "")
+                + f" — procurement risk {band_label}"
             )
         if demand:
-            return f"핵심 근거: 수요 예측 불확실성 확인 — 구매·조달 위험 {band_ko}"
-        return f"핵심 근거: 구매·조달 위험 수준 {band_ko}"
+            return f"Key rationale: Demand forecast uncertainty detected — procurement risk {band_label}"
+        return f"Key rationale: Procurement risk level {band_label}"
 
-    return f"핵심 근거: 위험 수준 {band_ko}"
+    return f"Key rationale: Risk level {band_label}"
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +440,7 @@ def _summarize_dimension_evidence(
 ) -> list[RiskSignal]:
     """
     Transform raw signals into the final UI-ready list:
-      [0]   SUMMARY signal (Korean 핵심 근거, severity = band)
+      [0]   SUMMARY signal (key rationale, severity = band)
       [1..3] detail signals sorted by severity desc → value desc → id asc
 
     Each detail signal is pruned to max 2 evidence items.
@@ -450,8 +450,8 @@ def _summarize_dimension_evidence(
     summary_label = _build_summary_label(dimension_key, raw_signals, band)
     summary_ev = _make_evidence(
         id="summary_source",
-        label_ko=_DIM_SUMMARY_SOURCE_KO.get(dimension_key, "종합 분석"),
-        source_ko=_DIM_SUMMARY_SOURCE_KO.get(dimension_key, "시스템 분석"),
+        label_text=_DIM_SUMMARY_SOURCE.get(dimension_key, "Comprehensive analysis"),
+        source_text=_DIM_SUMMARY_SOURCE.get(dimension_key, "System analysis"),
     )
     summary_signal = RiskSignal(
         id="SUMMARY",
@@ -661,8 +661,8 @@ class RiskScoringService:
                 evidence=[
                     _make_evidence(
                         id="overspend_ratio_calc",
-                        label_ko="요청 금액과 잔여 예산을 비교하여 초과 배수 산출",
-                        source_ko=_signal_source("OVERSPEND_RATIO"),
+                        label_text="Overspend ratio calculated by comparing requested amount to remaining budget",
+                        source_text=_signal_source("OVERSPEND_RATIO"),
                     )
                 ],
             ))
@@ -696,8 +696,8 @@ class RiskScoringService:
             evidence=[
                 _make_evidence(
                     id="threshold_policy",
-                    label_ko="회사 재무 정책 기준과 비교하여 초과 여부 판단",
-                    source_ko=_signal_source("THRESHOLD_BREACH"),
+                    label_text="Determined threshold breach by comparing against company financial policy",
+                    source_text=_signal_source("THRESHOLD_BREACH"),
                 )
             ],
         ))
@@ -719,7 +719,7 @@ class RiskScoringService:
                 rsev = (first_rule["consequence"].get("severity") or "").upper()
             rule_sev = rsev if rsev in ("CRITICAL", "HIGH", "MEDIUM", "LOW") else "HIGH"
 
-            rule_name = first_rule.get("name") or "재무 승인 규칙"
+            rule_name = first_rule.get("name") or "Financial approval rule"
             raw_signals.append(RiskSignal(
                 id="FIN_RULE_TRIGGERED",
                 label=_signal_label("FIN_RULE_TRIGGERED"),
@@ -728,8 +728,8 @@ class RiskScoringService:
                 evidence=[
                     _make_evidence(
                         id="fin_rule_engine",
-                        label_ko=f"거버넌스 규칙 발동: {rule_name}",
-                        source_ko=_signal_source("FIN_RULE_TRIGGERED"),
+                        label_text=f"Governance rule triggered: {rule_name}",
+                        source_text=_signal_source("FIN_RULE_TRIGGERED"),
                     )
                 ],
             ))
@@ -759,7 +759,7 @@ class RiskScoringService:
 
         return RiskDimension(
             id="financial",
-            label="재무 위험",
+            label="Financial Risk",
             label_en="Financial Risk",
             score=score,
             band=band,
@@ -824,18 +824,18 @@ class RiskScoringService:
             score += 60
             if _pii_from_semantics:
                 # Semantics filled the gap — use its Korean rationale in evidence
-                sem_rationale = _first_matching_rationale(rs, direction_filter=None, fallback="LLM 분석에서 개인정보 처리 관련성이 도출됨")
+                sem_rationale = _first_matching_rationale(rs, direction_filter=None, fallback="LLM analysis identified personal data processing relevance")
                 pii_ev = _make_evidence(
                     id="pii_semantics",
-                    label_ko=sem_rationale,
-                    source_ko="LLM(구조화)",
+                    label_text=sem_rationale,
+                    source_text="LLM (structured)",
                     confidence=rs.get("global_confidence"),
                 )
             else:
                 pii_ev = _make_evidence(
                     id="pii_field",
-                    label_ko="의사결정 내용에 개인정보 처리 여부가 명시됨",
-                    source_ko=_signal_source("PII_DETECTED"),
+                    label_text="Personal data processing explicitly stated in decision content",
+                    source_text=_signal_source("PII_DETECTED"),
                 )
             raw_signals.append(RiskSignal(
                 id="PII_DETECTED",
@@ -867,8 +867,8 @@ class RiskScoringService:
                 evidence=[
                     _make_evidence(
                         id="anon_missing",
-                        label_ko="비식별화 처리 여부가 확인되지 않음",
-                        source_ko=_signal_source("ANONYMIZATION_MISSING"),
+                        label_text="Anonymization processing has not been confirmed",
+                        source_text=_signal_source("ANONYMIZATION_MISSING"),
                     )
                 ],
             ))
@@ -884,8 +884,8 @@ class RiskScoringService:
                 evidence=[
                     _make_evidence(
                         id="cross_border",
-                        label_ko="국경 간 데이터 이전이 수반될 가능성 있음",
-                        source_ko=_signal_source("CROSS_BORDER_TRANSFER"),
+                        label_text="Cross-border data transfer may be involved",
+                        source_text=_signal_source("CROSS_BORDER_TRANSFER"),
                     )
                 ],
             ))
@@ -909,7 +909,7 @@ class RiskScoringService:
             elif sev_upper == "HIGH":
                 score += 10
 
-            rule_name = r.get("name") or "개인정보 보호 규칙"
+            rule_name = r.get("name") or "Privacy/compliance rule"
             raw_signals.append(RiskSignal(
                 id="COMPLIANCE_RULE_TRIGGERED",
                 label=_signal_label("COMPLIANCE_RULE_TRIGGERED"),
@@ -918,8 +918,8 @@ class RiskScoringService:
                 evidence=[
                     _make_evidence(
                         id="compliance_rule_engine",
-                        label_ko=f"거버넌스 규칙 발동: {rule_name}",
-                        source_ko=_signal_source("COMPLIANCE_RULE_TRIGGERED"),
+                        label_text=f"Governance rule triggered: {rule_name}",
+                        source_text=_signal_source("COMPLIANCE_RULE_TRIGGERED"),
                     )
                 ],
             ))
@@ -972,7 +972,7 @@ class RiskScoringService:
 
         return RiskDimension(
             id="compliance",
-            label="컴플라이언스 / 개인정보 위험",
+            label="Compliance / Privacy Risk",
             label_en="Compliance / Privacy Risk",
             score=score,
             band=band,
@@ -1033,16 +1033,16 @@ class RiskScoringService:
                 if len(support_edge_ev) < 2:
                     support_edge_ev.append(_make_evidence(
                         id=f"graph_support_{tgt}",
-                        label_ko=f"그래프 분석: '{tgt_label}' 목표와 연계 관계 확인",
-                        source_ko="그래프 분석",
+                        label_text=f"Graph analysis: alignment with goal '{tgt_label}' confirmed",
+                        source_text="Graph analysis",
                     ))
             elif rel in _CONFLICT_RELATIONS:
                 conflicted_goal_ids.add(tgt)
                 if len(conflict_edge_ev) < 2:
                     conflict_edge_ev.append(_make_evidence(
                         id=f"graph_conflict_{tgt}",
-                        label_ko=f"그래프 분석: '{tgt_label}' 목표와 충돌 관계 확인",
-                        source_ko="그래프 분석",
+                        label_text=f"Graph analysis: conflict with goal '{tgt_label}' confirmed",
+                        source_text="Graph analysis",
                     ))
 
         # ── Decision goals → word-intersection match to company goals ──
@@ -1071,7 +1071,7 @@ class RiskScoringService:
             for impact in sem_goal_impacts:
                 gid       = impact.get("goal_id", "")
                 direction = impact.get("direction", "neutral")
-                rationale = impact.get("rationale_ko", "")
+                rationale = impact.get("rationale") or impact.get("rationale_ko", "")
                 conf      = impact.get("confidence", 0.5)
 
                 if direction == "support":
@@ -1079,8 +1079,8 @@ class RiskScoringService:
                     if len(_sem_support_ev) < 2:
                         _sem_support_ev.append(_make_evidence(
                             id=f"sem_support_{gid}",
-                            label_ko=rationale or f"LLM 분석: '{gid}' 목표와 기여 관계",
-                            source_ko="LLM(구조화)",
+                            label_text=rationale or f"LLM analysis: alignment with goal '{gid}'",
+                            source_text="LLM (structured)",
                             confidence=conf,
                         ))
                 elif direction == "conflict":
@@ -1088,8 +1088,8 @@ class RiskScoringService:
                     if len(_sem_conflict_ev) < 2:
                         _sem_conflict_ev.append(_make_evidence(
                             id=f"sem_conflict_{gid}",
-                            label_ko=rationale or f"LLM 분석: '{gid}' 목표와 충돌 관계",
-                            source_ko="LLM(구조화)",
+                            label_text=rationale or f"LLM analysis: conflict with goal '{gid}'",
+                            source_text="LLM (structured)",
                             confidence=conf,
                         ))
 
@@ -1135,16 +1135,16 @@ class RiskScoringService:
                 evidence=[
                     _make_evidence(
                         id="no_goal_mapping",
-                        label_ko="그래프 및 거버넌스 결과에서 목표 연결 정보를 찾을 수 없음",
-                        source_ko="시스템 분석",
-                        note="전략 정합성 수치화 불가 — 중간 기준값 적용",
+                        label_text="No goal mapping found in graph or governance results",
+                        source_text="System analysis",
+                        note="Cannot quantify strategic alignment — medium baseline applied",
                     )
                 ],
             ))
             final_signals = _summarize_dimension_evidence("strategic", raw_signals, "MEDIUM")
             return RiskDimension(
                 id="strategic",
-                label="전략 정합성 / 충돌",
+                label="Strategic Alignment / Conflict",
                 label_en="Strategic Alignment / Conflict",
                 score=50,
                 band="MEDIUM",
@@ -1160,8 +1160,8 @@ class RiskScoringService:
                 or _sem_conflict_ev[:2]
                 or [_make_evidence(
                     id="conflict_governance",
-                    label_ko="거버넌스 규칙 분석을 통해 목표 충돌 가능성 도출",
-                    source_ko="규칙 엔진",
+                    label_text="Goal conflict identified through governance rule analysis",
+                    source_text="Rule engine",
                 )]
             )
             raw_signals.append(RiskSignal(
@@ -1179,8 +1179,8 @@ class RiskScoringService:
                 or _sem_support_ev[:2]
                 or [_make_evidence(
                     id="support_graph",
-                    label_ko="그래프 분석을 통해 전략 목표 기여 관계 확인",
-                    source_ko="그래프 분석",
+                    label_text="Strategic goal alignment confirmed through graph analysis",
+                    source_text="Graph analysis",
                 )]
             )
             raw_signals.append(RiskSignal(
@@ -1192,7 +1192,7 @@ class RiskScoringService:
             ))
 
         if strat_triggered:
-            rule_name = strat_triggered[0].get("name") or "전략 검토 규칙"
+            rule_name = strat_triggered[0].get("name") or "Strategic review rule"
             raw_signals.append(RiskSignal(
                 id="STRAT_RULE_TRIGGERED",
                 label=_signal_label("STRAT_RULE_TRIGGERED"),
@@ -1201,8 +1201,8 @@ class RiskScoringService:
                 evidence=[
                     _make_evidence(
                         id="strat_rule_engine",
-                        label_ko=f"거버넌스 규칙 발동: {rule_name}",
-                        source_ko=_signal_source("STRAT_RULE_TRIGGERED"),
+                        label_text=f"Governance rule triggered: {rule_name}",
+                        source_text=_signal_source("STRAT_RULE_TRIGGERED"),
                     )
                 ],
             ))
@@ -1239,7 +1239,7 @@ class RiskScoringService:
 
         return RiskDimension(
             id="strategic",
-            label="전략 정합성 / 충돌",
+            label="Strategic Alignment / Conflict",
             label_en="Strategic Alignment / Conflict",
             score=dim_score,
             band=band,
@@ -1315,12 +1315,12 @@ class RiskScoringService:
                 evidence=[
                     _make_evidence(
                         id="storage_registry",
-                        label_ko=(
-                            f"현재 재고 {int(on_hand)}개 + 배송 중 {int(in_transit)}개 = "
-                            f"{int(on_hand + in_transit)}개로 창고 용량 "
-                            f"({int(capacity)}개)의 {utilization*100:.0f}% 사용 중"
+                        label_text=(
+                            f"On-hand {int(on_hand)} units + in-transit {int(in_transit)} units = "
+                            f"{int(on_hand + in_transit)} units, utilizing {utilization*100:.0f}% "
+                            f"of storage capacity ({int(capacity)} units)"
                         ),
-                        source_ko=_signal_source("STORAGE_UTILIZATION"),
+                        source_text=_signal_source("STORAGE_UTILIZATION"),
                     )
                 ],
             ))
@@ -1340,7 +1340,7 @@ class RiskScoringService:
 
         if in_transit_val and in_transit_val > 0:
             score += 15
-            rule_note = f" (거버넌스 규칙 {proc_triggered[0].get('rule_id')} 발동)" if proc_triggered else ""
+            rule_note = f" (governance rule {proc_triggered[0].get('rule_id')} triggered)" if proc_triggered else ""
             raw_signals.append(RiskSignal(
                 id="IN_TRANSIT_OVERLAP",
                 label=_signal_label("IN_TRANSIT_OVERLAP"),
@@ -1350,8 +1350,8 @@ class RiskScoringService:
                 evidence=[
                     _make_evidence(
                         id="in_transit_registry",
-                        label_ko=f"동일 품목 {int(in_transit_val)}개 현재 배송 중{rule_note} — 중복 주문 위험",
-                        source_ko=_signal_source("IN_TRANSIT_OVERLAP"),
+                        label_text=f"{int(in_transit_val)} units of same item currently in transit{rule_note} — duplicate order risk",
+                        source_text=_signal_source("IN_TRANSIT_OVERLAP"),
                     )
                 ],
             ))
@@ -1372,19 +1372,19 @@ class RiskScoringService:
             r_score = _RELIABILITY_SCORES.get(str(reliability).lower(), 0)
             demand_score += r_score
             if r_score > 0:
-                demand_notes.append(f"SNS 판매 예측 신뢰도 '{reliability}'")
+                demand_notes.append(f"SNS sales forecast reliability '{reliability}'")
 
         if growth_trend:
             t_score = _TREND_SCORES.get(str(growth_trend).lower(), 0)
             demand_score += t_score
             if t_score > 0:
-                demand_notes.append(f"매출 성장 추세 '{growth_trend}'")
+                demand_notes.append(f"Revenue growth trend '{growth_trend}'")
 
         if promo_active and promo_drop_pct is not None:
             drop = float(promo_drop_pct)
             if drop >= 25:
                 demand_score += 12
-                demand_notes.append(f"프로모션 종료 후 수요 약 {int(drop)}% 감소 예상")
+                demand_notes.append(f"Expected ~{int(drop)}% demand drop after promotion ends")
             elif drop >= 10:
                 demand_score += 6
 
@@ -1399,8 +1399,8 @@ class RiskScoringService:
                 evidence=[
                     _make_evidence(
                         id="demand_registry",
-                        label_ko="; ".join(demand_notes) if demand_notes else "수요 예측 불확실 요인 감지",
-                        source_ko=_signal_source("DEMAND_UNCERTAINTY"),
+                        label_text="; ".join(demand_notes) if demand_notes else "Demand forecast uncertainty factors detected",
+                        source_text=_signal_source("DEMAND_UNCERTAINTY"),
                     )
                 ],
             ))
@@ -1423,7 +1423,7 @@ class RiskScoringService:
 
         return RiskDimension(
             id="procurement",
-            label="구매·조달 위험",
+            label="Procurement / Inventory Risk",
             label_en="Procurement / Inventory Risk",
             score=score,
             band=band,
@@ -1461,8 +1461,8 @@ class RiskScoringService:
             return None
 
         _COST_REDUCTION_KEYWORDS = {
-            "cost", "비용", "efficiency", "절감", "reduction", "savings",
-            "budget", "operating", "운영", "spend",
+            "cost", "efficiency", "reduction", "savings",
+            "budget", "operating", "spend",
         }
 
         target_goal: Optional[dict] = None
@@ -1525,7 +1525,7 @@ class RiskScoringService:
             if cost_delta is not None:
                 result["llm_cost_delta_pct"] = cost_delta
                 result["note"] = (
-                    f"insufficient baseline; LLM estimate: 비용 변화율 {cost_delta:+.1f}%"
+                    f"insufficient baseline; LLM estimate: cost change {cost_delta:+.1f}%"
                 )
             return result
 
@@ -1541,7 +1541,7 @@ class RiskScoringService:
         if cost_delta is not None:
             result["llm_cost_delta_pct"] = cost_delta
             result["note"] = (
-                f"insufficient baseline; LLM estimate: 비용 변화율 {cost_delta:+.1f}%"
+                f"insufficient baseline; LLM estimate: cost change {cost_delta:+.1f}%"
             )
         return result
 
@@ -1566,8 +1566,8 @@ class RiskScoringService:
             is_public = industry_code in ("PUBLIC_SECTOR", "GOVERNMENT")
         else:
             # Legacy fallback: substring matching when industry_code absent
-            is_healthcare = any(kw in industry_text for kw in ("health", "hospital", "medical", "헬스", "의료"))
-            is_public = any(kw in industry_text for kw in ("government", "public", "정부", "공공", "gsa"))
+            is_healthcare = any(kw in industry_text for kw in ("health", "hospital", "medical"))
+            is_public = any(kw in industry_text for kw in ("government", "public", "gsa"))
 
         default_weights: dict[str, float] = {
             "financial":   0.40,

@@ -116,14 +116,14 @@ def _compute_affected_goals(
     that caused this flag — NOT against the raw rule description text.
 
     Rule description text is avoided because it shares incidental vocabulary
-    (e.g. "환자" appears in both a compliance rule and a patient-safety goal)
+    (e.g. "patient" appears in both a compliance rule and a patient-safety goal)
     that would create misleading cross-category goal attribution.
 
-    Example for this HIPAA scenario:
-      HIGH_RISK (compliance rule R2) → hint vocab {규제, HIPAA, 데이터, …}
-        → G2 "규제 및 데이터 준수" matches; G1 "환자 안전" does NOT
-      STRATEGIC_CRITICAL (strategic rules R3/R4) → hint vocab {안전, 환자, 임상, …}
-        → G1 "환자 안전 우수성" matches; G2 also matches via "임상"
+    Example for a HIPAA scenario:
+      HIGH_RISK (compliance rule R2) → hint vocab {COMPLIANCE, HIPAA, DATA, ...}
+        → G2 "Regulatory & Data Compliance" matches; G1 "Patient Safety" does NOT
+      STRATEGIC_CRITICAL (strategic rules R3/R4) → hint vocab {SAFETY, PATIENT, CLINICAL, ...}
+        → G1 "Patient Safety Excellence" matches; G2 also matches via "CLINICAL"
 
     Returns a deduplicated list of {goal_id, name, priority} dicts.
     """
@@ -361,7 +361,7 @@ def _normalize_approval_chain(
                 personnel_by_role[key] = person
 
     # Build rule_id → lang-appropriate approver_role lookup
-    # so stored KO role names ("인사팀장") are re-read in the correct lang at response time.
+    # so stored role names are re-read in the correct lang at response time.
     rules_by_id: dict[str, dict] = {}
     if company_data:
         for rule in company_data.get("governance_rules", []):
@@ -392,7 +392,7 @@ def _normalize_approval_chain(
         # Look up the person by role to get their ID and numeric level
         person = personnel_by_role.get(role.upper(), {})
 
-        # name: prefer value already on the step, fall back to person's actual name (e.g. "이수진")
+        # name: prefer value already on the step, fall back to person's actual name
         person_name = step.get("name") or person.get("name")
 
         # Derive auth_type from rule_action stored on the step
@@ -549,7 +549,7 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
         d = record.decision
 
         # Enrich owners: when the LLM puts a role title in the `name` field
-        # (e.g. "연구개발팀장") because no personal name was in the text,
+        # (e.g. "R&D Team Lead") because no personal name was in the text,
         # swap in the actual person name from the personnel hierarchy.
         raw_owners = d.get("owners", [])
         enriched_owners = []
