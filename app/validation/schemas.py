@@ -16,7 +16,7 @@ State
 
 from __future__ import annotations
 
-import operator
+from operator import add as _list_add
 from enum import Enum
 from typing import Annotated, Literal, Optional
 
@@ -102,7 +102,7 @@ def _trim_messages(messages: list, max_keep: int = 20) -> list:
     Keep the system message (first) and the last ``max_keep - 1`` messages.
 
     Prevents unbounded growth of ``agent_messages`` in LangGraph state
-    when ``operator.add`` is used as the reducer.
+    when ``_list_add`` is used as the reducer.
     """
     if len(messages) <= max_keep:
         return messages
@@ -126,12 +126,12 @@ class ValidationState(TypedDict):
     graph_context: Optional[dict]    # from get_governance_context()
 
     # Agent-populated fields (use operator.add for lists)
-    precedent_decisions: Annotated[list, operator.add]
-    governance_gaps: Annotated[list, operator.add]
-    goal_impacts: Annotated[list, operator.add]
+    precedent_decisions: Annotated[list, _list_add]
+    governance_gaps: Annotated[list, _list_add]
+    goal_impacts: Annotated[list, _list_add]
     agent_reasoning: str
     verdict: str
     confidence: float
-    messages: Annotated[list, operator.add]
+    messages: Annotated[list, _list_add]
     external_signals: Optional[dict]
     error: Optional[str]

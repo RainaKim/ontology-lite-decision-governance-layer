@@ -194,7 +194,7 @@ NODE_TYPE_REGISTRY: dict[NodeType, NodeTypeMetadata] = {
         layer=NodeLayer.DOMAIN,
         meta_classes=[MetaClass.ANTAGONISM],
         merge_strategy=MergeStrategy.MERGE,
-        neo4j_labels=["Conflict"],
+        neo4j_labels=["Conflict", "Antagonism"],
         description="Reified conflict between two governance entities (Goal vs Goal)",
     ),
     NodeType.DECISION_TYPE: NodeTypeMetadata(
