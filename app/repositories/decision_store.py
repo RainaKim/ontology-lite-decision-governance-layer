@@ -1,11 +1,12 @@
 """
 Decision Store - In-memory lifecycle store for decisions.
 
-Tracks the full lifecycle: pending → processing → complete | failed
+Tracks the full lifecycle: pending -> processing -> complete | failed
 No DB. Dict-based. Thread-safe enough for single-process hackathon use.
 """
 
 import uuid
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass, field
@@ -20,6 +21,8 @@ STEP_LABELS = {
     5: "building_decision_pack",
     6: "complete",
 }
+
+_MAX_STORE_SIZE = 1000
 
 
 @dataclass
@@ -55,9 +58,33 @@ class DecisionRecord:
     workspace_decision_id: Optional[str] = None  # DB decision ID to update after analysis
 
 
-# ── In-memory store ──────────────────────────────────────────────────────────
+@dataclass
+class PipelineResults:
+    """Groups pipeline output parameters for store_results()."""
+    decision: Optional[dict] = None
+    governance: Optional[dict] = None
+    graph_payload: Optional[dict] = None
+    reasoning: Optional[dict] = None
+    decision_pack: Optional[dict] = None
+    derived_attributes: Optional[dict] = None
+    extraction_metadata: Optional[dict] = None
+    risk_scoring: Optional[dict] = None
+    risk_semantics: Optional[dict] = None
+    simulation: Optional[dict] = None
+    decision_context: Optional[dict] = None
+    external_signals: Optional[dict] = None
+    validation_result: Optional[dict] = None
 
-_store: dict[str, DecisionRecord] = {}
+
+# -- In-memory store with LRU eviction -----------------------------------------
+
+_store: OrderedDict[str, DecisionRecord] = OrderedDict()
+
+
+def _evict_if_needed() -> None:
+    """Remove oldest entries if store exceeds max size."""
+    while len(_store) >= _MAX_STORE_SIZE:
+        _store.popitem(last=False)
 
 
 def _now() -> str:
@@ -75,6 +102,7 @@ def create(
     workspace_decision_id: Optional[str] = None,
 ) -> DecisionRecord:
     """Create a new pending DecisionRecord and return it."""
+    _evict_if_needed()
     decision_id = str(uuid.uuid4())
     now = _now()
     record = DecisionRecord(
@@ -113,6 +141,7 @@ def update_status(decision_id: str, status: str, current_step: int = None) -> No
 
 def store_results(
     decision_id: str,
+    results: Optional[PipelineResults] = None,
     *,
     decision: dict = None,
     governance: dict = None,
@@ -128,10 +157,44 @@ def store_results(
     external_signals: dict = None,
     validation_result: dict = None,
 ) -> None:
-    """Persist pipeline outputs onto the record."""
+    """Persist pipeline outputs onto the record.
+
+    Accepts either a PipelineResults object or individual keyword arguments
+    (backward compatible). When both are provided, keyword arguments take precedence.
+    """
     record = _store.get(decision_id)
     if not record:
         return
+
+    # If a PipelineResults object is provided, use it as the base
+    if results is not None:
+        if decision is None:
+            decision = results.decision
+        if governance is None:
+            governance = results.governance
+        if graph_payload is None:
+            graph_payload = results.graph_payload
+        if reasoning is None:
+            reasoning = results.reasoning
+        if decision_pack is None:
+            decision_pack = results.decision_pack
+        if derived_attributes is None:
+            derived_attributes = results.derived_attributes
+        if extraction_metadata is None:
+            extraction_metadata = results.extraction_metadata
+        if risk_scoring is None:
+            risk_scoring = results.risk_scoring
+        if risk_semantics is None:
+            risk_semantics = results.risk_semantics
+        if simulation is None:
+            simulation = results.simulation
+        if decision_context is None:
+            decision_context = results.decision_context
+        if external_signals is None:
+            external_signals = results.external_signals
+        if validation_result is None:
+            validation_result = results.validation_result
+
     if decision is not None:
         record.decision = decision
     if governance is not None:

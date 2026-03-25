@@ -11,6 +11,7 @@ Public API:
 
 from app.validation.schemas import (
     GovernanceGap,
+    GovernanceVerdict,
     PrecedentDecision,
     ValidationResult,
     ValidationState,
@@ -19,6 +20,7 @@ from app.validation.governance_agent import run_governance_agent
 
 __all__ = [
     "GovernanceGap",
+    "GovernanceVerdict",
     "PrecedentDecision",
     "ValidationResult",
     "ValidationState",

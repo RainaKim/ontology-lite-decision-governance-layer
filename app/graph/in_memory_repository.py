@@ -33,6 +33,20 @@ class InMemoryGraphRepository(BaseGraphRepository):
     def __init__(self) -> None:
         self._nodes: dict[str, Node] = {}
         self._edges: list[Edge] = []
+        self.__adjacency_cache: dict[str, list[Edge]] | None = None
+        self.__adjacency_dirty: bool = True
+
+    @property
+    def _adjacency(self) -> dict[str, list[Edge]]:
+        """Lazily built adjacency index: node_id -> list of edges."""
+        if self.__adjacency_cache is None or self.__adjacency_dirty:
+            index: dict[str, list[Edge]] = {}
+            for edge in self._edges:
+                index.setdefault(edge.from_node, []).append(edge)
+                index.setdefault(edge.to_node, []).append(edge)
+            self.__adjacency_cache = index
+            self.__adjacency_dirty = False
+        return self.__adjacency_cache
 
     # ------------------------------------------------------------------
     # Schema init (no-op — nothing to seed in memory)
@@ -52,6 +66,7 @@ class InMemoryGraphRepository(BaseGraphRepository):
     async def write_edge(self, edge: Edge, company_id: str) -> None:
         """Append an edge.  Does not deduplicate."""
         self._edges.append(edge)
+        self.__adjacency_dirty = True
 
     async def write_graph(self, graph: DecisionGraph, company_id: str) -> None:
         """Write all nodes then all edges."""
@@ -82,19 +97,26 @@ class InMemoryGraphRepository(BaseGraphRepository):
 
         visited_ids: set[str] = set()
         visited_edges: list[Edge] = []
+        seen_edge_keys: set[tuple] = set()
         frontier: set[str] = {decision_id}
+        adjacency = self._adjacency
 
         for _ in range(depth):
             next_frontier: set[str] = set()
             for node_id in frontier:
                 visited_ids.add(node_id)
-                for edge in self._edges:
+                for edge in adjacency.get(node_id, []):
+                    edge_key = (edge.from_node, edge.predicate, edge.to_node)
                     if edge.from_node == node_id and edge.to_node not in visited_ids:
                         next_frontier.add(edge.to_node)
-                        visited_edges.append(edge)
+                        if edge_key not in seen_edge_keys:
+                            seen_edge_keys.add(edge_key)
+                            visited_edges.append(edge)
                     elif edge.to_node == node_id and edge.from_node not in visited_ids:
                         next_frontier.add(edge.from_node)
-                        visited_edges.append(edge)
+                        if edge_key not in seen_edge_keys:
+                            seen_edge_keys.add(edge_key)
+                            visited_edges.append(edge)
             frontier = next_frontier
             if not frontier:
                 break
@@ -190,7 +212,7 @@ class InMemoryGraphRepository(BaseGraphRepository):
     # Graph RAG query methods (Step 8c)
     # ------------------------------------------------------------------
 
-    async def get_rules_for_decision(self, company_id: str) -> list[dict]:
+    async def get_all_rules(self, company_id: str) -> list[dict]:
         """Return all Rule nodes with GOVERNED_BY goals and REQUIRES_APPROVAL_FROM actors."""
         prefix = f"{company_id}:"
         rule_nodes = [
@@ -357,3 +379,5 @@ class InMemoryGraphRepository(BaseGraphRepository):
         """Reset store to empty (test helper)."""
         self._nodes.clear()
         self._edges.clear()
+        self.__adjacency_cache = None
+        self.__adjacency_dirty = True

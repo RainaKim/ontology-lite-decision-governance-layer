@@ -17,10 +17,25 @@ State
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Optional
+from enum import Enum
+from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
+
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+
+
+class GovernanceVerdict(str, Enum):
+    """Valid governance verdicts."""
+
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    ESCALATE = "ESCALATE"
+    REVIEW = "REVIEW"
 
 
 # ---------------------------------------------------------------------------
@@ -31,11 +46,13 @@ from typing_extensions import TypedDict
 class GovernanceGap(BaseModel):
     """A detected gap in governance coverage."""
 
-    gap_type: str = Field(
+    gap_type: Literal["external_knowledge", "internal_data", "governance_config"] = Field(
         description="Type of gap: 'external_knowledge' | 'internal_data' | 'governance_config'"
     )
     description: str
-    severity: str = Field(description="Severity: 'low' | 'medium' | 'high'")
+    severity: Literal["low", "medium", "high"] = Field(
+        description="Severity: 'low' | 'medium' | 'high'"
+    )
     integration_request: Optional[str] = Field(
         default=None,
         description="For internal_data gaps: what integration is needed to fill the gap",
@@ -61,7 +78,7 @@ class ValidationResult(BaseModel):
     does not change.
     """
 
-    verdict: str = Field(
+    verdict: GovernanceVerdict = Field(
         description="APPROVE | REJECT | ESCALATE | REVIEW"
     )
     confidence: float = Field(ge=0.0, le=1.0)
@@ -78,6 +95,19 @@ class ValidationResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 _VALID_VERDICTS = {"APPROVE", "REJECT", "ESCALATE", "REVIEW"}
+
+
+def _trim_messages(messages: list, max_keep: int = 20) -> list:
+    """
+    Keep the system message (first) and the last ``max_keep - 1`` messages.
+
+    Prevents unbounded growth of ``agent_messages`` in LangGraph state
+    when ``operator.add`` is used as the reducer.
+    """
+    if len(messages) <= max_keep:
+        return messages
+    # Preserve the system message (always first) plus the tail
+    return [messages[0]] + messages[-(max_keep - 1):]
 
 
 class ValidationState(TypedDict):

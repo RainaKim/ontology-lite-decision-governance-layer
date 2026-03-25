@@ -42,7 +42,7 @@ def create_tools(repo: BaseGraphRepository) -> list:
         governed goals, and required approvers.
         """
         try:
-            return await repo.get_rules_for_decision(company_id)
+            return await repo.get_all_rules(company_id)
         except Exception as exc:
             logger.warning(f"search_governance_rules failed: {exc}")
             return []

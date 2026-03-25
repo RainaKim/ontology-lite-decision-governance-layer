@@ -583,14 +583,20 @@ class RiskScoringService:
         decision_payload: dict,
         company_payload: dict,
         governance_result: dict,
-        graph_payload: Optional[dict],
+        graph_data: Optional[dict] = None,
         risk_semantics: Optional[dict] = None,
         company_id: Optional[str] = None,
-        graph_context: Optional[dict] = None,
         company_config=None,
+        # Deprecated aliases — accepted for backward compatibility
+        graph_payload: Optional[dict] = None,
+        graph_context: Optional[dict] = None,
     ) -> RiskScoringResult:
         """
         Compute risk score.
+
+        graph_data (optional) — unified graph context. Accepts either format:
+            in-memory graph_payload (with "edges", "nodes") or Neo4j graph_context.
+            Legacy parameters graph_payload/graph_context are accepted but deprecated.
 
         risk_semantics (optional) — pre-parsed RiskSemantics.model_dump() from
         the optional LLM semantics step. Used ONLY as a fallback when structural
@@ -600,7 +606,10 @@ class RiskScoringService:
         dp = decision_payload or {}
         cp = company_payload or {}
         gv = governance_result or {}
-        gr = graph_payload or {}
+
+        # Unify graph data: prefer graph_data, fall back to deprecated aliases
+        _graph = graph_data or graph_payload or graph_context or {}
+        gr = _graph
         rs = risk_semantics or {}
 
         triggered_rules: list[dict] = gv.get("triggered_rules", [])
@@ -620,7 +629,7 @@ class RiskScoringService:
 
         strat_dim, strat_ded = self._strategic(
             dp, cp, triggered_rules, gr, rs,
-            company_id=company_id, graph_context=graph_context,
+            company_id=company_id,
         )
         if strat_dim is not None:
             dims.append(strat_dim)
@@ -651,9 +660,9 @@ class RiskScoringService:
             return None, 0
 
         risk_tol = cp.get("risk_tolerance", {}).get("financial", {})
-        unbudgeted_thresh = risk_tol.get("unbudgeted_spend_threshold") or 50_000_000
-        high_thresh       = risk_tol.get("high_cost_threshold") or 250_000_000
-        critical_thresh   = risk_tol.get("critical_cost_threshold") or 1_000_000_000
+        unbudgeted_thresh = risk_tol.get("unbudgeted_spend_threshold") or 50_000
+        high_thresh       = risk_tol.get("high_cost_threshold") or 200_000
+        critical_thresh   = risk_tol.get("critical_cost_threshold") or 500_000
 
         raw_signals: list[RiskSignal] = []
         confidence_deductions = 0
@@ -1015,39 +1024,31 @@ class RiskScoringService:
         gr: dict,
         rs: dict = None,
         company_id: Optional[str] = None,
-        graph_context: Optional[dict] = None,
     ) -> tuple[Optional[RiskDimension], int]:
         company_goals: list[dict] = cp.get("strategic_goals", [])
         raw_signals: list[RiskSignal] = []
         confidence_deductions = 0
 
-        edges: list[dict] = gr.get("edges", [])
-        nodes: list[dict] = gr.get("nodes", [])
+        # Normalize edges from whichever keys are present in the unified graph data
+        edges: list[dict] = list(gr.get("edges", []) or [])
+        nodes: list[dict] = list(gr.get("nodes", []) or [])
 
-        # --- Graph context enrichment (Step 8a) ---
-        # If graph_context is provided (from Neo4j get_governance_context()),
-        # extract GOVERNED_BY and CONFLICTS_WITH edges for strategic scoring.
-        if graph_context:
-            gc_edges = graph_context.get("edges", [])
-            for gc_edge in gc_edges:
-                # Edge objects from get_governance_context() have .predicate, .from_node, .to_node
-                pred = getattr(gc_edge, "predicate", None) or (
-                    gc_edge.get("predicate") if isinstance(gc_edge, dict) else None
-                )
-                to_node = getattr(gc_edge, "to_node", None) or (
-                    gc_edge.get("to_node") if isinstance(gc_edge, dict) else None
-                )
-                from_node = getattr(gc_edge, "from_node", None) or (
-                    gc_edge.get("from_node") if isinstance(gc_edge, dict) else None
-                )
-                if pred and to_node:
-                    pred_str = pred if isinstance(pred, str) else str(pred)
-                    edge_dict = {
-                        "predicate": pred_str,
-                        "to_node": to_node,
-                        "from_node": from_node,
-                    }
-                    edges.append(edge_dict)
+        # Also extract from edge_list / node_list aliases if present
+        for alias_key in ("edge_list",):
+            for item in gr.get(alias_key, []):
+                if isinstance(item, dict):
+                    edges.append(item)
+                else:
+                    # Handle object-style edges (e.g. from Neo4j get_governance_context)
+                    pred = getattr(item, "predicate", None)
+                    to_node = getattr(item, "to_node", None)
+                    from_node = getattr(item, "from_node", None)
+                    if pred and to_node:
+                        edges.append({
+                            "predicate": str(pred),
+                            "to_node": to_node,
+                            "from_node": from_node,
+                        })
 
         node_by_id: dict[str, dict] = {}
         for n in nodes:
@@ -1647,6 +1648,14 @@ class RiskScoringService:
         total_w = sum(active_weights.values())
         if total_w == 0:
             return RiskAggregate(score=0, band="LOW", confidence=0.5)
+
+        # Log effective weights after normalization so divergence from config is visible
+        if total_w != 1.0:
+            effective = {k: round(v / total_w, 3) for k, v in active_weights.items()}
+            logger.debug(
+                f"Risk weight normalization: raw={active_weights}, "
+                f"total={total_w:.3f}, effective={effective}"
+            )
 
         weighted_sum = sum(
             (active_weights[d.id] / total_w) * d.score for d in dims

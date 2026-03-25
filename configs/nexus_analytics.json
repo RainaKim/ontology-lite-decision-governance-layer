@@ -75,7 +75,7 @@
       "name": "Board Approval for Spend Over $200K",
       "description": "Any expenditure exceeding $200,000 requires board-level approval",
       "conditions": [{"field": "cost", "operator": ">", "value": 200000}],
-      "consequence": {"action": "require_approval", "approver_role": "CEO"},
+      "consequence": {"action": "require_approval", "approver_role": "Board"},
       "source": "documented",
       "confidence": "high",
       "governed_by_goal_ids": ["G2"]
@@ -133,7 +133,8 @@
     }
   ],
   "approval_hierarchy": [
-    {"role": "CEO", "reports_to": null, "approval_limit": null, "approval_limit_note": "Unlimited"},
+    {"role": "Board", "reports_to": null, "approval_limit": null, "approval_limit_note": "Board-level approval for spend > $200K"},
+    {"role": "CEO", "reports_to": "Board", "approval_limit": null, "approval_limit_note": "Unlimited"},
     {"role": "CFO", "reports_to": "CEO", "approval_limit": 200000},
     {"role": "CTO", "reports_to": "CEO", "approval_limit": null, "approval_limit_note": "Technical decisions only"},
     {"role": "VP Sales", "reports_to": "CEO", "approval_limit": null, "approval_limit_note": "15% discount authority"},

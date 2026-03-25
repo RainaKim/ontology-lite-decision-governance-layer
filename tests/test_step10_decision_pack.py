@@ -112,16 +112,12 @@ class TestBuildConsolePayloadBackwardCompat:
         """build_console_payload works without validation_result."""
         payload = build_console_payload(minimal_record, validation_result=None)
         assert payload.decision_id == "test-001"
-        assert payload.validation_verdict is None
-        assert payload.validation_confidence is None
-        assert payload.validation_reasoning is None
-        assert payload.governance_gaps is None
-        assert payload.similar_decisions is None
+        assert payload.validation is None
 
     def test_no_validation_result_default(self, minimal_record):
         """build_console_payload with no validation_result arg at all."""
         payload = build_console_payload(minimal_record)
-        assert payload.validation_verdict is None
+        assert payload.validation is None
 
 
 # ---------------------------------------------------------------------------
@@ -136,15 +132,16 @@ class TestBuildConsolePayloadWithValidation:
             minimal_record,
             validation_result=sample_validation_result,
         )
-        assert payload.validation_verdict == "ESCALATE"
-        assert payload.validation_confidence == 0.75
-        assert "CFO" in payload.validation_reasoning
-        assert payload.governance_gaps is not None
-        assert len(payload.governance_gaps) == 1
-        assert payload.governance_gaps[0]["gap_type"] == "internal_data"
+        assert payload.validation is not None
+        assert payload.validation.verdict == "ESCALATE"
+        assert payload.validation.confidence == 0.75
+        assert "CFO" in payload.validation.reasoning
+        assert payload.validation.governance_gaps is not None
+        assert len(payload.validation.governance_gaps) == 1
+        assert payload.validation.governance_gaps[0]["gap_type"] == "internal_data"
         # similar_decisions capped at 3
-        assert payload.similar_decisions is not None
-        assert len(payload.similar_decisions) == 3
+        assert payload.validation.similar_decisions is not None
+        assert len(payload.validation.similar_decisions) == 3
 
     def test_validation_from_record_dict(self, minimal_record):
         """Validation result stored as dict on record is also consumed."""
@@ -158,10 +155,11 @@ class TestBuildConsolePayloadWithValidation:
             ],
         }
         payload = build_console_payload(minimal_record)
-        assert payload.validation_verdict == "APPROVE"
-        assert payload.validation_confidence == 0.9
-        assert payload.similar_decisions is not None
-        assert len(payload.similar_decisions) == 1
+        assert payload.validation is not None
+        assert payload.validation.verdict == "APPROVE"
+        assert payload.validation.confidence == 0.9
+        assert payload.validation.similar_decisions is not None
+        assert len(payload.validation.similar_decisions) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -268,11 +266,11 @@ class TestValidationEndpoint:
         )
 
         with patch(
-            "app.validation.governance_agent.run_governance_agent",
+            "app.routers.validation.run_governance_agent",
             new_callable=AsyncMock,
             return_value=mock_result,
         ), patch(
-            "app.governance.evaluate_governance",
+            "app.routers.validation.evaluate_governance",
             return_value=mock_gov_result,
         ):
             response = await validate_decision(request)
@@ -302,7 +300,7 @@ class TestValidationEndpointError:
         )
 
         with patch(
-            "app.governance.evaluate_governance",
+            "app.routers.validation.evaluate_governance",
             side_effect=Exception("LLM timeout"),
         ):
             with pytest.raises(HTTPException) as exc_info:

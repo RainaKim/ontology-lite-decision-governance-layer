@@ -30,16 +30,22 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Optional
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 
 from app.config.llm import get_llm
 from app.graph.base import BaseGraphRepository
-from app.validation.schemas import ValidationResult, ValidationState, _VALID_VERDICTS
+from app.validation.schemas import (
+    ValidationResult,
+    ValidationState,
+    _VALID_VERDICTS,
+    _trim_messages,
+)
 from app.validation.tools import create_tools
 
 logger = logging.getLogger(__name__)
@@ -64,9 +70,12 @@ decisions, and check for governance gaps.
 Rules:
 - Always check for similar past decisions before making a verdict
 - Always check for governance gaps in triggered rules
+- Review the Layer 1 analysis which already identifies triggered rules and approval \
+requirements. Use tools only for additional context not already provided.
 - APPROVE only if all rules are satisfied and confidence > 0.85
-- ESCALATE if cost > $200K or critical compliance rules triggered
 - REJECT only if rules are clearly violated with no remediation path
+- ESCALATE when critical compliance rules are triggered or higher authority sign-off \
+is needed based on the Layer 1 approval chain
 - REVIEW for uncertain cases, partial rule satisfaction, or detected gaps
 - Be concise in reasoning -- 2-4 sentences
 
@@ -92,6 +101,29 @@ After your analysis, you MUST output your final verdict as a JSON block:
 
 _MAX_TOOL_ROUNDS = 3
 
+# ---------------------------------------------------------------------------
+# Lazily-cached LLM client (P1: avoid re-creating per request)
+# ---------------------------------------------------------------------------
+
+_llm_capable = None
+_llm_factory_id = None
+
+
+def _get_llm_capable():
+    """
+    Return a cached 'capable' tier LLM client, creating on first use.
+
+    The cache is invalidated if `get_llm` is replaced (e.g. by a test mock),
+    which is detected by comparing the id of the current `get_llm` function
+    against the id stored when the cache was populated.
+    """
+    global _llm_capable, _llm_factory_id
+    current_factory_id = id(get_llm)
+    if _llm_capable is None or _llm_factory_id != current_factory_id:
+        _llm_capable = get_llm("capable")
+        _llm_factory_id = current_factory_id
+    return _llm_capable
+
 
 # ---------------------------------------------------------------------------
 # Graph builder
@@ -108,7 +140,7 @@ def build_governance_agent(repo: BaseGraphRepository):
     Returns:
         Compiled LangGraph app (call .ainvoke() to run).
     """
-    llm = get_llm("capable")
+    llm = _get_llm_capable()
     tools = create_tools(repo)
     llm_with_tools = llm.bind_tools(tools)
 
@@ -121,6 +153,9 @@ def build_governance_agent(repo: BaseGraphRepository):
         # On first call, inject system prompt and decision context
         if not messages:
             messages = _build_initial_messages(state)
+
+        # Cap message list to prevent unbounded growth
+        messages = _trim_messages(messages, max_keep=20)
 
         response = await llm_with_tools.ainvoke(messages)
         return {"messages": [response]}
@@ -167,7 +202,7 @@ def build_governance_agent(repo: BaseGraphRepository):
         if (
             isinstance(last_message, AIMessage)
             and getattr(last_message, "tool_calls", None)
-            and tool_rounds <= _MAX_TOOL_ROUNDS
+            and tool_rounds < _MAX_TOOL_ROUNDS
         ):
             return "tools"
 
@@ -325,6 +360,22 @@ def _extract_verdict_from_messages(messages: list) -> tuple[str, float, str]:
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
             return _parse_verdict_json(content)
 
+    # Fallback: take the last AIMessage even if it has tool_calls
+    for msg in reversed(messages):
+        if isinstance(msg, AIMessage):
+            logger.warning(
+                "No clean AI message found for verdict extraction; "
+                "falling back to last AIMessage (which has tool_calls)"
+            )
+            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            if content:
+                return _parse_verdict_json(content)
+            break
+
+    logger.warning(
+        "No AI message found in conversation for verdict extraction; "
+        "returning default REVIEW verdict"
+    )
     return default
 
 
@@ -332,7 +383,15 @@ def _parse_verdict_json(text: str) -> tuple[str, float, str]:
     """Parse a verdict JSON block from text."""
     default = ("REVIEW", 0.5, text[:500] if text else "No response")
 
-    # Try to find JSON block
+    # 1. Try direct json.loads on the entire text
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict) and "verdict" in data:
+            return _extract_from_dict(data, text)
+    except (json.JSONDecodeError, ValueError, TypeError):
+        pass
+
+    # 2. Try to find JSON in fenced code block
     json_str = None
     if "```json" in text:
         parts = text.split("```json")
@@ -344,9 +403,12 @@ def _parse_verdict_json(text: str) -> tuple[str, float, str]:
         if len(parts) >= 3:
             json_str = parts[1].strip()
 
-    # Also try to find raw JSON object
+    # 3. Try to find outermost balanced braces containing "verdict"
     if json_str is None:
-        import re
+        json_str = _find_balanced_json(text)
+
+    # 4. Regex fallback for simple (non-nested) JSON
+    if json_str is None:
         match = re.search(r'\{[^{}]*"verdict"[^{}]*\}', text, re.DOTALL)
         if match:
             json_str = match.group(0)
@@ -357,15 +419,43 @@ def _parse_verdict_json(text: str) -> tuple[str, float, str]:
 
     try:
         data = json.loads(json_str)
-        verdict = str(data.get("verdict", "REVIEW")).upper()
-        if verdict not in _VALID_VERDICTS:
-            verdict = "REVIEW"
-        confidence = float(data.get("confidence", 0.5))
-        confidence = max(0.0, min(1.0, confidence))
-        reasoning = str(data.get("reasoning", data.get("agent_reasoning", "")))
-        return verdict, confidence, reasoning
+        return _extract_from_dict(data, text)
     except (json.JSONDecodeError, ValueError, TypeError):
         return _extract_verdict_from_text(text)
+
+
+def _find_balanced_json(text: str) -> Optional[str]:
+    """
+    Find the outermost balanced ``{...}`` block that contains ``"verdict"``.
+
+    Returns the matched JSON string or None.
+    """
+    start = None
+    depth = 0
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                candidate = text[start : i + 1]
+                if '"verdict"' in candidate:
+                    return candidate
+                start = None
+    return None
+
+
+def _extract_from_dict(data: dict, text: str) -> tuple[str, float, str]:
+    """Extract verdict/confidence/reasoning from a parsed dict."""
+    verdict = str(data.get("verdict", "REVIEW")).upper()
+    if verdict not in _VALID_VERDICTS:
+        verdict = "REVIEW"
+    confidence = float(data.get("confidence", 0.5))
+    confidence = max(0.0, min(1.0, confidence))
+    reasoning = str(data.get("reasoning", data.get("agent_reasoning", "")))
+    return verdict, confidence, reasoning
 
 
 def _extract_verdict_from_text(text: str) -> tuple[str, float, str]:
@@ -381,23 +471,23 @@ def _extract_precedents_from_messages(messages: list) -> list[dict]:
     """Extract precedent decision data from tool call results."""
     precedents = []
     for msg in messages:
-        if hasattr(msg, "content") and isinstance(msg.content, str):
-            # ToolMessage content is the tool return value as a string
-            if "score" in msg.content and "decision" in msg.content.lower():
-                try:
-                    data = json.loads(msg.content)
-                    if isinstance(data, list):
-                        for item in data[:5]:
-                            if isinstance(item, dict) and "score" in item:
-                                precedents.append({
-                                    "decision_id": item.get("id", ""),
-                                    "similarity_score": item.get("score", 0.0),
-                                    "label": item.get("label", ""),
-                                    "rules_triggered": [],
-                                    "outcome": item.get("outcome"),
-                                })
-                except (json.JSONDecodeError, TypeError):
-                    pass
+        if not isinstance(msg, ToolMessage):
+            continue
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        try:
+            data = json.loads(content)
+            if isinstance(data, list):
+                for item in data[:5]:
+                    if isinstance(item, dict) and "score" in item:
+                        precedents.append({
+                            "decision_id": item.get("id", ""),
+                            "similarity_score": item.get("score", 0.0),
+                            "label": item.get("label", ""),
+                            "rules_triggered": [],
+                            "outcome": item.get("outcome"),
+                        })
+        except (json.JSONDecodeError, TypeError):
+            pass
     return precedents
 
 
@@ -405,18 +495,19 @@ def _extract_gaps_from_messages(messages: list) -> list[dict]:
     """Extract governance gap data from tool call results."""
     gaps = []
     for msg in messages:
-        if hasattr(msg, "content") and isinstance(msg.content, str):
-            if "gap" in msg.content.lower():
-                try:
-                    data = json.loads(msg.content)
-                    if isinstance(data, list):
-                        for item in data[:10]:
-                            if isinstance(item, dict) and "gap_label" in item:
-                                gaps.append({
-                                    "gap_type": "governance_config",
-                                    "description": item.get("gap_label", ""),
-                                    "severity": "medium",
-                                })
-                except (json.JSONDecodeError, TypeError):
-                    pass
+        if not isinstance(msg, ToolMessage):
+            continue
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        try:
+            data = json.loads(content)
+            if isinstance(data, list):
+                for item in data[:10]:
+                    if isinstance(item, dict) and "gap_label" in item:
+                        gaps.append({
+                            "gap_type": "governance_config",
+                            "description": item.get("gap_label", ""),
+                            "severity": "medium",
+                        })
+        except (json.JSONDecodeError, TypeError):
+            pass
     return gaps
