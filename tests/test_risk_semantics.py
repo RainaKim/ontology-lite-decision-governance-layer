@@ -3,7 +3,7 @@ Unit tests for the structured LLM semantics layer.
 
 Covers:
   1. Semantics absent (None) → risk scoring still produces valid RiskScoringPayload
-  2. Semantics present → strategic dimension evidence includes rationale_ko
+  2. Semantics present → strategic dimension evidence includes rationale
   3. Semantics present → compliance dimension uses semantics PII fact when extractor absent
   4. Semantics numeric_estimates → kpi_impact_estimate note includes LLM estimate
   5. RiskSemantics schema edge cases
@@ -30,14 +30,14 @@ _VALID_SEMANTICS_JSON = json.dumps({
             "goal_id": "G3",
             "direction": "conflict",
             "magnitude": "high",
-            "rationale_ko": "광고비 지출 증가로 운영비용 절감 목표에 충돌이 발생함",
+            "rationale": "광고비 지출 증가로 운영비용 절감 목표에 충돌이 발생함",
             "confidence": 0.85,
         },
         {
             "goal_id": "G1",
             "direction": "support",
             "magnitude": "med",
-            "rationale_ko": "북미 시장 확장 캠페인이 매출 성장 목표에 기여함",
+            "rationale": "북미 시장 확장 캠페인이 매출 성장 목표에 기여함",
             "confidence": 0.70,
         },
     ],
@@ -170,7 +170,7 @@ _SEMANTICS_WITH_GOAL_CONFLICT = {
             "goal_id": "G3",
             "direction": "conflict",
             "magnitude": "high",
-            "rationale_ko": "광고비 지출 증가로 운영비용 절감 목표에 충돌이 발생함",
+            "rationale": "광고비 지출 증가로 운영비용 절감 목표에 충돌이 발생함",
             "confidence": 0.85,
         }
     ],
@@ -214,8 +214,8 @@ class TestScoringWithSemantics:
         assert "GOAL_CONFLICT" in signal_ids
         assert "NO_GOAL_MAPPING" not in signal_ids
 
-    def test_semantics_evidence_contains_rationale_ko(self):
-        """GOAL_CONFLICT signal evidence includes the Korean rationale from semantics."""
+    def test_semantics_evidence_contains_rationale(self):
+        """GOAL_CONFLICT signal evidence includes the rationale from semantics."""
         service = RiskScoringService()
         result = service.score(
             decision_payload=MARKETING_DECISION,
@@ -231,14 +231,14 @@ class TestScoringWithSemantics:
         assert goal_conflict_sig is not None
 
         all_labels = [ev.label for ev in goal_conflict_sig.evidence if ev.label]
-        # The Korean rationale from semantics should appear in evidence
+        # The rationale from semantics should appear in evidence
         assert any(
-            "운영비용 절감" in lbl or "충돌" in lbl
+            "운영비용 절감" in lbl or "충돌" in lbl or "conflict" in lbl.lower()
             for lbl in all_labels
-        ), f"Expected Korean rationale in evidence labels: {all_labels}"
+        ), f"Expected rationale in evidence labels: {all_labels}"
 
     def test_semantics_evidence_source_is_llm_structured(self):
-        """Evidence from semantics uses 'LLM(구조화)' as source."""
+        """Evidence from semantics uses 'LLM (structured)' as source."""
         service = RiskScoringService()
         result = service.score(
             decision_payload=MARKETING_DECISION,
@@ -254,7 +254,7 @@ class TestScoringWithSemantics:
         assert goal_conflict_sig is not None
         all_sources = [ev.source for ev in goal_conflict_sig.evidence if ev.source]
         assert any("LLM" in src for src in all_sources), (
-            f"Expected LLM(구조화) in evidence sources: {all_sources}"
+            f"Expected 'LLM (structured)' in evidence sources: {all_sources}"
         )
 
     def test_semantics_pii_fills_compliance_when_extractor_missing(self):
@@ -285,7 +285,7 @@ class TestScoringWithSemantics:
         assert comp_with_sem is not None, "Compliance dimension expected when semantics provides PII=True"
 
     def test_semantics_pii_evidence_source_is_llm_structured(self):
-        """PII signal filled by semantics uses 'LLM(구조화)' as evidence source."""
+        """PII signal filled by semantics uses 'LLM (structured)' as evidence source."""
         decision_no_pii = {**MARKETING_DECISION, "uses_pii": None}
         service = RiskScoringService()
         result = service.score(
@@ -363,7 +363,7 @@ class TestScoringWithSemantics:
             # If a kpi_impact_estimate is produced, the llm note may appear
             note = strat_dim.kpi_impact_estimate.get("note", "")
             if strat_dim.kpi_impact_estimate.get("llm_cost_delta_pct") is not None:
-                assert "12.5" in note or "LLM" in note.upper() or "비용" in note
+                assert "12.5" in note or "LLM" in note.upper() or "cost" in note.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -397,7 +397,7 @@ class TestRiskSemanticsSchema:
                     goal_id="G1",
                     direction="support",
                     magnitude="high",
-                    rationale_ko="기여함",
+                    rationale="기여함",
                     confidence=0.9,
                 )
             ],

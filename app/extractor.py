@@ -36,7 +36,7 @@ def _inject_budget_risk(decision: "Decision") -> "Decision":
 
     # Remove LLM-generated budget risks to avoid duplicates.
     # Prefer structured risk_type; fall back to keyword matching for older LLM responses that predate the field.
-    _BUDGET_MARKERS = ("예산 초과", "budget overrun", "잔여 예산", "remaining budget")
+    _BUDGET_MARKERS = ("budget overrun", "remaining budget", "over budget")
     def _is_budget_risk(r) -> bool:
         if r.risk_type is not None:
             return r.risk_type == "budget_overrun"
@@ -48,15 +48,11 @@ def _inject_budget_risk(decision: "Decision") -> "Decision":
         ratio = decision.cost / decision.remaining_budget
         severity = "High" if ratio >= 3 else "Medium"
         description = (
-            f"예산 초과: 요청 금액({int(decision.cost):,}원)이 "
-            f"잔여 예산({int(decision.remaining_budget):,}원)의 {ratio:.1f}배"
-        )
-        description_en = (
             f"Budget overrun: requested {int(decision.cost):,} KRW is "
-            f"{ratio:.1f}× the remaining budget ({int(decision.remaining_budget):,} KRW)"
+            f"{ratio:.1f}x the remaining budget ({int(decision.remaining_budget):,} KRW)"
         )
-        mitigation = "추가 예산 승인 필요 또는 요청 금액 조정"
-        decision.risks = [Risk(description=description, description_en=description_en, severity=severity, mitigation=mitigation)] + filtered
+        mitigation = "Additional budget approval required or adjust requested amount"
+        decision.risks = [Risk(description=description, severity=severity, mitigation=mitigation)] + filtered
     else:
         decision.risks = filtered
 

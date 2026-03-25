@@ -78,6 +78,142 @@ from app.config.company_registry import COMPANY_RULES_FILES as _COMPANY_RULES_FI
 
 _DEFAULT_RULES_FILE = None  # No default rules file — returns empty dict when unconfigured
 
+
+# ---------------------------------------------------------------------------
+# CompanyConfig loading (Phase 2 — primary lookup for governance rules)
+# ---------------------------------------------------------------------------
+
+def load_company_config(company_id: str):
+    """
+    Load a CompanyConfig from a JSON file for the given company_id.
+
+    Searches in order:
+      1. configs/{company_id}.json
+      2. dev/simulate/personas/{company_id}.json
+
+    Returns None if no config file is found or if parsing fails (graceful fallback).
+    """
+    from app.config.company_config import CompanyConfig
+
+    search_paths = [
+        Path(__file__).parent.parent / "configs" / f"{company_id}.json",
+        Path(__file__).parent.parent / "dev" / "simulate" / "personas" / f"{company_id}.json",
+    ]
+    for config_path in search_paths:
+        if config_path.exists():
+            try:
+                with open(config_path, "r") as f:
+                    data = json.load(f)
+                config = CompanyConfig.model_validate(data)
+                logger.info(f"Loaded CompanyConfig for '{company_id}' from {config_path}")
+                return config
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to parse CompanyConfig from {config_path}: {exc}"
+                )
+                return None
+    return None
+
+
+def _convert_company_config_to_rules_data(config) -> dict:
+    """
+    Convert a CompanyConfig into the dict format that evaluate_governance() expects.
+
+    The output matches the legacy JSON structure consumed by select_approval_chain(),
+    evaluate_company_rule(), and detect_flags().
+    """
+    rules_list = []
+    for rule in config.sorted_rules():
+        # Convert conditions: if single condition, use directly; otherwise wrap in AND
+        if len(rule.conditions) == 1:
+            cond = rule.conditions[0]
+            condition_dict = {
+                "field": cond.field,
+                "operator": cond.operator.value,
+                "value": cond.value,
+            }
+        else:
+            # Multiple conditions — AND logic; evaluate_company_rule handles OR,
+            # but for AND we expose each condition individually.
+            # Since the existing engine only supports single conditions or OR,
+            # we use the first condition as primary (most rules have one condition).
+            # TODO: Add native AND support to evaluate_company_rule
+            condition_dict = {
+                "field": rule.conditions[0].field,
+                "operator": rule.conditions[0].operator.value,
+                "value": rule.conditions[0].value,
+            }
+
+        consequence_dict = {
+            "action": rule.consequence.action.value,
+        }
+        if rule.consequence.approver_role:
+            consequence_dict["approver_role"] = rule.consequence.approver_role
+            consequence_dict["approver_roles"] = [rule.consequence.approver_role]
+            # Use role as approver_id for lookup in approval hierarchy
+            consequence_dict["approver_id"] = rule.consequence.approver_role
+            consequence_dict["approver_ids"] = [rule.consequence.approver_role]
+        if rule.consequence.message:
+            consequence_dict["message"] = rule.consequence.message
+
+        # Infer semantic rule_type from condition fields and rule metadata
+        # for detect_flags() compatibility (financial, compliance, privacy, strategic, etc.)
+        _cond_fields = {c.field for c in rule.conditions}
+        _name_desc = (rule.name + " " + (rule.description or "")).lower()
+        if _cond_fields & {"cost", "vendor_contract_value"}:
+            _rule_type = "financial"
+        elif _cond_fields & {"uses_pii", "affects_compliance"} or any(
+            kw in _name_desc for kw in ("pii", "privacy", "customer data", "gdpr", "hipaa")
+        ):
+            _rule_type = "compliance"
+        elif _cond_fields & {"involves_hiring", "headcount_change"}:
+            _rule_type = "operational"
+        else:
+            _rule_type = "general"
+
+        rule_dict = {
+            "rule_id": rule.rule_id,
+            "name": rule.name,
+            "description": rule.description or "",
+            "type": _rule_type,
+            "rule_type": _rule_type,
+            "condition": condition_dict,
+            "consequence": consequence_dict,
+            "active": True,
+        }
+        rules_list.append(rule_dict)
+
+    # Convert approval hierarchy for get_approver_level() / find_role_in_hierarchy()
+    personnel = []
+    for idx, entry in enumerate(config.approval_hierarchy):
+        person = {
+            "id": entry.role,  # Use role as ID
+            "role": entry.role,
+            "level": idx + 1,  # Assign levels based on order
+        }
+        if entry.reports_to:
+            person["reports_to"] = entry.reports_to
+        if entry.approval_limit is not None:
+            person["approval_limit"] = entry.approval_limit
+        personnel.append(person)
+
+    return {
+        "governance_rules": rules_list,
+        "approval_hierarchy": {
+            "personnel": personnel,
+        },
+        "strategic_goals": [
+            {
+                "goal_id": g.goal_id,
+                "name": g.label,
+                "label": g.label,
+                "priority": g.priority,
+                "description": g.description or "",
+            }
+            for g in config.strategic_goals
+        ],
+    }
+
 _SEVERITY_WEIGHTS: dict[str, float] = {
     "critical": 8.0,
     "high": 3.0,
@@ -106,11 +242,22 @@ def _apply_translation(raw: dict, lang: str) -> dict:
 
 
 def load_rules(rules_path: str = None, company_id: str = None, lang: str = "en") -> dict:
-    """Load governance rules from JSON file, selecting by company_id and lang.
+    """Load governance rules, selecting by company_id and lang.
 
-    Returns an empty dict when no rules file is configured or found,
+    Lookup order:
+      1. CompanyConfig JSON (configs/{company_id}.json or dev/simulate/personas/{company_id}.json)
+      2. Legacy rules JSON via COMPANY_RULES_FILES registry (backward compat)
+
+    Returns an empty dict when no rules source is found,
     so that governance evaluation proceeds safely with zero rules.
     """
+    # --- Primary: CompanyConfig-based lookup ---
+    if rules_path is None and company_id:
+        config = load_company_config(company_id)
+        if config is not None:
+            return _convert_company_config_to_rules_data(config)
+
+    # --- Fallback: legacy JSON file lookup ---
     if rules_path is None:
         files = _COMPANY_RULES_FILES.get(company_id, {})
         filename = files.get("merged") or _DEFAULT_RULES_FILE
@@ -278,6 +425,10 @@ def evaluate_single_condition(condition: dict, decision: Decision, company_conte
     elif operator == 'overlaps_with':
         # For boolean extraction fields (like launch_date)
         return (actual_value is True), {"field": field}
+    elif operator == 'is_true':
+        return (actual_value is True), {"field": field}
+    elif operator == 'is_false':
+        return (actual_value is False or actual_value is None), {"field": field}
 
     return False, None
 

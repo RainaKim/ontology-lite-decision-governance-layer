@@ -8,7 +8,7 @@ Contract:
 - LLM outputs ONLY these fields — no scores, no weights, no thresholds.
 - Downstream deterministic logic (risk_scoring_service) uses this as a
   fallback input when structural/graph data is absent.
-- All rationale text is Korean (rationale_ko).
+- All rationale text is English.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ class GoalImpact(BaseModel):
     goal_id: str = Field(description="Company strategic goal identifier, e.g. G1")
     direction: Literal["support", "conflict", "neutral"]
     magnitude: Literal["low", "med", "high"]
-    rationale_ko: str = Field(
-        description="One Korean sentence explaining why this direction was chosen."
+    rationale: str = Field(
+        description="One sentence explaining why this direction was chosen."
     )
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
@@ -77,7 +77,7 @@ class RiskSemantics(BaseModel):
     Shape is intentionally stable: callers check presence of each sub-field
     before use; missing fields mean 'no LLM data available'.
 
-    All rationale text MUST be in Korean.
+    All rationale text MUST be in English.
     """
 
     goal_impacts: list[GoalImpact] = Field(

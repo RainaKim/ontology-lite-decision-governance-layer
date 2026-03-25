@@ -41,13 +41,13 @@ _BOARD_THRESHOLD = 1_000_000_000
 # ── Agent name → department derivation ───────────────────────────────────────
 
 _AGENT_SUFFIXES = [
-    "ai agent", "agent", "에이전트", "ai",
+    "ai agent", "agent", "ai",
 ]
 
 def _derive_department_from_agent(agent_name: str) -> Optional[str]:
     """
     Strip common agent-name suffixes to get a department hint.
-    '마케팅 에이전트' → '마케팅'  |  'Finance AI Agent' → 'Finance'
+    'Finance AI Agent' → 'Finance'
     Returns None if the result is empty or the name is the generic default.
     """
     if not agent_name:
@@ -64,7 +64,7 @@ def _derive_department_from_agent(agent_name: str) -> Optional[str]:
 # ── Role string normalisation ─────────────────────────────────────────────────
 
 def _strip_parens(text: str) -> str:
-    """Remove parenthetical suffixes: '최고재무책임자 (CFO)' → '최고재무책임자'."""
+    """Remove parenthetical suffixes: 'Chief Financial Officer (CFO)' → 'Chief Financial Officer'."""
     return re.sub(r"\s*\(.*?\)", "", text).strip()
 
 
@@ -80,8 +80,8 @@ def _build_role_alias_table(approval_sources: list[dict]) -> dict[str, str]:
 
     For each entry we register:
       - the roleKey itself (e.g. "cfo")
-      - the full roleNameKo (e.g. "최고재무책임자 (cfo)")
-      - roleNameKo with parens stripped (e.g. "최고재무책임자")
+      - the full roleNameKo (if present in data)
+      - roleNameKo with parens stripped
       - the full roleNameEn (e.g. "chief financial officer (cfo)")
       - roleNameEn with parens stripped (e.g. "chief financial officer")
 
@@ -208,7 +208,7 @@ def _resolve_role_key(role_input: str, role_alias_table: dict[str, str]) -> Opti
     if key:
         return key
 
-    # 2. Substring scan — handles inputs like "CFO (최고재무책임자)" where the
+    # 2. Substring scan — handles inputs like "CFO (Chief Financial Officer)" where the
     #    paren content itself contains a registered alias key
     normalized_input = _normalize_str(role_input)
     for alias, role_key in role_alias_table.items():
@@ -452,7 +452,7 @@ def _build_budget_runtime_meta(entry: dict, cost: Optional[float]) -> dict:
 
         if balance_val is not None:
             ok = cost <= balance_val
-            meta["verdict"] = "잔액 범위 내" if ok else "잔액 초과"
+            meta["verdict"] = "within available balance" if ok else "exceeds available balance"
             meta["verdictEn"] = "within available balance" if ok else "exceeds available balance"
 
     return meta
@@ -661,13 +661,13 @@ def assemble_financial_evidence(
         return []
 
     remaining_budget = decision_payload.get("remaining_budget")
-    # department (KO): explicit extraction > agent_name(KO) derivation > "해당" fallback
+    # department: explicit extraction > agent_name derivation > "relevant" fallback
     department = (
         decision_payload.get("department")
         or _derive_department_from_agent(decision_payload.get("agent_name", ""))
-        or "해당"
+        or "relevant"
     )
-    # department (EN): explicit extraction > agent_name_en derivation > "relevant" fallback
+    # department (EN fallback): explicit extraction > agent_name_en derivation > "relevant" fallback
     department_en = (
         decision_payload.get("department")
         or _derive_department_from_agent(decision_payload.get("agent_name_en", ""))
@@ -676,17 +676,15 @@ def assemble_financial_evidence(
 
     # Compute verdict deterministically when remaining_budget is known
     if remaining_budget is not None:
-        verdict_ko = "예산 초과" if cost > remaining_budget else "예산 내 처리 가능"
-        verdict_en = "over budget" if cost > remaining_budget else "within budget"
+        verdict = "over budget" if cost > remaining_budget else "within budget"
     else:
-        verdict_ko = None
-        verdict_en = None
+        verdict = None
 
     dept_budget_meta: dict = {"cost": cost, "department": department, "departmentEn": department_en}
     if remaining_budget is not None:
         dept_budget_meta["remaining_budget"] = remaining_budget
-        dept_budget_meta["verdict"] = verdict_ko
-        dept_budget_meta["verdictEn"] = verdict_en
+        dept_budget_meta["verdict"] = verdict
+        dept_budget_meta["verdictEn"] = verdict
 
     result = []
 
@@ -710,10 +708,10 @@ def assemble_financial_evidence(
         if relevant_tier:
             authority_meta = {
                 "cost": cost,
-                "approver_role": relevant_tier["roleNameKo"],
-                "approverRoleEn": relevant_tier["roleNameEn"],
+                "approver_role": relevant_tier.get("roleNameEn") or relevant_tier.get("roleNameKo", ""),
+                "approverRoleEn": relevant_tier.get("roleNameEn", ""),
                 "max_budget_authority": relevant_tier["limit"],
-                "verdict": "초과",
+                "verdict": "exceeds",
                 "verdictEn": "exceeds",
             }
         else:
@@ -738,17 +736,15 @@ def assemble_financial_evidence(
     if opex_baseline and cost_reduction_target_pct is not None:
         reduction_target = opex_baseline * (cost_reduction_target_pct / 100)
         if cost > reduction_target:
-            opex_verdict_ko = "G3 절감 목표 초과 우려"
-            opex_verdict_en = "a concern for the G3 cost reduction target"
+            opex_verdict = "a concern for the G3 cost reduction target"
         else:
-            opex_verdict_ko = "G3 절감 목표 범위 내"
-            opex_verdict_en = "within the G3 cost reduction target"
+            opex_verdict = "within the G3 cost reduction target"
         opex_meta = {
             "cost": cost,
             "opex_baseline": opex_baseline,
             "cost_reduction_target_pct": cost_reduction_target_pct,
-            "verdict": opex_verdict_ko,
-            "verdictEn": opex_verdict_en,
+            "verdict": opex_verdict,
+            "verdictEn": opex_verdict,
         }
     else:
         opex_meta = {"cost": cost}
