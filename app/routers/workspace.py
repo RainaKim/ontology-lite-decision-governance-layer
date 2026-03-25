@@ -38,8 +38,7 @@ class CreateWorkspaceDecisionRequest(BaseModel):
     agent_id: str = Field(..., description="Agent UUID — must exist in agents table")
     impact_label: Optional[str] = Field(default=None, max_length=50)
     impact_label_en: Optional[str] = Field(default=None, max_length=50)
-    lang: str = Field(default="ko", description="'ko' or 'en' — passed to governance pipeline")
-    use_nova_graph: bool = Field(default=True)
+    lang: str = Field(default="en", description="Language passed to governance pipeline")
 
 
 class CreateWorkspaceDecisionResponse(BaseModel):
@@ -277,8 +276,6 @@ def create_workspace_decision(
         decision_id=pipeline_record.decision_id,
         extractor=extractor,
         graph_repo=graph_repo,
-        use_nova_governance=False,
-        use_nova_graph=request.use_nova_graph,
     )
 
     return CreateWorkspaceDecisionResponse(
@@ -354,7 +351,10 @@ def list_decisions(
 
     def _resolve(d: "Decision") -> WorkspaceDecisionItem:
         # Prefer live agent data via FK; fall back to flat columns for legacy rows
-        a = d.agent
+        try:
+            a = d.agent
+        except Exception:
+            a = None
         a_name = a.name if a else d.agent_name
         a_name_en = a.name_en if a else d.agent_name_en
         a_dept = a.department if a else d.department

@@ -5,10 +5,10 @@ Execution order (strict):
   1. LLM extraction           (extractor.extract)
   2. Governance evaluation    (governance.evaluate_governance)
   3. Graph upsert + retrieval (graph_repository)
-  2d. Semantics inference     (risk_evidence_llm — OPTIONAL, non-fatal)
+  2d. Semantics inference     (risk_evidence_llm — OPTIONAL, non-fatal, currently stub)
   2c. Risk Scoring            (risk_scoring_service — non-fatal, consumes semantics if available)
-  4. Nova Reasoning           (decision_pipeline — MANDATORY, graceful on API error)
-  5. Decision Pack            (decision_pack.build_decision_pack)
+  3. Deterministic reasoning stub (Nova removed — LangChain replacement pending)
+  4. Decision Pack            (decision_pack.build_decision_pack)
 
 Updates DecisionRecord at each step so the polling endpoint reflects progress.
 Never raises — stores error and marks record failed.
@@ -28,8 +28,6 @@ async def run_pipeline(
     decision_id: str,
     extractor,
     graph_repo,
-    use_nova_governance: bool = False,
-    use_nova_graph: bool = False,
 ) -> None:
     """
     Full async pipeline. Designed to run as a BackgroundTask.
@@ -38,8 +36,6 @@ async def run_pipeline(
         decision_id:      ID of the DecisionRecord to process
         extractor:        DecisionExtractor instance from app globals
         graph_repo:       InMemoryGraphRepository instance from app globals
-        use_nova_governance: Use Nova for governance evaluation (default: False)
-        use_nova_graph:     Use Nova for graph reasoning (default: False)
     """
     record = decision_store.get(decision_id)
     if not record:
@@ -124,7 +120,6 @@ async def run_pipeline(
         gov_result = evaluate_governance(
             decision=decision_obj,
             company_context=company_data or {},
-            use_nova=False,  # Deterministic governance for pipeline
             company_id=record.company_id,
             lang=record.lang,
         )
@@ -158,12 +153,6 @@ async def run_pipeline(
                 "edges": [e.model_dump() for e in decision_graph.edges],
                 "metadata": decision_graph.metadata or {},
             }
-
-            # Enrich Korean node labels with English translations (non-fatal)
-            try:
-                await loop.run_in_executor(None, lambda: _enrich_node_labels_en(graph_payload["nodes"]))
-            except Exception as _lbl_e:
-                logger.warning(f"[{decision_id}] Node label enrichment failed (non-fatal): {_lbl_e}")
 
             decision_store.store_results(decision_id, graph_payload=graph_payload)
             logger.info(f"[{decision_id}] Graph: stored graph_payload successfully")
@@ -253,93 +242,85 @@ async def run_pipeline(
                 exc_info=True,
             )
 
-        # ── Step 3: Nova Reasoning ───────────────────────────────────────────
-        # Set to 3 AFTER reasoning stores results → SSE emits "reasoning_complete"
-        logger.info(f"[{decision_id}] Step 3: Nova Reasoning (use_nova_graph={use_nova_graph})")
-
-        reasoning = await _run_nova_reasoning(
-            decision_id=decision_id,
-            decision_obj=decision_obj,
-            gov_dict=gov_dict,
-            company_data=company_data,
-            graph_repo=graph_repo,
-            use_nova_graph=use_nova_graph,
-            lang=record.lang,
-        )
+        # ── Step 3: Reasoning (deterministic stub — Nova removed) ────────────
+        # Nova has been removed. LangChain-based replacement is pending.
+        # Returns a deterministic stub so the pipeline continues without error.
+        logger.info(f"[{decision_id}] Step 3: Reasoning (Nova removed — deterministic stub)")
+        reasoning = {
+            "source": "deterministic",
+            "graph_reasoning": None,
+        }
         decision_store.store_results(decision_id, reasoning=reasoning)
         decision_store.update_status(decision_id, "processing", current_step=3)
-        logger.info(
-            f"[{decision_id}] Step 3 complete → reasoning_complete "
-            f"(source={reasoning.get('source')}, "
-            f"nova_available={reasoning.get('nova_available')}, "
-            f"graph_reasoning_keys={list((reasoning.get('graph_reasoning') or {}).keys())})"
+        logger.info(f"[{decision_id}] Step 3 complete → reasoning_complete (deterministic stub)")
+
+        # ── Steps 4b + 4c: Simulation & External Signals (parallel) ────────
+        # Both steps are independent and non-fatal. Run them concurrently.
+        logger.info(f"[{decision_id}] Steps 4b+4c: Simulation + External Signals (parallel)")
+
+        async def _run_simulation():
+            try:
+                from app.services.risk_response_simulation_service import (
+                    RiskResponseSimulationService,
+                )
+                _sim_service = RiskResponseSimulationService()
+                _sim_result = _sim_service.simulate(
+                    decision_payload=decision_obj.model_dump(),
+                    governance_result=gov_dict,
+                    risk_scoring=record.risk_scoring or {},
+                    company_payload=company_data or {},
+                    company_id=record.company_id,
+                    lang=record.lang,
+                )
+                decision_store.store_results(decision_id, simulation=_sim_result)
+                n_scenarios = len(_sim_result.get("scenarios", []))
+                logger.info(
+                    f"[{decision_id}] Simulation complete — {n_scenarios} scenario(s) generated"
+                )
+            except Exception as _sim_e:
+                logger.error(
+                    f"[{decision_id}] Simulation failed (non-fatal): {_sim_e}",
+                    exc_info=True,
+                )
+
+        async def _run_external_signals():
+            try:
+                from app.services.external_signal_service import build_external_signals
+
+                result = build_external_signals(
+                    company_id=record.company_id,
+                    decision=decision_obj.model_dump(),
+                    governance_result=gov_dict,
+                    risk_scoring=record.risk_scoring,
+                    lang=record.lang,
+                )
+                if result is not None:
+                    decision_store.store_results(
+                        decision_id, external_signals=result.model_dump()
+                    )
+                    logger.info(
+                        f"[{decision_id}] External signals assembled — "
+                        f"market={len(result.marketSignals)}, "
+                        f"regulatory={len(result.regulatorySignals)}, "
+                        f"operational={len(result.operationalSignals)}"
+                    )
+                else:
+                    logger.info(
+                        f"[{decision_id}] External signals: no payload "
+                        f"(no profile configured or sources unavailable)"
+                    )
+                return result
+            except Exception as _ext_e:
+                logger.error(
+                    f"[{decision_id}] External signal retrieval failed (non-fatal): {_ext_e}",
+                    exc_info=True,
+                )
+                return None
+
+        _, _ext_payload = await asyncio.gather(
+            _run_simulation(),
+            _run_external_signals(),
         )
-
-        # ── Step 4b: Risk Response Simulation ────────────────────────────────
-        # Non-fatal: generates counterfactual remediation scenarios by re-running
-        # governance + risk scoring on patched decision payloads.
-        logger.info(f"[{decision_id}] Step 4b: Risk Response Simulation")
-        try:
-            from app.services.risk_response_simulation_service import (
-                RiskResponseSimulationService,
-            )
-            _sim_service = RiskResponseSimulationService()
-            _sim_result = _sim_service.simulate(
-                decision_payload=decision_obj.model_dump(),
-                governance_result=gov_dict,
-                risk_scoring=record.risk_scoring or {},
-                company_payload=company_data or {},
-                company_id=record.company_id,
-                lang=record.lang,
-            )
-            decision_store.store_results(decision_id, simulation=_sim_result)
-            n_scenarios = len(_sim_result.get("scenarios", []))
-            logger.info(
-                f"[{decision_id}] Simulation complete — {n_scenarios} scenario(s) generated"
-            )
-        except Exception as _sim_e:
-            logger.error(
-                f"[{decision_id}] Simulation failed (non-fatal): {_sim_e}",
-                exc_info=True,
-            )
-
-        # ── Step 4c: External Signal Retrieval ───────────────────────────────
-        # Non-fatal: retrieves and summarizes external market / regulatory /
-        # operational signals that provide supporting context for this decision.
-        # External signals are ADDITIVE — they never modify governance outcomes.
-        # Runs before Decision Pack so signals can be included in the pack report.
-        logger.info(f"[{decision_id}] Step 4c: External Signal Retrieval")
-        _ext_payload = None
-        try:
-            from app.services.external_signal_service import build_external_signals
-
-            _ext_payload = build_external_signals(
-                company_id=record.company_id,
-                decision=decision_obj.model_dump(),
-                governance_result=gov_dict,
-                risk_scoring=record.risk_scoring,
-                lang=record.lang,
-            )
-            if _ext_payload is not None:
-                decision_store.store_results(
-                    decision_id, external_signals=_ext_payload.model_dump()
-                )
-                logger.info(
-                    f"[{decision_id}] External signals assembled — "
-                    f"market={len(_ext_payload.marketSignals)}, "
-                    f"regulatory={len(_ext_payload.regulatorySignals)}, "
-                    f"operational={len(_ext_payload.operationalSignals)}"
-                )
-            else:
-                logger.info(
-                    f"[{decision_id}] External signals: no payload "
-                    f"(no profile configured or sources unavailable)"
-                )
-        except Exception as _ext_e:
-            logger.error(
-                f"[{decision_id}] External signal retrieval failed (non-fatal): {_ext_e}",
-                exc_info=True,
-            )
 
         # ── Step 4: Decision Pack ────────────────────────────────────────────
         # Set status=complete after pack is built → SSE emits "complete" event
@@ -347,8 +328,8 @@ async def run_pipeline(
 
         from app.decision_pack import build_decision_pack
 
-        # Pass graph reasoning insights to decision pack so it can use
-        # Nova-generated next actions and detect strategic misalignments.
+        # Pass graph reasoning insights to decision pack so it can
+        # detect strategic misalignments.
         _graph_insights = (reasoning or {}).get("graph_reasoning")
 
         decision_pack = build_decision_pack(
@@ -421,102 +402,3 @@ async def run_pipeline(
         decision_store.store_error(decision_id, str(e))
 
 
-async def _run_nova_reasoning(
-    decision_id: str,
-    decision_obj,
-    gov_dict: dict,
-    company_data: Optional[dict],
-    graph_repo=None,
-    use_nova_graph: bool = False,
-    lang: str = "ko",
-) -> dict:
-    """
-    Run graph reasoning for step 4.
-
-    When use_nova_graph=True: calls analyze_decision_graph_with_nova against graph_repo.
-    When use_nova_graph=False: returns deterministic stub immediately — Nova is NOT called.
-    """
-    if not use_nova_graph:
-        logger.info(f"[{decision_id}] Nova reasoning skipped (use_nova_graph=False)")
-        return {
-            "source": "deterministic",
-            "graph_reasoning": None,
-            "nova_available": False,
-        }
-
-    try:
-        from app.graph_reasoning import analyze_decision_graph_with_nova, format_graph_insights_for_pack
-
-        graph_insights = await analyze_decision_graph_with_nova(
-            decision_id=decision_id,
-            governance=gov_dict,
-            repository=graph_repo,
-            decision_data=decision_obj.model_dump(),
-            company_data=company_data or {},
-            use_nova=True,
-            lang=lang,
-        )
-        formatted = format_graph_insights_for_pack(graph_insights)
-
-        return {
-            "source": "nova",
-            "graph_reasoning": formatted,
-            "nova_available": True,
-        }
-
-    except Exception as e:
-        logger.warning(
-            f"[{decision_id}] Nova reasoning failed: {e} — returning deterministic fallback"
-        )
-        return {
-            "source": "deterministic_fallback",
-            "graph_reasoning": None,
-            "nova_available": False,
-        }
-
-
-def _enrich_node_labels_en(nodes: list[dict]) -> None:
-    """
-    Batch-translate Korean node labels to English via Nova.
-    Mutates each node dict in-place by setting properties["label_en"].
-    Skips nodes that already have label_en or whose label is already ASCII.
-    """
-    import json as _json
-    from app.bedrock_client import BedrockClient
-
-    to_translate = [
-        {"id": n["id"], "type": n.get("type", ""), "label": n.get("label", "")}
-        for n in nodes
-        if n.get("label") and not n.get("label", "").isascii()
-        and not (n.get("properties") or {}).get("label_en")
-    ]
-    if not to_translate:
-        return
-
-    client = BedrockClient()
-    user_msg = (
-        "Translate each Korean governance graph node label to concise English (≤60 chars).\n"
-        "Return ONLY a JSON object: {\"<id>\": \"<English label>\", ...}\n\n"
-        + _json.dumps(to_translate, ensure_ascii=False)
-    )
-    system_prompt = (
-        "You are a bilingual translator for a corporate governance system. "
-        "Translate Korean labels to professional English. "
-        "Keep proper nouns and identifiers unchanged. Return only the JSON object."
-    )
-    raw = client.invoke(user_msg, system_prompt=system_prompt, max_tokens=512)
-    translations: dict = _json.loads(raw)
-    if not isinstance(translations, dict):
-        return
-
-    id_to_node = {n["id"]: n for n in nodes}
-    for node_id, en_label in translations.items():
-        if not isinstance(en_label, str) or not en_label.strip():
-            continue
-        node = id_to_node.get(node_id)
-        if node is None:
-            continue
-        if node.get("properties") is None:
-            node["properties"] = {}
-        node["properties"]["label_en"] = en_label.strip()
-    logger.info(f"[graph_label] Enriched {len(translations)} node label(s) with English")

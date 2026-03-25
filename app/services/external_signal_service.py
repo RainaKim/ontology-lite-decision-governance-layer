@@ -5,10 +5,7 @@ Pipeline:
   1. Load company external profile (company-specific signal categories + themes)
   2. Infer retrieval context from decision fields + governance findings
   3. Attempt live fetch (best-effort; gracefully returns [] in demo environments)
-  4. Load curated sources for Nova grounding if live fetch is sparse (< 2 results)
-  5. Call Nova (generate_external_signals) with structured context dicts
-  6. If Nova fails/unavailable → curated fallback via get_fallback_signals()
-  7. Return payload (None on any failure — always non-fatal)
+  4. Return curated fallback signals via get_fallback_signals()
 
 Design contract:
   - External signals NEVER modify internal governance decisions.
@@ -31,7 +28,6 @@ logger = logging.getLogger(__name__)
 _PROFILES_DIR = Path(__file__).parent.parent / "demo_fixtures" / "external_profiles"
 _SOURCES_DIR = Path(__file__).parent.parent / "demo_fixtures" / "external_sources"
 
-# Max curated fallback sources to pass to Nova (keeps prompt bounded)
 _MAX_SOURCES = 4
 
 # Company ID → profile file name mapping (handles cases where file name differs from ID)
@@ -103,7 +99,7 @@ def build_external_signals(
     decision: dict,
     governance_result: dict,
     risk_scoring: Optional[dict],
-    lang: str = "ko",
+    lang: str = "en",
     live_provider: Optional[LiveFetchProvider] = None,
 ) -> Optional[ExternalSignalsPayload]:
     """
@@ -132,24 +128,12 @@ def build_external_signals(
             decision, governance_result, risk_scoring, company_id
         )
 
-        # Step 3: Live fetch (best-effort)
+        # Step 3: Live fetch hook (best-effort stub — currently always returns [])
         provider = live_provider or _DEFAULT_LIVE_PROVIDER
         live_query = _build_live_query(profile, query_context)
-        live_sources = retrieve_live_sources(provider, live_query)
+        retrieve_live_sources(provider, live_query)
 
-        # Step 4: Load curated fallback if live result is insufficient
-        if len(live_sources) < 2:
-            logger.info(
-                f"[external_signals][{company_id}] "
-                f"Live fetch returned {len(live_sources)} source(s) — "
-                f"loading curated fallback"
-            )
-            fallback = load_fallback_sources(company_id, query_context)
-            sources = live_sources + fallback
-        else:
-            sources = live_sources
-
-        # Build structured context dicts for Nova
+        # Build structured context dicts for curated fallback
         decision_type = _infer_decision_type(decision)
         decision_context = {
             "decision_text": decision.get("decision_statement", ""),
@@ -158,33 +142,11 @@ def build_external_signals(
             "strategic_impact": _infer_strategic_impact(governance_result),
             "risk_band": (risk_scoring or {}).get("aggregate", {}).get("band", "UNKNOWN"),
         }
-        internal_entities = {
-            "cost": decision.get("cost"),
-            "involves_hiring": decision.get("involves_hiring"),
-            "uses_pii": decision.get("uses_pii"),
-            "new_product_development": decision.get("new_product_development"),
-            "headcount_change": decision.get("headcount_change"),
-            "triggered_flags": (governance_result or {}).get("flags", []),
-        }
         triggered_rules = (governance_result or {}).get("triggered_rules", [])
 
-        # Step 5: Nova generation
-        from app.services.nova_external_signal_summarizer import generate_external_signals
-
-        payload = generate_external_signals(
-            company_profile=profile,
-            decision_context=decision_context,
-            triggered_rules=triggered_rules,
-            internal_entities=internal_entities,
-            available_sources=sources or [],
-        )
-
-        if payload is not None:
-            return payload
-
-        # Step 6: Curated fallback when Nova fails or is unavailable
+        # Step 4: Curated fallback
         logger.info(
-            f"[external_signals][{company_id}] Nova unavailable — using curated fallback"
+            f"[external_signals][{company_id}] Using curated fallback"
         )
         from app.providers.curated_external_signal_provider import get_fallback_signals
 

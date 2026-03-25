@@ -5,7 +5,7 @@ End-to-end flow:
 1. Decision input
 2. Governance evaluation (deterministic)
 3. Graph storage
-4. Graph reasoning with Nova (optional)
+4. Graph reasoning (deterministic)
 5. Decision Pack generation
 """
 
@@ -14,17 +14,14 @@ from typing import Optional
 from app.schemas import Decision
 from app.governance import evaluate_governance
 from app.graph_repository import BaseGraphRepository, InMemoryGraphRepository
-from app.graph_reasoning import analyze_decision_graph_with_nova, format_graph_insights_for_pack
+from app.graph_reasoning import analyze_decision_graph, format_graph_insights_for_pack
 from app.decision_pack import build_decision_pack
-
 
 async def process_decision_with_graph_reasoning(
     decision: Decision,
     decision_id: Optional[str] = None,
     repository: Optional[BaseGraphRepository] = None,
     company_context: dict = None,
-    use_nova_governance: bool = False,
-    use_nova_graph: bool = True,
     company_id: Optional[str] = None
 ) -> dict:
     """
@@ -35,8 +32,6 @@ async def process_decision_with_graph_reasoning(
         decision_id: Optional decision ID (auto-generated if not provided)
         repository: Graph repository (InMemory if not provided)
         company_context: Company context for governance
-        use_nova_governance: Use Nova for approval chain optimization
-        use_nova_graph: Use Nova for graph contradiction analysis
         company_id: Optional company ID for governance
 
     Returns:
@@ -52,12 +47,11 @@ async def process_decision_with_graph_reasoning(
         import uuid
         decision_id = f"decision_{uuid.uuid4().hex[:8]}"
 
-    # Step 1: Evaluate governance (deterministic + optional Nova for conflicts)
-    print(f"[1/5] Evaluating governance (nova={use_nova_governance})...")
+    # Step 1: Evaluate governance (deterministic)
+    print(f"[1/5] Evaluating governance (deterministic)...")
     governance_result = evaluate_governance(
         decision,
         company_context=company_context,
-        use_nova=use_nova_governance,
         company_id=company_id
     )
     governance_dict = governance_result.to_dict()
@@ -75,15 +69,14 @@ async def process_decision_with_graph_reasoning(
     )
     print(f"  ✓ Graph stored: {len(decision_graph.nodes)} nodes, {len(decision_graph.edges)} edges")
 
-    # Step 3: Analyze graph with Nova (find contradictions, patterns, insights)
-    print(f"[3/5] Analyzing graph for contradictions (nova={use_nova_graph})...")
-    graph_insights = await analyze_decision_graph_with_nova(
+    # Step 3: Analyze graph for contradictions (deterministic)
+    print(f"[3/5] Analyzing graph for contradictions (deterministic)...")
+    graph_insights = await analyze_decision_graph(
         decision_id=decision_id,
         governance=governance_dict,
         repository=repository,
         decision_data=decision_dict,
         company_data=company_context,
-        use_nova=use_nova_graph
     )
     formatted_insights = format_graph_insights_for_pack(graph_insights)
 
@@ -132,8 +125,6 @@ async def demo_pipeline():
 
     result = await process_decision_with_graph_reasoning(
         decision=decision,
-        use_nova_governance=False,  # Deterministic governance
-        use_nova_graph=False  # Start with deterministic graph analysis
     )
 
     print("\n" + "="*80)

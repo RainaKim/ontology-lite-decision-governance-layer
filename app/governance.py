@@ -1,10 +1,9 @@
 """
 Decision Governance Layer - Rule Engine
 
-Hybrid governance evaluation:
+Governance evaluation:
 - Rule matching (deterministic Python)
-- Conflict resolution (Nova reasoning)
-- Approval optimization (Nova reasoning)
+- Approval chain derivation (deterministic)
 
 Extension pattern — pure function extraction:
   When adding a new transformation, write it as a pure function (no I/O, no os.environ),
@@ -19,7 +18,6 @@ from typing import Optional
 from enum import Enum
 
 from app.schemas import Decision, ApprovalChainStep, ApprovalLevel
-from app.nova_reasoner import NovaReasoner
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +76,7 @@ class GovernanceResult:
 
 from app.config.company_registry import COMPANY_RULES_FILES as _COMPANY_RULES_FILES
 
-_DEFAULT_RULES_FILE = "mock_company.json"
+_DEFAULT_RULES_FILE = None  # No default rules file — returns empty dict when unconfigured
 
 _SEVERITY_WEIGHTS: dict[str, float] = {
     "critical": 8.0,
@@ -96,24 +94,34 @@ _STRATEGIC_IMPACT_BONUS: dict[str, float] = {
 
 
 def _apply_translation(raw: dict, lang: str) -> dict:
-    """Apply language overlay from a rules dict's 'translations' section.
+    """Apply English language overlay from a rules dict's 'translations' section.
     Pure function — no I/O. Returns a merged dict with the translated fields."""
-    lang_key = lang if lang in ("ko", "en") else "ko"
     if "translations" not in raw:
         return raw
-    translation = raw.get("translations", {}).get(lang_key, {})
+    translation = raw.get("translations", {}).get("en", {})
     data = {**raw, **translation}
     if "rules" in translation:
         data["governance_rules"] = translation["rules"]
     return data
 
 
-def load_rules(rules_path: str = None, company_id: str = None, lang: str = "ko") -> dict:
-    """Load governance rules from JSON file, selecting by company_id and lang."""
+def load_rules(rules_path: str = None, company_id: str = None, lang: str = "en") -> dict:
+    """Load governance rules from JSON file, selecting by company_id and lang.
+
+    Returns an empty dict when no rules file is configured or found,
+    so that governance evaluation proceeds safely with zero rules.
+    """
     if rules_path is None:
         files = _COMPANY_RULES_FILES.get(company_id, {})
         filename = files.get("merged") or _DEFAULT_RULES_FILE
+        if filename is None:
+            logger.info(f"No rules file configured for company_id={company_id} — returning empty rules")
+            return {}
         rules_path = Path(__file__).parent.parent / filename
+    rules_path = Path(rules_path)
+    if not rules_path.exists():
+        logger.warning(f"Rules file not found: {rules_path} — returning empty rules")
+        return {}
     with open(rules_path, 'r') as f:
         raw = json.load(f)
     return _apply_translation(raw, lang)
@@ -127,8 +135,8 @@ def compute_risk_score(decision: Decision) -> float:
     1. Individual risks (LLM-extracted): weighted by severity
     2. Structural signals: strategic_impact and compliance flags
        These ensure the numeric score stays consistent with qualitative judgements —
-       e.g. a HIPAA violation with strategic_impact=critical should score ≥ 7 (HIGH_RISK),
-       not 3 (one extracted high-severity risk item) while the UI labels it "매우 높음".
+       e.g. a HIPAA violation with strategic_impact=critical should score >= 7 (HIGH_RISK),
+       not 3 (one extracted high-severity risk item).
 
     Structural bonus calibration:
       strategic_impact=critical  → +3.5  (serious strategic exposure)
@@ -416,7 +424,7 @@ def infer_owner_from_approval_chain(approval_chain: list, rules_data: dict) -> O
     Ownership ≠ approval. Strategy:
     1. Find the lowest-level required approver (closest to the operational work)
     2. If that approver has direct reports → the direct report is the inferred owner
-       (e.g. R1 requires CFO → 재무팀장 reports to CFO → 재무팀장 is owner)
+       (e.g. R1 requires CFO → finance team lead reports to CFO → finance team lead is owner)
     3. If no direct reports → the approver themselves is the inferred owner
        (e.g. R6 requires CISO → CISO owns security decisions directly)
 
@@ -505,7 +513,7 @@ def detect_flags(decision: Decision, company_context: dict, computed_risk_score:
     # R2 in healthcare is typed 'compliance' (not 'privacy') because it is a broad
     # regulatory-compliance rule, but its subject matter is data privacy — so we
     # check the rule description/name for privacy-relevant vocabulary.
-    _PRIVACY_KEYWORDS = {'pii', 'hipaa', 'gdpr', 'privacy', '프라이버시', '개인정보', 'phi', 'anonymi'}
+    _PRIVACY_KEYWORDS = {'pii', 'hipaa', 'gdpr', 'privacy', 'phi', 'anonymi'}
     def _is_privacy_relevant(rule: dict) -> bool:
         rt = (rule.get('rule_type') or rule.get('type') or '').lower()
         if rt == 'privacy':
@@ -542,15 +550,15 @@ def detect_flags(decision: Decision, company_context: dict, computed_risk_score:
     return list(dict.fromkeys(flags))
 
 
-def evaluate_governance(decision: Decision, company_context: dict = None, use_nova: bool = True, company_id: str = None, lang: str = "ko") -> GovernanceResult:
+def evaluate_governance(decision: Decision, company_context: dict = None, company_id: str = None, lang: str = "en") -> GovernanceResult:
     """
-    Main governance evaluation function with Nova reasoning.
+    Main governance evaluation function (deterministic).
 
     Args:
         decision: Decision object to evaluate
         company_context: Optional company-specific context (policies, thresholds, etc.)
-        use_nova: Whether to use Nova for conflict resolution (default: True)
         company_id: Which company to select rules for
+        lang: Language for rules loading
 
     Returns:
         GovernanceResult with approval_chain, flags, requires_human_review, triggered_rules
@@ -570,12 +578,6 @@ def evaluate_governance(decision: Decision, company_context: dict = None, use_no
 
     # Select approval chain based on rules
     approval_chain, triggered_rules = select_approval_chain(decision, rules_data, company_context)
-
-    # If multiple rules triggered and Nova enabled, use Nova for conflict resolution
-    if use_nova and len(triggered_rules) >= 2:
-        approval_chain = optimize_approval_chain_with_nova(
-            approval_chain, triggered_rules, decision, rules_data
-        )
 
     # Detect flags (passing triggered_rules and approval_chain for rule-based flags)
     flags = detect_flags(decision, company_context, computed_risk_score, triggered_rules, approval_chain, rules_data)
@@ -603,58 +605,6 @@ def evaluate_governance(decision: Decision, company_context: dict = None, use_no
         triggered_rules=triggered_rules,
         computed_risk_score=computed_risk_score
     )
-
-
-def optimize_approval_chain_with_nova(approval_chain: list, triggered_rules: list,
-                                     decision: Decision, company_data: dict) -> list:
-    """
-    Use Nova to optimize approval chain when multiple rules trigger.
-
-    Resolves conflicts and determines optimal approval sequence.
-    """
-    # Prepare decision data
-    decision_data = {
-        'decision_statement': decision.decision_statement,
-        'goals': [{'description': g.description} for g in decision.goals],
-        'confidence': decision.confidence,
-        'risk_score': decision.risk_score
-    }
-
-    # Initialize Nova reasoner
-    nova_reasoner = NovaReasoner(model="o4-mini")
-
-    # Call Nova for governance reasoning
-    nova_result = nova_reasoner.reason_about_governance_conflicts(
-        triggered_rules, decision_data, company_data
-    )
-
-    # If Nova provided optimized chain, use it
-    optimized = nova_result.get('optimized_approval_chain', [])
-    if optimized:
-        # Convert Nova format to ApprovalChainStep
-        new_chain = []
-        for step in optimized:
-            # Map level number to ApprovalLevel enum
-            level_map = {
-                1: ApprovalLevel.TEAM_LEAD,
-                2: ApprovalLevel.DEPARTMENT_HEAD,
-                3: ApprovalLevel.VP,
-                4: ApprovalLevel.C_LEVEL,
-                5: ApprovalLevel.BOARD
-            }
-            approval_level = level_map.get(step.get('level', 1), ApprovalLevel.TEAM_LEAD)
-
-            new_chain.append(ApprovalChainStep(
-                level=approval_level,
-                role=step.get('approver_role'),
-                required=True,
-                rationale=step.get('rationale')
-            ))
-
-        return new_chain
-
-    # Fallback to original chain if Nova didn't optimize
-    return approval_chain
 
 
 def apply_governance_to_decision(decision: Decision, company_context: dict = None, company_id: str = None) -> Decision:
