@@ -7,7 +7,7 @@ Start with in-memory, evolve to Neo4j without touching service logic.
 
 from abc import ABC, abstractmethod
 from typing import Optional
-from app.graph_ontology import Node, Edge, DecisionGraph
+from app.ontology.models import Node, Edge, DecisionGraph
 
 
 class BaseGraphRepository(ABC):
@@ -231,12 +231,10 @@ class InMemoryGraphRepository(BaseGraphRepository):
         company_context: Optional[dict] = None,
     ) -> DecisionGraph:
         """Build decision subgraph from decision + governance."""
-        from app.graph_ontology import (
-            create_action_node, create_actor_node, create_risk_node,
-            create_policy_node, create_edge, EdgePredicate, NodeType, Node
-        )
+        from app.ontology.models import Node, Edge
+        from app.ontology.node_types import NodeType
+        from app.ontology.edge_predicates import EdgePredicate
         import uuid
-        import re
 
         if decision_id is None:
             decision_id = f"decision_{uuid.uuid4().hex[:8]}"
@@ -244,32 +242,40 @@ class InMemoryGraphRepository(BaseGraphRepository):
         nodes = []
         edges = []
 
-        # 1. Create Action node (the decision itself)
-        action_node = create_action_node(
-            action_id=decision_id,
-            statement=decision.get("decision_statement", ""),
-            risk_score=decision.get("risk_score"),
-            strategic_impact=decision.get("strategic_impact")
+        # 1. Create Decision node
+        decision_props: dict = {}
+        if decision.get("risk_score") is not None:
+            decision_props["risk_score"] = decision["risk_score"]
+        if decision.get("strategic_impact"):
+            decision_props["strategic_impact"] = decision["strategic_impact"]
+        action_node = Node(
+            id=decision_id,
+            type=NodeType.DECISION,
+            label=decision.get("decision_statement", ""),
+            properties=decision_props,
         )
         await self.add_node(action_node)
         nodes.append(action_node)
 
         # 2. Create Actor nodes for explicitly stated owners only.
         # If owners is empty (not stated in input), no Actor nodes are added here.
-        # Ownership inference is delegated to the Nova reasoning step (step 4),
-        # which has full access to company personnel and governance signals.
+        # Ownership inference is delegated to the reasoning step (step 4).
         for idx, owner in enumerate(decision.get("owners", [])):
             actor_id = f"{decision_id}_owner_{idx}"
-            actor_node = create_actor_node(
-                actor_id=actor_id,
-                name=owner.get("name", ""),
-                role=owner.get("role")
+            actor_props: dict = {}
+            if owner.get("role"):
+                actor_props["role"] = owner["role"]
+            actor_node = Node(
+                id=actor_id,
+                type=NodeType.ACTOR,
+                label=owner.get("name", ""),
+                properties=actor_props,
             )
             await self.add_node(actor_node)
             nodes.append(actor_node)
 
-            # Edge: Actor -[OWNS]-> Action
-            edge = create_edge(actor_id, decision_id, EdgePredicate.OWNS)
+            # Edge: Actor -[SUBMITTED_BY]-> Decision
+            edge = Edge(from_node=decision_id, to_node=actor_id, predicate=EdgePredicate.SUBMITTED_BY)
             await self.add_edge(edge)
             edges.append(edge)
 
@@ -290,80 +296,33 @@ class InMemoryGraphRepository(BaseGraphRepository):
             await self.add_node(kpi_node)
             nodes.append(kpi_node)
 
-            # Edge: Decision -[MEASURED_BY]-> KPI
-            edge = create_edge(decision_id, kpi_id, EdgePredicate.MEASURED_BY)
+            # Edge: Goal -[MEASURED_BY]-> KPI
+            edge = Edge(from_node=decision_id, to_node=kpi_id, predicate=EdgePredicate.MEASURED_BY)
             await self.add_edge(edge)
             edges.append(edge)
 
-        # 5. Extract and create Cost node from decision text or assumptions
+        # 5-7. COST/REGION/DATA_TYPE nodes removed — demoted to Decision properties.
+        # cost, region, data_type extracted from decision dict and stored on the Decision node.
         cost_amount, cost_currency = self._extract_cost_and_currency(decision)
-        if cost_amount:
-            cost_id = f"{decision_id}_cost"
-            cost_label = f"{cost_amount} {cost_currency}" if cost_currency else str(cost_amount)
-            cost_node = Node(
-                id=cost_id,
-                type=NodeType.COST,
-                label=cost_label,
-                properties={"amount": cost_amount, "currency": cost_currency}
-            )
-            await self.add_node(cost_node)
-            nodes.append(cost_node)
-
-            edge = create_edge(decision_id, cost_id, EdgePredicate.HAS_COST)
-            await self.add_edge(edge)
-            edges.append(edge)
-
-        # 6. Extract and create Region node
-        region = self._extract_region(decision)
-        if region:
-            region_id = f"{decision_id}_region"
-            # Store name_en when region is already ASCII (extracted from English text).
-            # Korean regions (e.g. "북미") have name_en=None — normalizer will handle display.
-            region_en = region if region.isascii() else None
-            region_node = Node(
-                id=region_id,
-                type=NodeType.REGION,
-                label=region,
-                properties={"name": region, "name_en": region_en}
-            )
-            await self.add_node(region_node)
-            nodes.append(region_node)
-
-            edge = create_edge(decision_id, region_id, EdgePredicate.AFFECTS_REGION)
-            await self.add_edge(edge)
-            edges.append(edge)
-
-        # 7. Extract and create DataType node
-        data_type = self._extract_data_type(decision)
-        if data_type:
-            data_id = f"{decision_id}_data"
-            data_node = Node(
-                id=data_id,
-                type=NodeType.DATA_TYPE,
-                label=data_type,
-                properties={"classification": data_type}
-            )
-            await self.add_node(data_node)
-            nodes.append(data_node)
-
-            edge = create_edge(decision_id, data_id, EdgePredicate.USES_DATA)
-            await self.add_edge(edge)
-            edges.append(edge)
 
         # 8. Create Risk nodes
         # Risk nodes are created here, but edges are created in graph_enrichment
         # to connect them to the Rules that generate them (Rule → GENERATES_RISK → Risk)
         for idx, risk in enumerate(decision.get("risks", [])):
             risk_id = f"{decision_id}_risk_{idx}"
-            risk_node = create_risk_node(
-                risk_id=risk_id,
-                description=risk.get("description", ""),
-                severity=risk.get("severity"),
-                mitigation=risk.get("mitigation")
-            )
-            risk_node.properties["source"] = "llm"
+            risk_props: dict = {"source": "llm"}
+            if risk.get("severity"):
+                risk_props["severity"] = risk["severity"]
+            if risk.get("mitigation"):
+                risk_props["mitigation"] = risk["mitigation"]
             if risk.get("description_en"):
-                risk_node.properties["description_en"] = risk["description_en"]
+                risk_props["description_en"] = risk["description_en"]
+            risk_node = Node(
+                id=risk_id,
+                type=NodeType.RISK,
+                label=risk.get("description", ""),
+                properties=risk_props,
+            )
             await self.add_node(risk_node)
             nodes.append(risk_node)
 
@@ -454,12 +413,14 @@ class InMemoryGraphRepository(BaseGraphRepository):
                     edge_source = None
 
                 if edge_source:
-                    edge = create_edge(
-                        edge_source,
-                        approver_id,
-                        EdgePredicate.REQUIRES_APPROVAL_BY,
-                        required=step.get("required", True),
-                        rationale=step.get("rationale")
+                    edge = Edge(
+                        from_node=edge_source,
+                        to_node=approver_id,
+                        predicate=EdgePredicate.REQUIRES_APPROVAL_FROM,
+                        properties={
+                            "required": step.get("required", True),
+                            "rationale": step.get("rationale"),
+                        },
                     )
                     await self.add_edge(edge)
                     edges.append(edge)
@@ -493,8 +454,9 @@ class InMemoryGraphRepository(BaseGraphRepository):
             # NOTE: Rule nodes (R1-R8) are created earlier in step 9a
             # This ensures they exist before we create approver edges
 
-            # Add cost threshold violation edges
-            cost_node_id = f"{decision_id}_cost" if self._extract_cost_and_currency(decision)[0] else None
+            # Cost threshold edges: cost_node_id is None since COST nodes are removed.
+            # add_cost_threshold_edges returns [] when cost_node_id is None.
+            cost_node_id = None
             threshold_edges = await add_cost_threshold_edges(
                 decision_id=decision_id,
                 decision=decision,
@@ -570,33 +532,16 @@ class InMemoryGraphRepository(BaseGraphRepository):
         # Try to infer currency from decision statement or cost field
         statement = decision.get("decision_statement", "")
         if isinstance(cost, str):
-            if "원" in cost or "KRW" in cost:
-                currency = "KRW"
-            elif "$" in cost or "USD" in cost:
+            if "$" in cost or "USD" in cost:
                 currency = "USD"
         elif isinstance(cost, (int, float)):
-            if "원" in statement or "KRW" in statement:
-                currency = "KRW"
-            elif "$" in statement or "USD" in statement:
+            if "$" in statement or "USD" in statement:
                 currency = "USD"
-        # Default to KRW for Korean company
-        if currency is None and decision.get("company_id") == "nexus_dynamics":
-            currency = "KRW"
         if cost is not None:
             # Format as integer if whole number, otherwise as float
             amount = f"{int(cost):,}" if isinstance(cost, (int, float)) and cost == int(cost) else str(cost)
             return amount, currency
         return None, None
-
-    def _extract_region(self, decision: dict) -> Optional[str]:
-        """Extract geographic region from LLM-extracted target_market field."""
-        return decision.get("target_market") or None
-
-    def _extract_data_type(self, decision: dict) -> Optional[str]:
-        """Extract data classification from LLM-extracted uses_pii field."""
-        if decision.get("uses_pii"):
-            return "PII"
-        return None
 
     async def get_governance_context(
         self,
@@ -639,7 +584,7 @@ class InMemoryGraphRepository(BaseGraphRepository):
                 break
 
         # Collect nodes by type
-        from app.graph_ontology import NodeType
+        from app.ontology.node_types import NodeType
 
         decision_node = self._nodes.get(decision_id)
         actors = [self._nodes[nid] for nid in visited_nodes if self._nodes[nid].type == NodeType.ACTOR]

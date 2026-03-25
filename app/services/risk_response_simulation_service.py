@@ -7,7 +7,7 @@ decisions, and returns structured before/after comparison.
 
 Architecture rules:
 - LLM never computes final scores or approval outcomes.
-- All scores come from evaluate_governance() (use_nova=False) + RiskScoringService.score().
+- All scores come from evaluate_governance() + RiskScoringService.score().
 - Templates are config-driven (simulation_templates.json); no per-company if/else.
 - Patch strategies are pure functions of decision payload + company context.
 - Confidence is a deterministic heuristic, never a probabilistic model.
@@ -24,9 +24,6 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Nova proposer imported at module level so tests can patch it cleanly.
-# boto3 is only touched inside _call_nova() — absent credentials are non-fatal.
-from app.services.nova_scenario_proposer import propose_scenarios_with_nova  # noqa: E402
 # ── Template config ────────────────────────────────────────────────────────────
 _TEMPLATES_PATH = (
     Path(__file__).parent.parent / "demo_fixtures" / "simulation_templates.json"
@@ -119,7 +116,7 @@ class RiskResponseSimulationService:
                 )
                 risk_scoring = _re.to_dict()
                 logger.info(
-                    f"[simulation] Estimated hiring cost ₩{int(estimated):,} "
+                    f"[simulation] Estimated hiring cost {int(estimated):,} "
                     f"from {decision_payload['headcount_change']} headcount — "
                     f"baseline re-scored"
                 )
@@ -133,25 +130,9 @@ class RiskResponseSimulationService:
         # ── Pass 1: strict candidate generation (issue-typed + conditions) ──
         candidates: list[dict] = []
         if issue_types:
-            nova_proposals = propose_scenarios_with_nova(
-                decision=decision_payload,
-                governance_result=governance_result,
-                risk_scoring=risk_scoring,
+            candidates = self._generate_candidates(
+                decision_payload, governance_result, risk_scoring, company_payload, issue_types
             )
-            if nova_proposals:
-                candidates = self._proposals_to_candidates(
-                    nova_proposals, decision_payload, company_payload
-                )
-                if not candidates:
-                    logger.warning("[simulation] Nova proposals invalid — using strict deterministic candidates")
-                    candidates = self._generate_candidates(
-                        decision_payload, governance_result, risk_scoring,
-                        company_payload, issue_types
-                    )
-            else:
-                candidates = self._generate_candidates(
-                    decision_payload, governance_result, risk_scoring, company_payload, issue_types
-                )
 
         evaluated: list[dict] = self._evaluate_candidates(
             candidates, decision_payload, company_payload, company_id, lang
@@ -192,16 +173,6 @@ class RiskResponseSimulationService:
             evaluated.extend(self._synthetic_fallback_scenarios(baseline_outcome, needed))
 
         self._mark_recommended(evaluated, baseline_outcome)
-
-        # ── Nova rationale enrichment (non-fatal) ──
-        # Use Nova to generate natural-language rationale for each scenario,
-        # explaining WHY this remediation works in the context of the decision.
-        try:
-            self._enrich_with_nova_rationale(
-                evaluated, decision_payload, baseline_outcome, lang
-            )
-        except Exception as exc:
-            logger.warning(f"[simulation] Nova rationale enrichment failed (non-fatal): {exc}")
 
         return {"baseline": baseline_outcome, "scenarios": evaluated, "generatedAt": _now_iso()}
 
@@ -351,9 +322,7 @@ class RiskResponseSimulationService:
             candidates.append({
                 "scenarioId":      f"sim_{tmpl['templateId']}",
                 "templateId":      tmpl["templateId"],
-                "titleKo":         tmpl["titleKo"],
                 "titleEn":         tmpl.get("titleEn"),
-                "changeSummaryKo": self._summary_ko(strategy, decision_payload, patch),
                 "changeSummaryEn": self._summary_en(strategy, decision_payload, patch),
                 "issueTypes":      [tmpl["issueType"]],
                 "changeSet":       patch,
@@ -415,9 +384,7 @@ class RiskResponseSimulationService:
             candidates.append({
                 "scenarioId":      f"sim_{tmpl['templateId']}",
                 "templateId":      tmpl["templateId"],
-                "titleKo":         tmpl["titleKo"],
                 "titleEn":         tmpl.get("titleEn"),
-                "changeSummaryKo": self._summary_ko(strategy, decision_payload, patch),
                 "changeSummaryEn": self._summary_en(strategy, decision_payload, patch),
                 "issueTypes":      [tmpl["issueType"]],
                 "changeSet":       patch,
@@ -425,65 +392,6 @@ class RiskResponseSimulationService:
             })
             seen_strategies.add(strategy)
             if len(candidates) >= needed:
-                break
-
-        return candidates
-
-    # ── Nova proposals → candidates ───────────────────────────────────────────
-
-    def _proposals_to_candidates(
-        self,
-        proposals: list,
-        decision_payload: dict,
-        company_payload: dict,
-    ) -> list[dict]:
-        """
-        Convert validated NovaScenarioProposal objects into candidate dicts
-        that _evaluate_scenario() can consume.
-
-        For each proposal:
-          1. Look up template by templateId (Step 6 validation)
-          2. Derive patchStrategy from template config
-          3. Build changeSet via _build_patch() (returns None if not applicable)
-          4. Assemble candidate — Nova's titleKo/changeSummaryKo are used as-is;
-             changeSummaryEn and titleEn fall back to template or strategy defaults.
-        """
-        templates_by_id = {t["templateId"]: t for t in self._load_templates()}
-        seen_strategies: set[str] = set()
-        candidates: list[dict] = []
-
-        for proposal in proposals:
-            tmpl = templates_by_id.get(proposal.templateId)
-            if tmpl is None:
-                # templateId not in config — skip (already warned in proposer)
-                logger.warning(
-                    f"[simulation] templateId '{proposal.templateId}' not in "
-                    "simulation_templates.json — skipping"
-                )
-                continue
-
-            strategy = tmpl["patchStrategy"]
-            if strategy in seen_strategies:
-                continue
-
-            patch = self._build_patch(strategy, decision_payload, company_payload)
-            if patch is None:
-                # Template not applicable to this decision's current values
-                continue
-
-            candidates.append({
-                "scenarioId":      f"sim_{proposal.templateId}",
-                "templateId":      proposal.templateId,
-                "titleKo":         proposal.titleKo,
-                "titleEn":         tmpl.get("titleEn"),
-                "changeSummaryKo": proposal.changeSummaryKo,
-                "changeSummaryEn": self._summary_en(strategy, decision_payload, patch),
-                "issueTypes":      [tmpl["issueType"]],
-                "changeSet":       patch,
-                "confidence":      _CONFIDENCE.get(strategy, 0.70),
-            })
-            seen_strategies.add(strategy)
-            if len(candidates) >= 3:
                 break
 
         return candidates
@@ -564,7 +472,7 @@ class RiskResponseSimulationService:
         if strategy == "inject_goal_alignment":
             if decision_payload.get("goals"):
                 return None
-            return {"goals": [{"description": "전략 목표 달성에 기여", "metric": None}]}
+            return {"goals": [{"description": "Contributes to achieving strategic goals", "metric": None}]}
 
         if strategy == "defer_hiring":
             if not decision_payload.get("involves_hiring"):
@@ -603,7 +511,7 @@ class RiskResponseSimulationService:
         """Estimate total hiring cost from headcount when no explicit cost is provided.
 
         Uses the company's unbudgeted_spend_threshold as a proxy for annual
-        per-head cost.  Falls back to 50M KRW per head (reasonable industry
+        per-head cost.  Falls back to 50M per head (reasonable industry
         average for loaded salary + benefits).
         """
         fin_tol = (company_payload or {}).get("risk_tolerance", {}).get("financial", {})
@@ -611,32 +519,6 @@ class RiskResponseSimulationService:
         return float(headcount * per_head)
 
     # ── Change summaries ──────────────────────────────────────────────────────
-
-    def _summary_ko(self, strategy: str, decision_payload: dict, patch: dict) -> str:
-        cost = decision_payload.get("cost")
-        c = f"₩{int(cost)}" if cost is not None else "미정"
-        pc = f"₩{int(patch['cost'])}" if patch.get("cost") is not None else "미정"
-        if strategy == "set_cost_to_remaining_budget":
-            return f"요청 금액을 {c}에서 잔여 예산({pc}) 수준으로 조정"
-        if strategy == "set_cost_to_high_threshold":
-            return f"요청 금액을 {c}에서 승인 기준 이하({pc})로 조정"
-        if strategy == "reduce_cost_by_half":
-            return f"요청 금액을 {c}에서 절반({pc})으로 분할 집행"
-        if strategy == "remove_pii_usage":
-            return "고객 개인정보(PII) 처리를 익명화로 대체하여 개인정보 보호 리스크 해소"
-        if strategy == "clear_compliance_flag":
-            return "준법감시인 사전 검토 절차를 의무화하여 컴플라이언스 리스크 해소"
-        if strategy == "inject_goal_alignment":
-            return "의사결정을 전략 목표와 명시적으로 연계하여 전략 정합성 확보"
-        if strategy == "defer_hiring":
-            return "채용 계획을 다음 분기로 연기하여 비용 안정화 목표와의 충돌 해소"
-        if strategy == "reduce_headcount":
-            hc = decision_payload.get("headcount_change", 0)
-            new_hc = patch.get("headcount_change", 0)
-            new_cost = patch.get("cost")
-            cost_note = f" (예상 비용: ₩{int(new_cost)})" if new_cost is not None else ""
-            return f"채용 인원을 {hc}명에서 {new_hc}명으로 축소하여 비용 부담 경감{cost_note}"
-        return "의사결정 조건 변경"
 
     def _summary_en(self, strategy: str, decision_payload: dict, patch: dict) -> str:
         cost = decision_payload.get("cost")
@@ -693,7 +575,6 @@ class RiskResponseSimulationService:
             gov_result = evaluate_governance(
                 decision_obj,
                 company_context=company_payload,
-                use_nova=False,
                 company_id=company_id,
                 lang=lang,
             )
@@ -727,9 +608,7 @@ class RiskResponseSimulationService:
         return {
             "scenarioId":      scenario["scenarioId"],
             "templateId":      scenario["templateId"],
-            "titleKo":         scenario["titleKo"],
             "titleEn":         scenario.get("titleEn"),
-            "changeSummaryKo": scenario["changeSummaryKo"],
             "changeSummaryEn": scenario.get("changeSummaryEn"),
             "issueTypes":      scenario.get("issueTypes", []),
             "expectedOutcome": sim_outcome,
@@ -785,39 +664,30 @@ class RiskResponseSimulationService:
             all_names = {**b_names, **s_names}
 
             resolved: list[str] = []
-            resolved_en: list[str] = []
             resolved_ids = baseline_ids - sim_ids
             for rid in sorted(resolved_ids):
                 rule_name = all_names.get(rid) or rid
-                resolved.append(f"해소: {rule_name}")
-                resolved_en.append(f"Resolved: {rule_name}")
+                resolved.append(f"Resolved: {rule_name}")
 
             b_band_idx = _BANDS.index(baseline_outcome.get("band", "LOW")) if baseline_outcome.get("band") in _BANDS else 0
             s_band_idx = _BANDS.index(sim_outcome.get("band", "LOW")) if sim_outcome.get("band") in _BANDS else 0
             if s_band_idx < b_band_idx:
                 _b_band = baseline_outcome.get('band')
                 _s_band = sim_outcome.get('band')
-                resolved.append(f"리스크 등급 개선 ({_b_band} → {_s_band})")
-                resolved_en.append(f"Risk band improved ({_b_band} → {_s_band})")
+                resolved.append(f"Risk band improved ({_b_band} → {_s_band})")
 
             remaining: list[str] = []
-            remaining_en: list[str] = []
             for rid in sorted(sim_ids):
                 rule_name = all_names.get(rid) or rid
-                remaining.append(f"미해소: {rule_name}")
-                remaining_en.append(f"Still triggered: {rule_name}")
-            roles_ko = sim_outcome.get("requiredApprovals") or []
-            roles_en = sim_outcome.get("requiredApprovalsEn") or roles_ko
-            for role_ko, role_en in zip(roles_ko, roles_en):
-                item = f"{role_ko} 승인 필요"
+                remaining.append(f"Still triggered: {rule_name}")
+            roles_en = sim_outcome.get("requiredApprovalsEn") or sim_outcome.get("requiredApprovals") or []
+            for role_en in roles_en:
+                item = f"{role_en} approval still required"
                 if item not in remaining:
                     remaining.append(item)
-                    remaining_en.append(f"{role_en} approval still required")
 
             s["resolvedIssues"] = list(dict.fromkeys(resolved))
-            s["resolvedIssuesEn"] = list(dict.fromkeys(resolved_en))
             s["remainingIssues"] = list(dict.fromkeys(remaining))
-            s["remainingIssuesEn"] = list(dict.fromkeys(remaining_en))
 
     # ── Synthetic fallbacks ───────────────────────────────────────────────────
 
@@ -840,21 +710,16 @@ class RiskResponseSimulationService:
         adjustment of the baseline outcome — no governance re-run required.
         """
         base_score = baseline_outcome.get("aggregateRiskScore", 50)
-        remaining_approvals_ko = baseline_outcome.get("requiredApprovals") or []
-        remaining_approvals_en = baseline_outcome.get("requiredApprovalsEn") or remaining_approvals_ko
+        remaining_approvals_en = baseline_outcome.get("requiredApprovalsEn") or baseline_outcome.get("requiredApprovals") or []
 
-        def _remaining_issues(approvals_ko, approvals_en):
-            items_ko = [f"{r} 승인 필요" for r in approvals_ko]
-            items_en = [f"{r} approval still required" for r in approvals_en]
-            return items_ko, items_en
+        def _remaining_issues(approvals_en):
+            return [f"{r} approval still required" for r in approvals_en]
 
         _FALLBACK_TEMPLATES = [
             {
                 "scenarioId": "sim_fallback_phased",
                 "templateId": "fallback_phased",
-                "titleKo": "단계적 실행",
                 "titleEn": "Phased Implementation",
-                "changeSummaryKo": "의사결정을 단계적으로 나누어 실행하여 리스크를 분산합니다.",
                 "changeSummaryEn": "Split the decision into phases to distribute and reduce overall risk.",
                 "score_reduction": 15,
                 "confidence": 0.65,
@@ -862,16 +727,14 @@ class RiskResponseSimulationService:
             {
                 "scenarioId": "sim_fallback_scope_reduction",
                 "templateId": "fallback_scope_reduction",
-                "titleKo": "범위 축소",
                 "titleEn": "Scope Reduction",
-                "changeSummaryKo": "의사결정 범위를 축소하여 컴플라이언스 및 재무 부담을 경감합니다.",
                 "changeSummaryEn": "Reduce the scope of the decision to lower compliance and financial burden.",
                 "score_reduction": 22,
                 "confidence": 0.60,
             },
         ]
 
-        remaining_ko, remaining_en = _remaining_issues(remaining_approvals_ko, remaining_approvals_en)
+        remaining_en = _remaining_issues(remaining_approvals_en)
 
         fallbacks: list[dict] = []
         for tmpl in _FALLBACK_TEMPLATES[:count]:
@@ -879,95 +742,24 @@ class RiskResponseSimulationService:
             fallbacks.append({
                 "scenarioId": tmpl["scenarioId"],
                 "templateId": tmpl["templateId"],
-                "titleKo": tmpl["titleKo"],
                 "titleEn": tmpl["titleEn"],
-                "changeSummaryKo": tmpl["changeSummaryKo"],
                 "changeSummaryEn": tmpl["changeSummaryEn"],
                 "issueTypes": [],
                 "expectedOutcome": {
                     "aggregateRiskScore": new_score,
                     "band": self._score_to_band(new_score),
                     "status": baseline_outcome.get("status", "needs_approval"),
-                    "requiredApprovals": remaining_approvals_ko,
+                    "requiredApprovals": remaining_approvals_en,
                     "requiredApprovalsEn": remaining_approvals_en,
                     "triggeredRuleIds": baseline_outcome.get("triggeredRuleIds", []),
                 },
                 "delta": {"aggregateRiskScoreDelta": -tmpl["score_reduction"]},
                 "resolvedIssues": [],
-                "resolvedIssuesEn": [],
-                "remainingIssues": remaining_ko,
-                "remainingIssuesEn": remaining_en,
+                "remainingIssues": remaining_en,
                 "confidence": tmpl["confidence"],
                 "isRecommended": False,
             })
         return fallbacks
-
-    # ── Nova rationale enrichment ────────────────────────────────────────────
-
-    def _enrich_with_nova_rationale(
-        self,
-        scenarios: list[dict],
-        decision_payload: dict,
-        baseline_outcome: dict,
-        lang: str,
-    ) -> None:
-        """
-        Use Nova to generate a natural-language rationale for each scenario.
-
-        Explains WHY each remediation reduces risk in the context of this
-        specific decision. Mutates scenario dicts in-place (adds rationaleKo
-        and rationaleEn). Non-fatal — scenarios remain valid without rationale.
-        """
-        from app.bedrock_client import BedrockClient
-
-        # Skip if no real scenarios to explain
-        real = [s for s in scenarios if not s.get("templateId", "").startswith("fallback_")]
-        if not real:
-            return
-
-        scenario_summaries = []
-        for s in real:
-            scenario_summaries.append({
-                "scenarioId": s["scenarioId"],
-                "titleKo": s.get("titleKo", ""),
-                "titleEn": s.get("titleEn", ""),
-                "changeSummaryKo": s.get("changeSummaryKo", ""),
-                "riskDelta": s.get("delta", {}).get("aggregateRiskScoreDelta", 0),
-                "resolvedIssues": s.get("resolvedIssuesEn", [])[:3],
-                "isRecommended": s.get("isRecommended", False),
-            })
-
-        import json as _json
-
-        prompt = (
-            "You are explaining remediation scenarios for an enterprise decision governance system.\n\n"
-            f"DECISION: {decision_payload.get('decision_statement', '')}\n"
-            f"BASELINE RISK: {baseline_outcome.get('aggregateRiskScore', 0)} ({baseline_outcome.get('band', 'LOW')})\n\n"
-            f"SCENARIOS:\n{_json.dumps(scenario_summaries, ensure_ascii=False, indent=2)}\n\n"
-            "For each scenario, write a concise 1-2 sentence rationale explaining:\n"
-            "1. What governance risk it addresses\n"
-            "2. Why the proposed change reduces that risk\n\n"
-            "Return JSON only:\n"
-            '{"rationales": [{"scenarioId": "...", "rationaleKo": "한국어", "rationaleEn": "English"}, ...]}'
-        )
-
-        try:
-            client = BedrockClient()
-            raw = client.invoke(prompt, max_tokens=800)
-            data = _json.loads(raw)
-            rationale_map = {
-                r["scenarioId"]: r
-                for r in data.get("rationales", [])
-                if isinstance(r, dict) and "scenarioId" in r
-            }
-            for s in scenarios:
-                r = rationale_map.get(s["scenarioId"])
-                if r:
-                    s["rationaleKo"] = r.get("rationaleKo", "")
-                    s["rationaleEn"] = r.get("rationaleEn", "")
-            logger.info(f"[simulation] Nova rationale enriched {len(rationale_map)} scenario(s)")
-        except Exception as exc:
-            logger.warning(f"[simulation] Nova rationale parse failed: {exc}")
 
     # ── Recommendation ────────────────────────────────────────────────────────
 

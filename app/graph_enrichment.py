@@ -6,10 +6,9 @@ to create a true governance knowledge graph.
 """
 
 from typing import Optional
-from app.graph_ontology import (
-    Node, Edge, NodeType, EdgePredicate,
-    create_strategic_goal_node, create_rule_node, create_edge
-)
+from app.ontology.models import Node, Edge
+from app.ontology.node_types import NodeType
+from app.ontology.edge_predicates import EdgePredicate
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,6 +19,28 @@ logger = logging.getLogger(__name__)
 _COMPLIANCE_GOAL_CATEGORIES = {"regulatory_compliance", "data_privacy", "compliance"}
 _COST_STABILITY_CATEGORIES = {"cost_stability", "cost_efficiency", "cost_reduction"}
 _REVENUE_GROWTH_CATEGORIES = {"revenue_growth", "revenue", "growth"}
+
+
+def _build_goal_node(goal_id: str, goal: dict) -> Node:
+    """Build a GOAL node from a strategic goal dict. Used by add_strategic_goals and add_cost_goal_edges."""
+    goal_name = goal.get("name", "")
+    goal_props: dict = {"name": goal_name}
+    if goal.get("priority"):
+        goal_props["priority"] = goal["priority"]
+    if goal.get("owner_id"):
+        goal_props["owner_id"] = goal["owner_id"]
+    return Node(id=f"goal_{goal_id}", type=NodeType.GOAL, label=goal_name, properties=goal_props)
+
+
+def _extract_kpi_keywords(kpis: list) -> set:
+    """Extract keywords from a list of KPI dicts or strings. Used for SUPPORTS matching."""
+    keywords = set()
+    for kpi in kpis:
+        kpi_name = kpi.get("name", "") if isinstance(kpi, dict) else str(kpi)
+        for w in kpi_name.replace("-", " ").replace("%", " ").split():
+            if len(w) >= 2 and not w.isdigit():
+                keywords.add(w)
+    return keywords
 
 
 async def add_strategic_goals(
@@ -59,12 +80,7 @@ async def add_strategic_goals(
     has_strategic_rationale = decision.get("strategic_impact") not in (None, "low", "none")
 
     # Extract decision KPI keywords for SUPPORTS matching (fallback for uncategorised goals)
-    decision_kpi_keywords = set()
-    for kpi in decision.get("kpis", []):
-        kpi_name = kpi.get("name", "") if isinstance(kpi, dict) else str(kpi)
-        keywords = [w for w in kpi_name.replace("-", " ").replace("%", " ").split()
-                   if len(w) >= 2 and not w.isdigit()]
-        decision_kpi_keywords.update(keywords)
+    decision_kpi_keywords = _extract_kpi_keywords(decision.get("kpis", []))
 
     for goal in strategic_goals:
         goal_id = goal.get("goal_id", "")
@@ -81,19 +97,19 @@ async def add_strategic_goals(
         # ── Priority 1: compliance violation → CONFLICTS_WITH compliance goal ──
         if decision_violates_compliance and goal_category in _COMPLIANCE_GOAL_CATEGORIES:
             edge_predicate = EdgePredicate.CONFLICTS_WITH
-            reasoning = "컴플라이언스 위반: 미인가 PII 접근이 규제 준수 목표와 충돌"
+            reasoning = "Compliance violation: unauthorized PII access conflicts with regulatory compliance goal"
 
         # ── Priority 2: hiring → CONFLICTS_WITH cost_stability goal ──────────
         # Hiring increases fixed operating costs (salary, benefits) regardless of
         # whether an explicit cost value was extracted. Category-based, not keyword.
         elif involves_hiring and goal_category in _COST_STABILITY_CATEGORIES:
             edge_predicate = EdgePredicate.CONFLICTS_WITH
-            reasoning = "인력 충원은 고정 운영 비용을 증가시켜 비용 안정화 목표와 충돌"
+            reasoning = "Hiring increases fixed operating costs, conflicting with cost stability goal"
 
         # ── Priority 3: hiring with strategic rationale → SUPPORTS growth goal ─
         elif involves_hiring and has_strategic_rationale and goal_category in _REVENUE_GROWTH_CATEGORIES:
             edge_predicate = EdgePredicate.SUPPORTS
-            reasoning = "매출 성장 근거로 인력 채용 — 매출 성장 목표와 전략적으로 정렬"
+            reasoning = "Hiring for revenue growth rationale — strategically aligned with revenue growth goal"
 
         # ── Fallback: KPI keyword overlap → SUPPORTS ─────────────────────────
         # Used for goals without a category or when none of the above signals fire.
@@ -102,45 +118,34 @@ async def add_strategic_goals(
             for w in goal_name.replace("-", " ").replace("%", " ").split():
                 if len(w) >= 2 and not w.isdigit():
                     sg_kpi_keywords.add(w)
-            for kpi in goal.get("kpis", []):
-                kpi_name = kpi.get("name", "") if isinstance(kpi, dict) else str(kpi)
-                for w in kpi_name.replace("-", " ").replace("%", " ").split():
-                    if len(w) >= 2 and not w.isdigit():
-                        sg_kpi_keywords.add(w)
+            sg_kpi_keywords |= _extract_kpi_keywords(goal.get("kpis", []))
             if decision_kpi_keywords & sg_kpi_keywords:
                 edge_predicate = EdgePredicate.SUPPORTS
-                reasoning = "KPI 정렬: 의사결정 KPI가 전략 목표 KPI와 일치"
+                reasoning = "KPI alignment: decision KPIs match strategic goal KPIs"
 
         if edge_predicate is None:
             continue
 
-        goal_node = create_strategic_goal_node(
-            goal_id=goal_node_id,
-            name=goal_name,
-            priority=goal.get("priority"),
-            owner_id=goal.get("owner_id")
-        )
+        goal_node = _build_goal_node(goal_id, goal)
         try:
             await add_node_fn(goal_node)
             nodes.append(goal_node)
         except ValueError:
             nodes.append(goal_node)
 
-        edge = create_edge(decision_id, goal_node_id, edge_predicate, reasoning=reasoning)
+        edge = Edge(from_node=decision_id, to_node=goal_node_id, predicate=edge_predicate, properties={"reasoning": reasoning})
         await add_edge_fn(edge)
         edges.append(edge)
 
         # For CONFLICTS_WITH, add a Risk node so the graph shows the downstream consequence
         if edge_predicate == EdgePredicate.CONFLICTS_WITH:
             risk_id = f"{decision_id}_goal_conflict_risk_{goal_id}"
-            from app.graph_ontology import Node, NodeType
             risk_node = Node(
                 id=risk_id,
                 type=NodeType.RISK,
-                label=f"전략 충돌: {goal_name}",
+                label=f"Strategic conflict: {goal_name}",
                 properties={
                     "description": reasoning,
-                    "description_en": f"Strategic conflict: decision undermines '{goal_name}' goal",
                     "severity": "medium",
                     "source": "strategic_conflict",
                     "goal_id": goal_id,
@@ -151,10 +156,10 @@ async def add_strategic_goals(
                 nodes.append(risk_node)
             except ValueError:
                 pass
-            risk_edge = create_edge(
-                goal_node_id, risk_id,
-                EdgePredicate.GENERATES_RISK,
-                reason="Strategic conflict generates downstream risk"
+            risk_edge = Edge(
+                from_node=goal_node_id, to_node=risk_id,
+                predicate=EdgePredicate.GENERATES_RISK,
+                properties={"reason": "Strategic conflict generates downstream risk"},
             )
             await add_edge_fn(risk_edge)
             edges.append(risk_edge)
@@ -218,16 +223,17 @@ async def add_governance_rules(
         rule_status = visible_rule.get("status", "TRIGGERED")
         rule_reason = visible_rule.get("reason", "")
 
-        rule_node = create_rule_node(
-            rule_id=f"rule_{rule_id}",
-            name=rule.get("name", ""),
-            rule_type=rule.get("type"),
-            description=rule.get("description")
+        rule_props: dict = {"name": rule.get("name", ""), "status": rule_status, "reason": rule_reason}
+        if rule.get("type"):
+            rule_props["type"] = rule["type"]
+        if rule.get("description"):
+            rule_props["description"] = rule["description"]
+        rule_node = Node(
+            id=f"rule_{rule_id}",
+            type=NodeType.RULE,
+            label=f"{rule_id}: {rule.get('name', '')}",
+            properties=rule_props,
         )
-
-        # Add status to properties
-        rule_node.properties["status"] = rule_status
-        rule_node.properties["reason"] = rule_reason
 
         try:
             await add_node_fn(rule_node)
@@ -242,21 +248,19 @@ async def add_governance_rules(
         rule_type = rule.get("type", "")
 
         if rule_status == "TRIGGERED" and rule_type not in ["financial", "capital_expenditure"]:
-            edge = create_edge(
-                decision_id,
-                f"rule_{rule_id}",
-                EdgePredicate.TRIGGERS_RULE
+            edge = Edge(
+                from_node=decision_id,
+                to_node=f"rule_{rule_id}",
+                predicate=EdgePredicate.GOVERNED_BY,
             )
             await add_edge_fn(edge)
             edges.append(edge)
         elif rule_status == "UNSATISFIED":
-            # For UNSATISFIED rules, create edge showing violation/non-compliance
-            edge = create_edge(
-                decision_id,
-                f"rule_{rule_id}",
-                EdgePredicate.TRIGGERS_RULE,  # Or could use VIOLATES predicate
-                violation_type="UNSATISFIED",
-                reason=rule_reason
+            edge = Edge(
+                from_node=decision_id,
+                to_node=f"rule_{rule_id}",
+                predicate=EdgePredicate.GOVERNED_BY,
+                properties={"violation_type": "UNSATISFIED", "reason": rule_reason},
             )
             await add_edge_fn(edge)
             edges.append(edge)
@@ -315,13 +319,15 @@ async def add_cost_threshold_edges(
 
         # If it's a financial rule (R1, R2) and triggered, add threshold edge
         if rule_type in ["financial", "capital_expenditure"]:
-            edge = create_edge(
-                cost_node_id,
-                f"rule_{rule_id}",
-                EdgePredicate.EXCEEDS_THRESHOLD,
-                operator=condition.get("operator", ">"),
-                threshold=condition.get("value"),
-                observed=cost
+            edge = Edge(
+                from_node=cost_node_id,
+                to_node=f"rule_{rule_id}",
+                predicate=EdgePredicate.EXCEEDS_THRESHOLD,
+                properties={
+                    "operator": condition.get("operator", ">"),
+                    "threshold": condition.get("value"),
+                    "observed": cost,
+                },
             )
             await add_edge_fn(edge)
             edges.append(edge)
@@ -379,11 +385,11 @@ async def add_approval_hierarchy_edges(
         current_approver_id = f"{decision_id}_approver_{current_step.get('level')}_{current_idx}"
         next_approver_id = f"{decision_id}_approver_{next_step.get('level')}_{next_idx}"
 
-        edge = create_edge(
-            current_approver_id,
-            next_approver_id,
-            EdgePredicate.ESCALATES_TO,
-            escalation_reason=f"{current_step.get('role')} → {next_step.get('role')}"
+        edge = Edge(
+            from_node=current_approver_id,
+            to_node=next_approver_id,
+            predicate=EdgePredicate.ESCALATES_TO,
+            properties={"escalation_reason": f"{current_step.get('role')} → {next_step.get('role')}"},
         )
         await add_edge_fn(edge)
         edges.append(edge)
@@ -422,12 +428,7 @@ async def add_cost_goal_edges(
         return nodes, edges
 
     # Extract decision KPI keywords for matching
-    decision_kpi_keywords = set()
-    for kpi in decision.get("kpis", []):
-        kpi_name = kpi.get("name", "") if isinstance(kpi, dict) else str(kpi)
-        keywords = [w for w in kpi_name.replace("-", " ").replace("%", " ").split()
-                   if len(w) >= 2 and not w.isdigit()]
-        decision_kpi_keywords.update(keywords)
+    decision_kpi_keywords = _extract_kpi_keywords(decision.get("kpis", []))
 
     for goal in strategic_goals:
         goal_id = goal.get("goal_id", "")
@@ -441,12 +442,7 @@ async def add_cost_goal_edges(
         name_keywords = [w for w in goal_name.replace("-", " ").replace("%", " ").split()
                         if len(w) >= 2 and not w.isdigit()]
         sg_kpi_keywords.update(name_keywords)
-
-        for kpi in goal.get("kpis", []):
-            kpi_name = kpi.get("name", "") if isinstance(kpi, dict) else str(kpi)
-            keywords = [w for w in kpi_name.replace("-", " ").replace("%", " ").split()
-                       if len(w) >= 2 and not w.isdigit()]
-            sg_kpi_keywords.update(keywords)
+        sg_kpi_keywords |= _extract_kpi_keywords(goal.get("kpis", []))
 
         # Check for conflicts: cost-incurring decision vs. cost-stability goal.
         # Uses goal category (structural config) — not keyword matching.
@@ -458,17 +454,9 @@ async def add_cost_goal_edges(
             continue
 
         edge_predicate = EdgePredicate.CONFLICTS_WITH
-        edge_reasoning = f"비용 지출({cost:,}원)이 {goal_name} 목표와 충돌"
+        edge_reasoning = f"Cost expenditure ({cost:,}) conflicts with {goal_name} goal"
 
-        # Create Strategic Goal node (if not already exists)
-        from app.graph_ontology import create_strategic_goal_node
-
-        goal_node = create_strategic_goal_node(
-            goal_id=f"goal_{goal_id}",
-            name=goal_name,
-            priority=goal.get("priority"),
-            owner_id=goal.get("owner_id")
-        )
+        goal_node = _build_goal_node(goal_id, goal)
 
         try:
             await add_node_fn(goal_node)
@@ -476,48 +464,44 @@ async def add_cost_goal_edges(
         except ValueError:
             nodes.append(goal_node)  # Already exists
 
-        # Cost → SUPPORTS/CONFLICTS_WITH → Goal
-        edge = create_edge(
-            cost_node_id,
-            f"goal_{goal_id}",
-            edge_predicate,
-            reasoning=edge_reasoning
+        # Cost → CONFLICTS_WITH → Goal
+        edge = Edge(
+            from_node=cost_node_id,
+            to_node=f"goal_{goal_id}",
+            predicate=edge_predicate,
+            properties={"reasoning": edge_reasoning},
         )
         await add_edge_fn(edge)
         edges.append(edge)
 
-        # If CONFLICTS_WITH, create Goal → GENERATES_RISK → Risk
-        if edge_predicate == EdgePredicate.CONFLICTS_WITH:
-            risk_id = f"{decision_id}_strategic_conflict_risk_{goal_id}"
-            from app.graph_ontology import Node, NodeType
+        # Goal → GENERATES_RISK → Risk
+        risk_id = f"{decision_id}_strategic_conflict_risk_{goal_id}"
+        risk_node = Node(
+            id=risk_id,
+            type=NodeType.RISK,
+            label=f"Strategic conflict: {goal_name}",
+            properties={
+                "description": f"Cost expenditure conflicts with '{goal_name}' goal, generating strategic risk",
+                "severity": "medium",
+                "source": "strategic_conflict",
+                "goal_id": goal_id,
+            }
+        )
 
-            risk_node = Node(
-                id=risk_id,
-                type=NodeType.RISK,
-                label=f"전략 충돌: {goal_name}",
-                properties={
-                    "description": f"비용 지출이 '{goal_name}' 목표와 충돌하여 전략 리스크 발생",
-                    "severity": "Medium",
-                    "source": "strategic_conflict",
-                    "goal_id": goal_id
-                }
-            )
+        try:
+            await add_node_fn(risk_node)
+            nodes.append(risk_node)
+        except ValueError:
+            pass
 
-            try:
-                await add_node_fn(risk_node)
-                nodes.append(risk_node)
-            except ValueError:
-                pass
-
-            # Goal → GENERATES_RISK → Risk
-            risk_edge = create_edge(
-                f"goal_{goal_id}",
-                risk_id,
-                EdgePredicate.GENERATES_RISK,
-                reason="Strategic conflict generates risk"
-            )
-            await add_edge_fn(risk_edge)
-            edges.append(risk_edge)
+        risk_edge = Edge(
+            from_node=f"goal_{goal_id}",
+            to_node=risk_id,
+            predicate=EdgePredicate.GENERATES_RISK,
+            properties={"reason": "Strategic conflict generates risk"},
+        )
+        await add_edge_fn(risk_edge)
+        edges.append(risk_edge)
 
     logger.info(f"Added {len(edges)} cost-goal edges")
     return nodes, edges
@@ -559,14 +543,14 @@ async def add_rule_risk_edges(
         risk_desc = risk.get("description", "") if isinstance(risk, dict) else str(risk)
 
         # Skip strategic risks (handled in add_cost_goal_edges)
-        if "전략" in risk_desc or "strategic" in risk_desc.lower():
+        if "strategic" in risk_desc.lower():
             continue
 
         # Keyword matching to find related rule
         matched_rule_id = None
 
         # Check for budget/financial keywords
-        if any(kw in risk_desc for kw in ["예산", "비용", "budget", "cost", "financial"]):
+        if any(kw in risk_desc for kw in ["budget", "cost", "financial", "expenditure"]):
             # Find financial rule
             for r in visible_rules:
                 if r.get("rule_type") in ["financial", "capital_expenditure"]:
@@ -574,7 +558,7 @@ async def add_rule_risk_edges(
                     break
 
         # Check for compliance keywords
-        elif any(kw in risk_desc for kw in ["준법", "윤리", "규제", "compliance", "legal", "ethics"]):
+        elif any(kw in risk_desc for kw in ["compliance", "legal", "ethics", "regulatory", "privacy"]):
             # Find compliance rule
             for r in visible_rules:
                 if r.get("rule_type") == "compliance":
@@ -588,11 +572,11 @@ async def add_rule_risk_edges(
 
         # Create Rule → GENERATES_RISK → Risk edge
         if matched_rule_id:
-            edge = create_edge(
-                f"rule_{matched_rule_id}",
-                risk_id,
-                EdgePredicate.GENERATES_RISK,
-                risk_description=risk_desc[:100]
+            edge = Edge(
+                from_node=f"rule_{matched_rule_id}",
+                to_node=risk_id,
+                predicate=EdgePredicate.GENERATES_RISK,
+                properties={"risk_description": risk_desc[:100]},
             )
             await add_edge_fn(edge)
             edges.append(edge)

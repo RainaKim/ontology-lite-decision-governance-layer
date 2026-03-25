@@ -89,54 +89,10 @@ class CompanyListResponse(BaseModel):
 
 
 class CreateDecisionResponse(BaseModel):
-    """
-    POST /v1/decisions — 202 Accepted.
-
-    Caller should immediately open the stream_url SSE connection to receive
-    real-time pipeline progress events.
-    """
+    """POST /v1/decisions — 202 Accepted."""
     decision_id: str
     status: DecisionStatus = DecisionStatus.pending
     message: str = "Decision submitted for governance evaluation"
-    stream_url: str = Field(
-        description="SSE endpoint to connect to for real-time pipeline progress"
-    )
-
-
-# ---------------------------------------------------------------------------
-# SSE event models (GET /v1/decisions/{id}/stream)
-# ---------------------------------------------------------------------------
-
-
-class SSEStepEvent(BaseModel):
-    """
-    'event: step' payload — emitted as each pipeline step begins.
-
-    Serialized to JSON and sent as: `data: <json>\\n\\n`
-    """
-    decision_id: str
-    step: int = Field(ge=1, le=5)
-    label: str = Field(
-        description="One of: extracting, evaluating_governance, building_graph, reasoning, building_decision_pack"
-    )
-    message: str
-
-
-class SSECompleteEvent(BaseModel):
-    """
-    'event: complete' payload — emitted when pipeline finishes successfully.
-    UI should fetch result_url to get the full console payload.
-    """
-    decision_id: str
-    status: DecisionStatus = DecisionStatus.complete
-    result_url: str = Field(description="URL to fetch the full console payload")
-
-
-class SSEErrorEvent(BaseModel):
-    """'event: error' payload — emitted when pipeline fails."""
-    decision_id: str
-    status: DecisionStatus = DecisionStatus.failed
-    message: str
 
 
 # ---------------------------------------------------------------------------
@@ -467,21 +423,16 @@ class SimulationScenarioResponse(BaseModel):
     """One remediation scenario with its deterministically computed outcome."""
     scenarioId: str
     templateId: str
-    titleKo: str
-    titleEn: Optional[str] = None
-    changeSummaryKo: str
-    changeSummaryEn: Optional[str] = None
+    title: str
+    changeSummary: str
     issueTypes: list[str] = Field(default_factory=list)
     expectedOutcome: SimulationOutcomeResponse
     delta: SimulationDeltaResponse
     resolvedIssues: list[str] = Field(default_factory=list)
-    resolvedIssuesEn: list[str] = Field(default_factory=list)
     remainingIssues: list[str] = Field(default_factory=list)
-    remainingIssuesEn: list[str] = Field(default_factory=list)
     confidence: Optional[float] = None
     isRecommended: bool = False
-    rationaleKo: Optional[str] = Field(default=None, description="Nova-generated Korean rationale explaining why this remediation reduces risk")
-    rationaleEn: Optional[str] = Field(default=None, description="Nova-generated English rationale explaining why this remediation reduces risk")
+    rationale: Optional[str] = Field(default=None, description="Rationale explaining why this remediation reduces risk")
 
 
 class RiskResponseSimulationPayload(BaseModel):

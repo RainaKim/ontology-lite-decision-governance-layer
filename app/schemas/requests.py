@@ -5,7 +5,7 @@ These are the only models routers should accept from HTTP clients.
 Business logic uses domain models from app/schemas/domain.py.
 """
 
-from typing import Literal, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -41,30 +41,24 @@ class CreateDecisionRequest(BaseModel):
 
     use_nova_governance: bool = Field(
         default=False,
-        description=(
-            "Use Nova for governance evaluation. "
-            "Falls back to deterministic engine if unavailable."
-        ),
+        description="Deprecated — Nova removed. Kept for API compatibility. Value is ignored.",
     )
 
     use_nova_graph: bool = Field(
-        default=True,
-        description=(
-            "Use Nova for graph reasoning. "
-            "Falls back to deterministic subgraph analysis if unavailable."
-        ),
+        default=False,
+        description="Deprecated — Nova removed. Kept for API compatibility. Value is ignored.",
     )
 
-    lang: Literal["ko", "en"] = Field(
-        default="ko",
-        description="Language for company context and response labels. 'ko' (default) or 'en'.",
+    lang: str = Field(
+        default="en",
+        description="Language for company context and response labels.",
     )
 
     agent_name: str = Field(
         default="AI Agent",
         max_length=200,
         description="Name of the AI agent that proposed this decision.",
-        examples=["마케팅 AI Agent"],
+        examples=["Marketing AI Agent"],
     )
 
     agent_name_en: str = Field(

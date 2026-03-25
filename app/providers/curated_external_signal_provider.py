@@ -1,16 +1,15 @@
 """
-curated_external_signal_provider.py — Deterministic fallback external signal provider.
+curated_external_signal_provider.py — Deterministic external signal provider.
 
-Used when Nova generation fails or times out. Returns pre-computed, company-aware
-signals built directly from curated source JSON files.
+Returns pre-computed, company-aware signals built directly from curated source JSON files.
 
 Behavior:
   - Deterministic: same inputs always produce the same output
   - Company-aware: signal selection driven by company + decision type
   - Graceful: returns None (not error) when no signals can be produced
 
-Design contract: identical to Nova output — same ExternalSignalsPayload shape,
-same separation from internal governance evidence.
+Design contract: produces ExternalSignalsPayload with same separation from
+internal governance evidence.
 """
 
 from __future__ import annotations
@@ -155,8 +154,7 @@ def _select_sources(
 def _source_to_signal(src: dict, decision_text: str, signal_id: str) -> ExternalSignal:
     """Convert a curated source entry to an ExternalSignal."""
     source_type = src.get("sourceType", "industry_benchmark")
-    relevance_en = src.get("relevanceHintEn", "This benchmark provides relevant context for the current decision.")
-    relevance_ko = src.get("relevanceHintKo", "이 벤치마크는 현재 결정에 관련된 맥락을 제공합니다.")
+    relevance = src.get("relevanceHintEn", "This benchmark provides relevant context for the current decision.")
 
     summary_text = src.get("summaryText", "")
     # Trim summary to 1 sentence
@@ -165,12 +163,9 @@ def _source_to_signal(src: dict, decision_text: str, signal_id: str) -> External
     return ExternalSignal(
         id=signal_id,
         category=src.get("category", "operational_signal"),
-        titleKo=src.get("title", "외부 신호"),
-        titleEn=src.get("title", "External signal"),
-        summaryKo=summary_1s,
-        summaryEn=summary_1s,
-        decisionRelevanceKo=relevance_ko,
-        decisionRelevanceEn=relevance_en,
+        title=src.get("title", "External signal"),
+        summary=summary_1s,
+        decisionRelevance=relevance,
         confidence=0.70,  # deterministic fallback uses conservative confidence
         source=ExternalSignalSource(
             sourceId=src.get("sourceId", signal_id),

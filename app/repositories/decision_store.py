@@ -34,7 +34,7 @@ class DecisionRecord:
     # Request flags (captured at submission, control pipeline behavior)
     use_nova_governance: bool = False
     use_nova_graph: bool = False
-    lang: str = "ko"  # "ko" | "en"
+    lang: str = "en"
     agent_name: str = "AI Agent"
     agent_name_en: str = "AI Agent"
     # Pipeline outputs — all optional until pipeline completes
@@ -68,7 +68,7 @@ def create(
     input_text: str,
     use_nova_governance: bool = False,
     use_nova_graph: bool = False,
-    lang: str = "ko",
+    lang: str = "en",
     agent_name: str = "AI Agent",
     agent_name_en: str = "AI Agent",
     workspace_decision_id: Optional[str] = None,

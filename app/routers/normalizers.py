@@ -69,16 +69,16 @@ _FLAG_SEVERITY_MAP: dict[str, FlagSeverity] = {
 
 # Human-readable messages for common flags
 _FLAG_MESSAGES = {
-    "HIGH_FINANCIAL_RISK": "고위험 재무 지출이 포함된 의사결정입니다",
-    "BOARD_APPROVAL_REQUIRED": "이사회 승인 필요",
-    "PRIVACY_REVIEW_REQUIRED": "개인정보/보안 검토 필요",
-    "CRITICAL_CONFLICT": "의사결정 내 치명적 상충 항목이 존재합니다",
-    "HIGH_RISK": "고위험 의사결정으로 분류되었습니다",
-    "STRATEGIC_CRITICAL": "전략적 중요성이 매우 높은 의사결정입니다",
-    "MISSING_OWNER": "의사결정 실행 책임자가 지정되지 않았습니다",
-    "MISSING_RISK_ASSESSMENT": "리스크 평가가 누락되었습니다",
-    "FINANCIAL_THRESHOLD_EXCEEDED": "재무 승인 기준을 초과하였습니다",
-    "GOVERNANCE_COVERAGE_GAP": "이 의사결정 유형에 적용 가능한 거버넌스 규정이 없습니다 — 규정 추가 또는 수동 검토를 고려하세요",
+    "HIGH_FINANCIAL_RISK": "This decision involves high-risk financial expenditure",
+    "BOARD_APPROVAL_REQUIRED": "Board approval required",
+    "PRIVACY_REVIEW_REQUIRED": "Privacy/security review required",
+    "CRITICAL_CONFLICT": "Critical conflicting items exist within this decision",
+    "HIGH_RISK": "This decision has been classified as high risk",
+    "STRATEGIC_CRITICAL": "This decision has very high strategic importance",
+    "MISSING_OWNER": "No accountable owner has been assigned for this decision",
+    "MISSING_RISK_ASSESSMENT": "Risk assessment is missing",
+    "FINANCIAL_THRESHOLD_EXCEEDED": "Financial approval threshold exceeded",
+    "GOVERNANCE_COVERAGE_GAP": "No applicable governance rules for this decision type — consider adding rules or manual review",
 }
 
 
@@ -97,10 +97,10 @@ _FLAG_RELEVANT_RULE_TYPES: dict[str, set[str]] = {
 # Rule-type → broad keyword hints to ensure goals are found even when
 # rule descriptions don't explicitly repeat the goal's vocabulary
 _TYPE_HINT_KEYWORDS: dict[str, set[str]] = {
-    "compliance": {"규제", "준수", "COMPLIANCE", "HIPAA", "GDPR", "프라이버시", "데이터", "개인정보"},
-    "privacy":    {"프라이버시", "PII", "PHI", "데이터", "개인정보", "규제"},
-    "financial":  {"비용", "예산", "효율", "절감", "COST", "BUDGET"},
-    "strategic":  {"안전", "SAFETY", "환자", "PATIENT", "전략", "STRATEGIC", "임상"},
+    "compliance": {"COMPLIANCE", "HIPAA", "GDPR", "REGULATORY", "DATA", "PRIVACY"},
+    "privacy":    {"PRIVACY", "PII", "PHI", "DATA", "REGULATORY"},
+    "financial":  {"COST", "BUDGET", "EFFICIENCY", "REDUCTION"},
+    "strategic":  {"SAFETY", "PATIENT", "STRATEGIC", "CLINICAL"},
 }
 
 
@@ -507,8 +507,8 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
     }
     status = status_map.get(record.status, DecisionStatus.pending)
 
-    # Resolve effective lang: query param override → record lang → default "ko"
-    effective_lang = lang or getattr(record, "lang", "ko") or "ko"
+    # Resolve effective lang: query param override → record lang → default "en"
+    effective_lang = lang or getattr(record, "lang", "en") or "en"
 
     # Build company summary
     company_data = company_service.get_company_v1(record.company_id, lang=effective_lang)
@@ -610,7 +610,7 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
                 role = owner.get("role", "") if isinstance(owner, dict) else str(owner)
                 owner_roles.add(role)
             # If department-level owner exists, prefer them
-            department_owner_roles = {"재무팀장", "내부감사실장", "준법감시인", "정보보호최고책임자"}
+            department_owner_roles = {"Finance Team Lead", "Internal Audit Director", "Compliance Officer", "CISO"}
             if owner_roles & department_owner_roles:
                 inferred_owner = True
             elif owners:
@@ -621,7 +621,7 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
             for owner in owners:
                 role = owner.get("role", "") if isinstance(owner, dict) else str(owner)
                 owner_roles.add(role)
-            department_owner_roles = {"재무팀장", "내부감사실장", "준법감시인", "정보보호최고책임자"}
+            department_owner_roles = {"Finance Team Lead", "Internal Audit Director", "Compliance Officer", "CISO"}
             if owner_roles & department_owner_roles:
                 inferred_owner = True
             elif owners:
@@ -815,12 +815,10 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
         )
 
     # Build reasoning payload (available after step 4)
-    # Nova pipeline stores: {"source": "nova", "graph_reasoning": <formatted>, "nova_available": True}
     reasoning = None
     if record.reasoning:
         r = record.reasoning
         gr = r.get("graph_reasoning") or {}
-        is_nova = r.get("source") == "nova" and gr
         graph_analysis = gr.get("graph_analysis") or {}
 
         contradictions = [
@@ -837,29 +835,19 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
                 if desc:
                     recommendations.append(desc)
 
-        if is_nova:
-            reasoning = ReasoningPayload(
-                analysis_method="nova_reasoner",
-                logical_contradictions=contradictions,
-                graph_recommendations=recommendations,
-                confidence=graph_analysis.get("confidence", 0.0),
-                raw_analysis=gr,
-            )
-        else:
-            # Deterministic fallback — use extraction confidence as proxy
-            extraction_confidence = (
-                record.decision.get("confidence", 1.0)
-                if record.decision else 1.0
-            )
-            reasoning_confidence = graph_analysis.get("confidence") or extraction_confidence
+        extraction_confidence = (
+            record.decision.get("confidence", 1.0)
+            if record.decision else 1.0
+        )
+        reasoning_confidence = graph_analysis.get("confidence") or extraction_confidence
 
-            reasoning = ReasoningPayload(
-                analysis_method=r.get("source", "deterministic"),
-                logical_contradictions=contradictions,
-                graph_recommendations=recommendations,
-                confidence=reasoning_confidence,
-                raw_analysis=None,
-            )
+        reasoning = ReasoningPayload(
+            analysis_method=r.get("source", "deterministic"),
+            logical_contradictions=contradictions,
+            graph_recommendations=recommendations,
+            confidence=reasoning_confidence,
+            raw_analysis=None,
+        )
 
     # Build decision pack payload (available after step 5)
     decision_pack = None
@@ -1002,21 +990,16 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
                 SimulationScenarioResponse(
                     scenarioId=s["scenarioId"],
                     templateId=s["templateId"],
-                    titleKo=s["titleKo"],
-                    titleEn=s.get("titleEn"),
-                    changeSummaryKo=s["changeSummaryKo"],
-                    changeSummaryEn=s.get("changeSummaryEn"),
+                    title=s.get("titleEn") or s.get("title", ""),
+                    changeSummary=s.get("changeSummaryEn") or s.get("changeSummary", ""),
                     issueTypes=s.get("issueTypes", []),
                     expectedOutcome=SimulationOutcomeResponse(**s["expectedOutcome"]),
                     delta=SimulationDeltaResponse(**s.get("delta", {})),
-                    resolvedIssues=s.get("resolvedIssues", []),
-                    resolvedIssuesEn=s.get("resolvedIssuesEn", []),
-                    remainingIssues=s.get("remainingIssues", []),
-                    remainingIssuesEn=s.get("remainingIssuesEn", []),
+                    resolvedIssues=s.get("resolvedIssuesEn") or s.get("resolvedIssues", []),
+                    remainingIssues=s.get("remainingIssuesEn") or s.get("remainingIssues", []),
                     confidence=s.get("confidence"),
                     isRecommended=s.get("isRecommended", False),
-                    rationaleKo=s.get("rationaleKo"),
-                    rationaleEn=s.get("rationaleEn"),
+                    rationale=s.get("rationaleEn") or s.get("rationale"),
                 )
                 for s in sim.get("scenarios", [])
             ]
