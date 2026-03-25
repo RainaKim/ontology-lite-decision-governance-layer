@@ -758,6 +758,53 @@ def evaluate_governance(decision: Decision, company_context: dict = None, compan
     )
 
 
+async def enrich_approval_chain_from_graph(
+    approval_chain: list,
+    triggered_rule_ids: list[str],
+    company_id: str,
+    repo,  # BaseGraphRepository
+) -> list:
+    """
+    Optionally enrich the config-derived approval chain with graph traversal.
+
+    Queries Neo4j for REQUIRES_APPROVAL_FROM and ESCALATES_TO edges associated
+    with the triggered rules. Merges any graph-discovered actors into the chain
+    if not already present.
+
+    Returns the original chain if graph query fails or returns nothing new.
+    Non-fatal -- always returns something usable.
+    """
+    try:
+        results = await repo.get_approval_chain_for_rules(triggered_rule_ids, company_id)
+        if not results:
+            return approval_chain
+
+        # Collect existing approver roles/IDs in the chain
+        existing_roles = set()
+        for step in approval_chain:
+            role = step.role if hasattr(step, "role") else step.get("role", "")
+            existing_roles.add(role.upper())
+
+        # Merge graph actors into chain if not already present
+        for result in results:
+            actor_label = result.get("actor_label", "")
+            if actor_label and actor_label.upper() not in existing_roles:
+                existing_roles.add(actor_label.upper())
+                approval_chain.append(ApprovalChainStep(
+                    level=ApprovalLevel.DEPARTMENT_HEAD,
+                    role=actor_label,
+                    required=True,
+                    rationale=f"Graph traversal: REQUIRES_APPROVAL_FROM edge on rule {result.get('rule_id', '')}",
+                    source_rule_id=result.get("rule_id", ""),
+                    rule_action="require_approval",
+                ))
+    except Exception as exc:
+        logger.warning(f"enrich_approval_chain_from_graph failed (non-fatal): {exc}")
+        return approval_chain
+
+    return approval_chain
+
+
 def apply_governance_to_decision(decision: Decision, company_context: dict = None, company_id: str = None) -> Decision:
     """
     Apply governance evaluation and update decision object.
