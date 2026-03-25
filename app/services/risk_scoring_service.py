@@ -561,6 +561,23 @@ class RiskScoringService:
     Returns a RiskScoringResult which can be serialised with .to_dict().
     """
 
+    @staticmethod
+    def _get_risk_weights(company_config=None) -> dict:
+        """
+        Return risk dimension weights from CompanyConfig if available,
+        otherwise fall back to default weights.
+        """
+        if company_config is not None:
+            rw = getattr(company_config, "risk_weights", None)
+            if rw is not None:
+                return {
+                    "financial": rw.financial,
+                    "compliance": rw.compliance,
+                    "strategic": rw.strategic,
+                }
+        # Default weights
+        return {"financial": 0.40, "compliance": 0.35, "strategic": 0.25}
+
     def score(
         self,
         decision_payload: dict,
@@ -569,6 +586,8 @@ class RiskScoringService:
         graph_payload: Optional[dict],
         risk_semantics: Optional[dict] = None,
         company_id: Optional[str] = None,
+        graph_context: Optional[dict] = None,
+        company_config=None,
     ) -> RiskScoringResult:
         """
         Compute risk score.
@@ -599,7 +618,10 @@ class RiskScoringService:
             dims.append(comp_dim)
             confidence_deductions += comp_ded
 
-        strat_dim, strat_ded = self._strategic(dp, cp, triggered_rules, gr, rs, company_id=company_id)
+        strat_dim, strat_ded = self._strategic(
+            dp, cp, triggered_rules, gr, rs,
+            company_id=company_id, graph_context=graph_context,
+        )
         if strat_dim is not None:
             dims.append(strat_dim)
             confidence_deductions += strat_ded
@@ -609,7 +631,7 @@ class RiskScoringService:
             dims.append(proc_dim)
             confidence_deductions += proc_ded
 
-        aggregate = self._aggregate(dims, cp, confidence_deductions)
+        aggregate = self._aggregate(dims, cp, confidence_deductions, company_config=company_config)
 
         return RiskScoringResult(aggregate=aggregate, dimensions=dims)
 
@@ -993,6 +1015,7 @@ class RiskScoringService:
         gr: dict,
         rs: dict = None,
         company_id: Optional[str] = None,
+        graph_context: Optional[dict] = None,
     ) -> tuple[Optional[RiskDimension], int]:
         company_goals: list[dict] = cp.get("strategic_goals", [])
         raw_signals: list[RiskSignal] = []
@@ -1000,6 +1023,31 @@ class RiskScoringService:
 
         edges: list[dict] = gr.get("edges", [])
         nodes: list[dict] = gr.get("nodes", [])
+
+        # --- Graph context enrichment (Step 8a) ---
+        # If graph_context is provided (from Neo4j get_governance_context()),
+        # extract GOVERNED_BY and CONFLICTS_WITH edges for strategic scoring.
+        if graph_context:
+            gc_edges = graph_context.get("edges", [])
+            for gc_edge in gc_edges:
+                # Edge objects from get_governance_context() have .predicate, .from_node, .to_node
+                pred = getattr(gc_edge, "predicate", None) or (
+                    gc_edge.get("predicate") if isinstance(gc_edge, dict) else None
+                )
+                to_node = getattr(gc_edge, "to_node", None) or (
+                    gc_edge.get("to_node") if isinstance(gc_edge, dict) else None
+                )
+                from_node = getattr(gc_edge, "from_node", None) or (
+                    gc_edge.get("from_node") if isinstance(gc_edge, dict) else None
+                )
+                if pred and to_node:
+                    pred_str = pred if isinstance(pred, str) else str(pred)
+                    edge_dict = {
+                        "predicate": pred_str,
+                        "to_node": to_node,
+                        "from_node": from_node,
+                    }
+                    edges.append(edge_dict)
 
         node_by_id: dict[str, dict] = {}
         for n in nodes:
@@ -1554,31 +1602,46 @@ class RiskScoringService:
         dims: list[RiskDimension],
         cp: dict,
         confidence_deductions: int,
+        company_config=None,
     ) -> RiskAggregate:
         if not dims:
             return RiskAggregate(score=0, band="LOW", confidence=_CONF_MIN)
 
-        industry_code = (cp.get("company", {}).get("industry_code") or "").upper()
-        industry_text = (cp.get("company", {}).get("industry") or "").lower()
+        # --- CompanyConfig weights (Step 8a) ---
+        # If a CompanyConfig is provided, use its risk_weights directly.
+        # This replaces the industry-based if/else logic below.
+        config_weights = self._get_risk_weights(company_config)
 
-        if industry_code:
-            is_healthcare = industry_code == "HEALTHCARE"
-            is_public = industry_code in ("PUBLIC_SECTOR", "GOVERNMENT")
+        if company_config is not None:
+            # Use config-driven weights; procurement stays at default 0.20
+            default_weights: dict[str, float] = {
+                "financial":   config_weights["financial"],
+                "compliance":  config_weights["compliance"],
+                "strategic":   config_weights["strategic"],
+                "procurement": 0.20,
+            }
         else:
-            # Legacy fallback: substring matching when industry_code absent
-            is_healthcare = any(kw in industry_text for kw in ("health", "hospital", "medical"))
-            is_public = any(kw in industry_text for kw in ("government", "public", "gsa"))
+            # Legacy fallback: industry-code heuristic (backward compat)
+            industry_code = (cp.get("company", {}).get("industry_code") or "").upper()
+            industry_text = (cp.get("company", {}).get("industry") or "").lower()
 
-        default_weights: dict[str, float] = {
-            "financial":   0.40,
-            "compliance":  0.35,
-            "strategic":   0.25,
-            "procurement": 0.20,
-        }
-        if is_healthcare:
-            default_weights["compliance"] = 0.50
-        elif is_public:
-            default_weights["compliance"] = 0.45
+            if industry_code:
+                is_healthcare = industry_code == "HEALTHCARE"
+                is_public = industry_code in ("PUBLIC_SECTOR", "GOVERNMENT")
+            else:
+                is_healthcare = any(kw in industry_text for kw in ("health", "hospital", "medical"))
+                is_public = any(kw in industry_text for kw in ("government", "public", "gsa"))
+
+            default_weights = {
+                "financial":   0.40,
+                "compliance":  0.35,
+                "strategic":   0.25,
+                "procurement": 0.20,
+            }
+            if is_healthcare:
+                default_weights["compliance"] = 0.50
+            elif is_public:
+                default_weights["compliance"] = 0.45
 
         active_weights = {d.id: default_weights.get(d.id, 0.20) for d in dims}
         total_w = sum(active_weights.values())

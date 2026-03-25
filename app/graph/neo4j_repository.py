@@ -15,6 +15,7 @@ Usage
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Optional
 
 from app.config.neo4j import (
@@ -389,6 +390,193 @@ class Neo4jGraphRepository(BaseGraphRepository):
                 {"node": dict(r["node"]), "score": r["score"]}
                 async for r in result
             ]
+
+    # ------------------------------------------------------------------
+    # Graph RAG query methods (Step 8c)
+    # ------------------------------------------------------------------
+
+    async def get_rules_for_decision(self, company_id: str) -> list[dict]:
+        """Return all active Rule nodes with GOVERNED_BY goals and REQUIRES_APPROVAL_FROM actors."""
+        database = get_company_database(company_id)
+        prefix = f"{company_id}:"
+        cypher = (
+            "MATCH (r:Rule) WHERE r.id STARTS WITH $prefix "
+            "OPTIONAL MATCH (r)-[:GOVERNED_BY]->(g:Goal) "
+            "OPTIONAL MATCH (r)-[:REQUIRES_APPROVAL_FROM]->(a:Actor) "
+            "RETURN r.id AS rule_id, r.label AS label, properties(r) AS properties, "
+            "collect(DISTINCT {id: g.id, label: g.label}) AS goals, "
+            "collect(DISTINCT {id: a.id, label: a.label}) AS approvers"
+        )
+        async with self._driver.session(database=database) as session:
+            result = await session.run(cypher, prefix=prefix)
+            records = []
+            async for record in result:
+                goals = [g for g in record["goals"] if g.get("id") is not None]
+                approvers = [a for a in record["approvers"] if a.get("id") is not None]
+                records.append({
+                    "rule_id": record["rule_id"],
+                    "label": record["label"],
+                    "properties": dict(record["properties"]) if record["properties"] else {},
+                    "goals": goals,
+                    "approvers": approvers,
+                })
+            return records
+
+    async def get_approval_chain_for_rules(
+        self, rule_ids: list[str], company_id: str
+    ) -> list[dict]:
+        """Traverse REQUIRES_APPROVAL_FROM + ESCALATES_TO for given triggered rules."""
+        database = get_company_database(company_id)
+        cypher = (
+            "MATCH (r:Rule)-[:REQUIRES_APPROVAL_FROM]->(a:Actor) "
+            "WHERE r.id IN $rule_ids "
+            "OPTIONAL MATCH (a)-[:ESCALATES_TO*1..3]->(higher:Actor) "
+            "RETURN r.id AS rule_id, a.id AS actor_id, a.label AS actor_label, "
+            "collect(DISTINCT higher.label) AS escalation_chain"
+        )
+        async with self._driver.session(database=database) as session:
+            result = await session.run(cypher, rule_ids=rule_ids)
+            records = []
+            async for record in result:
+                escalation = [e for e in record["escalation_chain"] if e is not None]
+                records.append({
+                    "rule_id": record["rule_id"],
+                    "actor_id": record["actor_id"],
+                    "actor_label": record["actor_label"],
+                    "escalation_chain": escalation,
+                })
+            return records
+
+    async def get_goal_conflicts(
+        self, goal_ids: list[str], company_id: str
+    ) -> list[dict]:
+        """Find CONFLICTS_WITH edges between the given goals."""
+        database = get_company_database(company_id)
+        # Try both patterns: direct Goal-Goal and Goal-Conflict-Goal (reified)
+        cypher = (
+            "MATCH (g1:Goal)-[:CONFLICTS_WITH]-(g2:Goal) "
+            "WHERE g1.id IN $goal_ids AND g1.id < g2.id "
+            "RETURN g1.id AS goal1_id, g2.id AS goal2_id, "
+            "g1.label AS goal1_label, g2.label AS goal2_label, "
+            "'' AS conflict_label "
+            "UNION "
+            "MATCH (g1:Goal)-[:CONFLICTS_WITH]->(c:Conflict)<-[:CONFLICTS_WITH]-(g2:Goal) "
+            "WHERE g1.id IN $goal_ids AND g1.id < g2.id "
+            "RETURN g1.id AS goal1_id, g2.id AS goal2_id, "
+            "g1.label AS goal1_label, g2.label AS goal2_label, "
+            "c.label AS conflict_label"
+        )
+        async with self._driver.session(database=database) as session:
+            result = await session.run(cypher, goal_ids=goal_ids)
+            records = []
+            seen = set()
+            async for record in result:
+                key = (record["goal1_id"], record["goal2_id"])
+                if key not in seen:
+                    seen.add(key)
+                    records.append({
+                        "goal1_id": record["goal1_id"],
+                        "goal2_id": record["goal2_id"],
+                        "goal1_label": record["goal1_label"],
+                        "goal2_label": record["goal2_label"],
+                        "conflict_label": record["conflict_label"] or "",
+                    })
+            return records
+
+    async def get_gaps_for_rules(
+        self, rule_ids: list[str], company_id: str
+    ) -> list[dict]:
+        """Find HAS_GAP edges from triggered rules."""
+        database = get_company_database(company_id)
+        cypher = (
+            "MATCH (r)-[:HAS_GAP]->(gap:Gap) "
+            "WHERE r.id IN $rule_ids "
+            "RETURN r.id AS rule_id, gap.id AS gap_id, gap.label AS gap_label, "
+            "properties(gap) AS gap_properties"
+        )
+        async with self._driver.session(database=database) as session:
+            result = await session.run(cypher, rule_ids=rule_ids)
+            records = []
+            async for record in result:
+                records.append({
+                    "rule_id": record["rule_id"],
+                    "gap_id": record["gap_id"],
+                    "gap_label": record["gap_label"],
+                    "gap_properties": dict(record["gap_properties"]) if record["gap_properties"] else {},
+                })
+            return records
+
+    async def search_similar_decisions(
+        self,
+        decision_embedding: list[float],
+        company_id: str,
+        top_k: int = 5,
+    ) -> list[dict]:
+        """
+        Find similar past decisions via vector search, then enrich with
+        their triggered rules, approvers, and outcomes.
+        """
+        similar = await self.vector_search(
+            decision_embedding,
+            top_k,
+            company_id,
+            label="Decision",
+            index_name="decision_embeddings",
+        )
+        enriched = []
+        for item in similar:
+            node_props = item.get("node", {})
+            node_id = node_props.get("id", "")
+            try:
+                ctx = await self.get_governance_context(node_id, depth=1)
+            except Exception:
+                ctx = {}
+            enriched.append({
+                **node_props,
+                "score": item.get("score", 0.0),
+                "context": ctx,
+            })
+        return enriched
+
+    # ------------------------------------------------------------------
+    # Safe Cypher read (Step 8d)
+    # ------------------------------------------------------------------
+
+    _MUTATING_KEYWORDS = re.compile(
+        r'\b(CREATE|MERGE|SET|DELETE|DETACH|REMOVE|DROP|CALL\s*\{)\b',
+        re.IGNORECASE,
+    )
+    _LIMIT_PATTERN = re.compile(r'\bLIMIT\s+(\d+)\b', re.IGNORECASE)
+
+    async def safe_cypher_read(
+        self,
+        query: str,
+        params: Optional[dict] = None,
+        company_id: str = "default",
+        result_limit: int = 50,
+    ) -> list[dict]:
+        """Execute a read-only Cypher query with safety constraints."""
+        # 1. Reject mutations
+        if self._MUTATING_KEYWORDS.search(query):
+            raise ValueError(
+                "Mutating Cypher operations are not allowed in safe_cypher_read"
+            )
+
+        # 2. Enforce LIMIT
+        limit_match = self._LIMIT_PATTERN.search(query)
+        if limit_match:
+            existing_limit = int(limit_match.group(1))
+            if existing_limit > result_limit:
+                query = self._LIMIT_PATTERN.sub(f"LIMIT {result_limit}", query)
+        else:
+            query = query.rstrip().rstrip(";") + f" LIMIT {result_limit}"
+
+        # 3. Inject company_id as parameter
+        safe_params = dict(params or {})
+        safe_params["_company_id"] = company_id
+
+        # 4. Route to correct database
+        return await self.cypher_read(query, safe_params, company_id)
 
 
 # ---------------------------------------------------------------------------

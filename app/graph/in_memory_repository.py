@@ -187,6 +187,153 @@ class InMemoryGraphRepository(BaseGraphRepository):
         )
 
     # ------------------------------------------------------------------
+    # Graph RAG query methods (Step 8c)
+    # ------------------------------------------------------------------
+
+    async def get_rules_for_decision(self, company_id: str) -> list[dict]:
+        """Return all Rule nodes with GOVERNED_BY goals and REQUIRES_APPROVAL_FROM actors."""
+        prefix = f"{company_id}:"
+        rule_nodes = [
+            n for n in self._nodes.values()
+            if n.type == NodeType.RULE and n.id.startswith(prefix)
+        ]
+        results = []
+        for rule in rule_nodes:
+            goals = []
+            approvers = []
+            for edge in self._edges:
+                if edge.from_node == rule.id:
+                    pred = edge.predicate if isinstance(edge.predicate, str) else edge.predicate
+                    target = self._nodes.get(edge.to_node)
+                    if pred == EdgePredicate.GOVERNED_BY.value and target:
+                        goals.append({"id": target.id, "label": target.label})
+                    elif pred == EdgePredicate.REQUIRES_APPROVAL_FROM.value and target:
+                        approvers.append({"id": target.id, "label": target.label})
+            results.append({
+                "rule_id": rule.id,
+                "label": rule.label,
+                "properties": rule.properties,
+                "goals": goals,
+                "approvers": approvers,
+            })
+        return results
+
+    async def get_approval_chain_for_rules(
+        self, rule_ids: list[str], company_id: str
+    ) -> list[dict]:
+        """Traverse REQUIRES_APPROVAL_FROM + ESCALATES_TO edges."""
+        results = []
+        for rule_id in rule_ids:
+            # Find REQUIRES_APPROVAL_FROM edges from this rule
+            for edge in self._edges:
+                pred = edge.predicate if isinstance(edge.predicate, str) else edge.predicate
+                if (
+                    edge.from_node == rule_id
+                    and pred == EdgePredicate.REQUIRES_APPROVAL_FROM.value
+                ):
+                    actor = self._nodes.get(edge.to_node)
+                    if not actor:
+                        continue
+                    # Traverse ESCALATES_TO chain (up to 3 hops)
+                    escalation = []
+                    current_id = actor.id
+                    for _ in range(3):
+                        found_next = False
+                        for e2 in self._edges:
+                            p2 = e2.predicate if isinstance(e2.predicate, str) else e2.predicate
+                            if (
+                                e2.from_node == current_id
+                                and p2 == EdgePredicate.ESCALATES_TO.value
+                            ):
+                                higher = self._nodes.get(e2.to_node)
+                                if higher and higher.label not in escalation:
+                                    escalation.append(higher.label)
+                                    current_id = higher.id
+                                    found_next = True
+                                    break
+                        if not found_next:
+                            break
+                    results.append({
+                        "rule_id": rule_id,
+                        "actor_id": actor.id,
+                        "actor_label": actor.label,
+                        "escalation_chain": escalation,
+                    })
+        return results
+
+    async def get_goal_conflicts(
+        self, goal_ids: list[str], company_id: str
+    ) -> list[dict]:
+        """Find CONFLICTS_WITH edges between the given goals."""
+        results = []
+        seen = set()
+        for edge in self._edges:
+            pred = edge.predicate if isinstance(edge.predicate, str) else edge.predicate
+            if pred == EdgePredicate.CONFLICTS_WITH.value:
+                g1_id = edge.from_node
+                g2_id = edge.to_node
+                if g1_id in goal_ids or g2_id in goal_ids:
+                    # Normalize order for dedup
+                    key = tuple(sorted([g1_id, g2_id]))
+                    if key not in seen:
+                        seen.add(key)
+                        g1 = self._nodes.get(g1_id)
+                        g2 = self._nodes.get(g2_id)
+                        results.append({
+                            "goal1_id": key[0],
+                            "goal2_id": key[1],
+                            "goal1_label": g1.label if g1 else key[0],
+                            "goal2_label": g2.label if g2 else key[1],
+                            "conflict_label": "",
+                        })
+        return results
+
+    async def get_gaps_for_rules(
+        self, rule_ids: list[str], company_id: str
+    ) -> list[dict]:
+        """Find HAS_GAP edges from triggered rules."""
+        results = []
+        for edge in self._edges:
+            pred = edge.predicate if isinstance(edge.predicate, str) else edge.predicate
+            if (
+                pred == EdgePredicate.HAS_GAP.value
+                and edge.from_node in rule_ids
+            ):
+                gap = self._nodes.get(edge.to_node)
+                if gap:
+                    results.append({
+                        "rule_id": edge.from_node,
+                        "gap_id": gap.id,
+                        "gap_label": gap.label,
+                        "gap_properties": gap.properties,
+                    })
+        return results
+
+    async def search_similar_decisions(
+        self,
+        decision_embedding: list[float],
+        company_id: str,
+        top_k: int = 5,
+    ) -> list[dict]:
+        """Not supported by the in-memory backend (no vector index)."""
+        raise NotImplementedError(
+            "search_similar_decisions is only available on Neo4jGraphRepository."
+        )
+
+    async def safe_cypher_read(
+        self,
+        query: str,
+        params: Optional[dict] = None,
+        company_id: str = "default",
+        result_limit: int = 50,
+    ) -> list[dict]:
+        """Not supported by the in-memory backend."""
+        raise NotImplementedError(
+            "safe_cypher_read is only available on Neo4jGraphRepository. "
+            "Use InMemoryGraphRepository for unit tests that don't need Cypher."
+        )
+
+    # ------------------------------------------------------------------
     # Test helpers
     # ------------------------------------------------------------------
 

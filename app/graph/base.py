@@ -143,3 +143,103 @@ class BaseGraphRepository(ABC):
 
         Returns list of {"node": <property dict>, "score": float}.
         """
+
+    # ------------------------------------------------------------------
+    # Graph RAG query methods (Step 8c)
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    async def get_rules_for_decision(
+        self,
+        company_id: str,
+    ) -> list[dict]:
+        """
+        Return all active Rule nodes with conditions, consequences,
+        and GOVERNED_BY goals.
+
+        Returns list of dicts:
+            {rule_id, label, properties, goals: [...], approvers: [...]}
+        """
+
+    @abstractmethod
+    async def get_approval_chain_for_rules(
+        self,
+        rule_ids: list[str],
+        company_id: str,
+    ) -> list[dict]:
+        """
+        Traverse REQUIRES_APPROVAL_FROM + ESCALATES_TO for given triggered rules.
+
+        Returns list of dicts:
+            {rule_id, actor_id, actor_label, escalation_chain: [...]}
+        """
+
+    @abstractmethod
+    async def get_goal_conflicts(
+        self,
+        goal_ids: list[str],
+        company_id: str,
+    ) -> list[dict]:
+        """
+        Find CONFLICTS_WITH edges between the given goals.
+
+        Returns list of dicts:
+            {goal1_id, goal2_id, goal1_label, goal2_label, conflict_label}
+        """
+
+    @abstractmethod
+    async def get_gaps_for_rules(
+        self,
+        rule_ids: list[str],
+        company_id: str,
+    ) -> list[dict]:
+        """
+        Find HAS_GAP edges from triggered rules.
+
+        Returns list of dicts:
+            {rule_id, gap_id, gap_label, gap_properties}
+        """
+
+    @abstractmethod
+    async def search_similar_decisions(
+        self,
+        decision_embedding: list[float],
+        company_id: str,
+        top_k: int = 5,
+    ) -> list[dict]:
+        """
+        Find similar past decisions via vector search, then enrich with
+        their triggered rules, approvers, and outcomes.
+
+        Returns list of dicts: each is a vector search result enriched
+        with governance context.
+        """
+
+    @abstractmethod
+    async def safe_cypher_read(
+        self,
+        query: str,
+        params: Optional[dict] = None,
+        company_id: str = "default",
+        result_limit: int = 50,
+    ) -> list[dict]:
+        """
+        Execute a read-only Cypher query with safety constraints.
+
+        Safety guarantees:
+        1. Only MATCH, CALL, RETURN, WITH, WHERE, ORDER BY, UNWIND,
+           OPTIONAL MATCH are allowed.
+           Rejects: CREATE, MERGE, SET, DELETE, DETACH, REMOVE, DROP,
+           CALL {...} IN TRANSACTIONS.
+        2. company_id is injected as a parameter — callers cannot bypass
+           tenant isolation.
+        3. LIMIT is enforced: if the query contains no LIMIT, one is appended.
+           If it contains a LIMIT > result_limit, it is clamped.
+        4. Database routing uses get_company_database(company_id).
+
+        Returns:
+            list of dicts (property maps from Neo4j records)
+
+        Raises:
+            ValueError: if query contains mutating keywords
+        """
