@@ -1,0 +1,422 @@
+"""
+Governance Agent — LangGraph StateGraph for Layer 2 validation.
+
+Receives the deterministic Layer 1 GovernanceResult and dynamically
+reasons about:
+  - Precedent decisions (vector search)
+  - Governance gaps (graph traversal)
+  - Goal conflicts
+  - Verdict and confidence
+
+Pattern follows app/onboarding/onboarding_graph.py: StateGraph with
+typed state, tool nodes, and conditional edges.
+
+Usage
+-----
+    from app.validation.governance_agent import run_governance_agent
+
+    result = await run_governance_agent(
+        company_id="nexus_analytics",
+        decision_text="Hire 3 engineers at $150K each",
+        decision_payload={...},
+        governance_result=gov_result.to_dict(),
+        risk_scoring=risk_result,
+        graph_context=graph_ctx,
+        repo=repo,
+    )
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Optional
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.constants import END, START
+from langgraph.graph import StateGraph
+from langgraph.prebuilt import ToolNode
+
+from app.config.llm import get_llm
+from app.graph.base import BaseGraphRepository
+from app.validation.schemas import ValidationResult, ValidationState, _VALID_VERDICTS
+from app.validation.tools import create_tools
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# System prompt
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT = """\
+You are a governance agent for enterprise AI decision validation.
+
+Your role: given a proposed AI decision and its initial governance analysis, determine:
+1. Whether the decision should be APPROVED, REJECTED, ESCALATED, or REVIEWED
+2. What governance gaps exist
+3. What precedent decisions are most relevant
+4. A clear reasoning explanation for the decision-maker
+
+You have access to tools to query the governance knowledge graph, find similar past \
+decisions, and check for governance gaps.
+
+Rules:
+- Always check for similar past decisions before making a verdict
+- Always check for governance gaps in triggered rules
+- APPROVE only if all rules are satisfied and confidence > 0.85
+- ESCALATE if cost > $200K or critical compliance rules triggered
+- REJECT only if rules are clearly violated with no remediation path
+- REVIEW for uncertain cases, partial rule satisfaction, or detected gaps
+- Be concise in reasoning -- 2-4 sentences
+
+Verdict definitions:
+- APPROVE: decision is compliant, all approvals in place
+- REJECT: decision violates governance rules, cannot proceed
+- ESCALATE: decision needs higher authority sign-off
+- REVIEW: decision needs human review before proceeding
+
+After your analysis, you MUST output your final verdict as a JSON block:
+```json
+{
+  "verdict": "APPROVE|REJECT|ESCALATE|REVIEW",
+  "confidence": 0.0-1.0,
+  "reasoning": "your 2-4 sentence explanation"
+}
+```
+"""
+
+# ---------------------------------------------------------------------------
+# Max tool-calling rounds (prevents infinite loops)
+# ---------------------------------------------------------------------------
+
+_MAX_TOOL_ROUNDS = 3
+
+
+# ---------------------------------------------------------------------------
+# Graph builder
+# ---------------------------------------------------------------------------
+
+
+def build_governance_agent(repo: BaseGraphRepository):
+    """
+    Build and compile the LangGraph governance agent.
+
+    Args:
+        repo: Graph repository for tool queries (Neo4j or InMemory).
+
+    Returns:
+        Compiled LangGraph app (call .ainvoke() to run).
+    """
+    llm = get_llm("capable")
+    tools = create_tools(repo)
+    llm_with_tools = llm.bind_tools(tools)
+
+    # --- Node functions ---
+
+    async def agent_node(state: ValidationState) -> dict:
+        """LLM reasoning node -- may call tools or produce final verdict."""
+        messages = list(state.get("messages", []))
+
+        # On first call, inject system prompt and decision context
+        if not messages:
+            messages = _build_initial_messages(state)
+
+        response = await llm_with_tools.ainvoke(messages)
+        return {"messages": [response]}
+
+    tool_node = ToolNode(tools)
+
+    async def synthesize_node(state: ValidationState) -> dict:
+        """
+        Extract verdict/confidence/reasoning from the final AI message
+        and write to state.
+        """
+        messages = state.get("messages", [])
+        verdict, confidence, reasoning = _extract_verdict_from_messages(messages)
+
+        # Extract precedent and gap info from tool call results
+        precedent_decisions = _extract_precedents_from_messages(messages)
+        governance_gaps = _extract_gaps_from_messages(messages)
+
+        return {
+            "verdict": verdict,
+            "confidence": confidence,
+            "agent_reasoning": reasoning,
+            "precedent_decisions": precedent_decisions,
+            "governance_gaps": governance_gaps,
+        }
+
+    # --- Conditional edge: should we call tools or synthesize? ---
+
+    def should_continue(state: ValidationState) -> str:
+        """Decide whether to call tools, synthesize, or loop back."""
+        messages = state.get("messages", [])
+        if not messages:
+            return "synthesize"
+
+        last_message = messages[-1]
+
+        # Count how many tool rounds we've done
+        tool_rounds = sum(
+            1 for m in messages
+            if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
+        )
+
+        # If last message has tool calls and we haven't exceeded max rounds
+        if (
+            isinstance(last_message, AIMessage)
+            and getattr(last_message, "tool_calls", None)
+            and tool_rounds <= _MAX_TOOL_ROUNDS
+        ):
+            return "tools"
+
+        return "synthesize"
+
+    # --- Build the graph ---
+
+    graph = StateGraph(ValidationState)
+
+    graph.add_node("agent", agent_node)
+    graph.add_node("tools", tool_node)
+    graph.add_node("synthesize", synthesize_node)
+
+    graph.add_edge(START, "agent")
+    graph.add_conditional_edges(
+        "agent",
+        should_continue,
+        {"tools": "tools", "synthesize": "synthesize"},
+    )
+    graph.add_edge("tools", "agent")
+    graph.add_edge("synthesize", END)
+
+    return graph.compile()
+
+
+# ---------------------------------------------------------------------------
+# Convenience runner
+# ---------------------------------------------------------------------------
+
+
+async def run_governance_agent(
+    company_id: str,
+    decision_text: str,
+    decision_payload: dict,
+    governance_result: dict,
+    risk_scoring: Optional[dict],
+    graph_context: Optional[dict],
+    repo: BaseGraphRepository,
+) -> ValidationResult:
+    """
+    Run the governance agent and return a ValidationResult.
+
+    Non-fatal: returns a default ValidationResult on any error.
+    """
+    try:
+        agent = build_governance_agent(repo)
+        initial_state: ValidationState = {
+            "company_id": company_id,
+            "decision_text": decision_text,
+            "decision_payload": decision_payload,
+            "governance_result": governance_result,
+            "risk_scoring": risk_scoring,
+            "graph_context": graph_context,
+            "precedent_decisions": [],
+            "governance_gaps": [],
+            "goal_impacts": [],
+            "agent_reasoning": "",
+            "verdict": "REVIEW",
+            "confidence": 0.5,
+            "messages": [],
+            "external_signals": None,
+            "error": None,
+        }
+        final_state = await agent.ainvoke(
+            initial_state,
+            config={"recursion_limit": 15},
+        )
+        return ValidationResult(
+            verdict=final_state.get("verdict", "REVIEW"),
+            confidence=final_state.get("confidence", 0.5),
+            agent_reasoning=final_state.get("agent_reasoning", ""),
+            precedent_decisions=final_state.get("precedent_decisions", []),
+            governance_gaps=final_state.get("governance_gaps", []),
+            goal_impacts=final_state.get("goal_impacts", []),
+            triggered_rule_ids=[
+                r.get("rule_id", "")
+                for r in governance_result.get("triggered_rules", [])
+                if r.get("status") == "TRIGGERED"
+            ],
+            approval_chain=governance_result.get("approval_chain", []),
+        )
+    except Exception as exc:
+        logger.error(f"Governance agent failed: {exc}", exc_info=True)
+        return ValidationResult(
+            verdict="REVIEW",
+            confidence=0.3,
+            agent_reasoning=f"Agent error -- defaulting to REVIEW: {str(exc)[:200]}",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_initial_messages(state: ValidationState) -> list:
+    """Build the initial message list for the agent's first call."""
+    gov = state.get("governance_result", {})
+    risk = state.get("risk_scoring")
+    ctx = state.get("graph_context")
+
+    context_parts = [
+        f"Company: {state['company_id']}",
+        f"Decision: {state['decision_text']}",
+        "",
+        "--- Layer 1 Governance Result ---",
+        f"Triggered rules: {json.dumps(gov.get('triggered_rules', []), default=str)[:1000]}",
+        f"Flags: {gov.get('flags', [])}",
+        f"Requires human review: {gov.get('requires_human_review', False)}",
+        f"Approval chain: {json.dumps(gov.get('approval_chain', []), default=str)[:500]}",
+    ]
+
+    if risk:
+        agg = risk.get("aggregate", {})
+        context_parts.extend([
+            "",
+            "--- Risk Scoring ---",
+            f"Aggregate: score={agg.get('score', 'N/A')}, band={agg.get('band', 'N/A')}",
+        ])
+
+    if ctx:
+        meta = ctx.get("metadata", {})
+        context_parts.extend([
+            "",
+            "--- Graph Context ---",
+            f"Nodes: {meta.get('node_count', 0)}, Edges: {meta.get('edge_count', 0)}",
+        ])
+
+    context_text = "\n".join(context_parts)
+
+    return [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=(
+            f"Analyze this decision and determine the appropriate governance verdict.\n\n"
+            f"{context_text}\n\n"
+            f"Use the available tools to search for similar past decisions, check for "
+            f"governance gaps, and gather any additional context needed. Then provide "
+            f"your verdict."
+        )),
+    ]
+
+
+def _extract_verdict_from_messages(messages: list) -> tuple[str, float, str]:
+    """
+    Extract verdict, confidence, and reasoning from the final AI message.
+
+    Looks for a JSON block in the last AI message. Falls back to REVIEW
+    if parsing fails.
+    """
+    default = ("REVIEW", 0.5, "Unable to extract verdict from agent response")
+
+    # Find the last AI message (non-tool-call)
+    for msg in reversed(messages):
+        if isinstance(msg, AIMessage) and not getattr(msg, "tool_calls", None):
+            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            return _parse_verdict_json(content)
+
+    return default
+
+
+def _parse_verdict_json(text: str) -> tuple[str, float, str]:
+    """Parse a verdict JSON block from text."""
+    default = ("REVIEW", 0.5, text[:500] if text else "No response")
+
+    # Try to find JSON block
+    json_str = None
+    if "```json" in text:
+        parts = text.split("```json")
+        if len(parts) > 1:
+            json_part = parts[-1].split("```")[0]
+            json_str = json_part.strip()
+    elif "```" in text:
+        parts = text.split("```")
+        if len(parts) >= 3:
+            json_str = parts[1].strip()
+
+    # Also try to find raw JSON object
+    if json_str is None:
+        import re
+        match = re.search(r'\{[^{}]*"verdict"[^{}]*\}', text, re.DOTALL)
+        if match:
+            json_str = match.group(0)
+
+    if json_str is None:
+        # No JSON found -- extract verdict from text
+        return _extract_verdict_from_text(text)
+
+    try:
+        data = json.loads(json_str)
+        verdict = str(data.get("verdict", "REVIEW")).upper()
+        if verdict not in _VALID_VERDICTS:
+            verdict = "REVIEW"
+        confidence = float(data.get("confidence", 0.5))
+        confidence = max(0.0, min(1.0, confidence))
+        reasoning = str(data.get("reasoning", data.get("agent_reasoning", "")))
+        return verdict, confidence, reasoning
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return _extract_verdict_from_text(text)
+
+
+def _extract_verdict_from_text(text: str) -> tuple[str, float, str]:
+    """Fallback: extract verdict from plain text."""
+    upper = text.upper()
+    for v in ["ESCALATE", "REJECT", "APPROVE", "REVIEW"]:
+        if v in upper:
+            return v, 0.5, text[:500]
+    return "REVIEW", 0.5, text[:500]
+
+
+def _extract_precedents_from_messages(messages: list) -> list[dict]:
+    """Extract precedent decision data from tool call results."""
+    precedents = []
+    for msg in messages:
+        if hasattr(msg, "content") and isinstance(msg.content, str):
+            # ToolMessage content is the tool return value as a string
+            if "score" in msg.content and "decision" in msg.content.lower():
+                try:
+                    data = json.loads(msg.content)
+                    if isinstance(data, list):
+                        for item in data[:5]:
+                            if isinstance(item, dict) and "score" in item:
+                                precedents.append({
+                                    "decision_id": item.get("id", ""),
+                                    "similarity_score": item.get("score", 0.0),
+                                    "label": item.get("label", ""),
+                                    "rules_triggered": [],
+                                    "outcome": item.get("outcome"),
+                                })
+                except (json.JSONDecodeError, TypeError):
+                    pass
+    return precedents
+
+
+def _extract_gaps_from_messages(messages: list) -> list[dict]:
+    """Extract governance gap data from tool call results."""
+    gaps = []
+    for msg in messages:
+        if hasattr(msg, "content") and isinstance(msg.content, str):
+            if "gap" in msg.content.lower():
+                try:
+                    data = json.loads(msg.content)
+                    if isinstance(data, list):
+                        for item in data[:10]:
+                            if isinstance(item, dict) and "gap_label" in item:
+                                gaps.append({
+                                    "gap_type": "governance_config",
+                                    "description": item.get("gap_label", ""),
+                                    "severity": "medium",
+                                })
+                except (json.JSONDecodeError, TypeError):
+                    pass
+    return gaps
