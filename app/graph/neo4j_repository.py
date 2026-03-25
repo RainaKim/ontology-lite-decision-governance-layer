@@ -33,6 +33,23 @@ from app.ontology.node_types import MergeStrategy, NodeType, get_merge_strategy,
 logger = logging.getLogger(__name__)
 
 
+_ALLOWED_VECTOR_INDEXES = frozenset({"chunk_embeddings", "decision_embeddings"})
+
+
+def _validate_index_name(index_name: str) -> str:
+    """Validate index_name against an allowlist to prevent Cypher injection."""
+    if index_name not in _ALLOWED_VECTOR_INDEXES:
+        raise ValueError(
+            f"Unknown vector index: {index_name!r}. Allowed: {_ALLOWED_VECTOR_INDEXES}"
+        )
+    return index_name
+
+
+def _strip_string_literals(query: str) -> str:
+    """Replace quoted string literals with placeholders to avoid false positives."""
+    return re.sub(r"'[^']*'|\"[^\"]*\"", '""', query)
+
+
 class Neo4jGraphRepository(BaseGraphRepository):
     """
     Async Neo4j-backed graph repository.
@@ -79,6 +96,13 @@ class Neo4jGraphRepository(BaseGraphRepository):
                         f"Schema init statement skipped: {exc} | "
                         f"stmt: {statement[:80]}"
                     )
+            # Global index on id property — enables O(1) label-free node lookup
+            try:
+                await session.run(
+                    "CREATE INDEX global_id_index IF NOT EXISTS FOR (n) ON (n.id)"
+                )
+            except Exception as exc:
+                logger.warning(f"Global id index creation skipped: {exc}")
 
         logger.info(
             f"Schema initialized for company={company_id!r} "
@@ -185,28 +209,43 @@ class Neo4jGraphRepository(BaseGraphRepository):
         company_id = decision_id.split(":")[0]
         database = get_company_database(company_id)
 
-        cypher = """
-        MATCH (d {id: $id})
-        OPTIONAL MATCH (d)-[r1]-(n1)
-        OPTIONAL MATCH (n1)-[r2]-(n2)
-          WHERE n2.id <> $id
-        RETURN
-          d,
-          collect(DISTINCT n1) AS level1,
-          collect(DISTINCT n2) AS level2,
-          collect(DISTINCT {
-            from_id: CASE WHEN startNode(r1).id IS NOT NULL THEN startNode(r1).id ELSE '' END,
-            to_id:   CASE WHEN endNode(r1).id   IS NOT NULL THEN endNode(r1).id   ELSE '' END,
-            type:    type(r1),
-            props:   properties(r1)
-          }) AS edges1,
-          collect(DISTINCT {
-            from_id: CASE WHEN startNode(r2).id IS NOT NULL THEN startNode(r2).id ELSE '' END,
-            to_id:   CASE WHEN endNode(r2).id   IS NOT NULL THEN endNode(r2).id   ELSE '' END,
-            type:    type(r2),
-            props:   properties(r2)
-          }) AS edges2
-        """
+        if depth <= 1:
+            cypher = """
+            MATCH (d {id: $id})
+            OPTIONAL MATCH (d)-[r1]-(n1)
+            RETURN
+              d,
+              collect(DISTINCT n1) AS level1,
+              collect(DISTINCT {
+                from_id: CASE WHEN startNode(r1).id IS NOT NULL THEN startNode(r1).id ELSE '' END,
+                to_id:   CASE WHEN endNode(r1).id   IS NOT NULL THEN endNode(r1).id   ELSE '' END,
+                type:    type(r1),
+                props:   properties(r1)
+              }) AS edges1
+            """
+        else:
+            cypher = """
+            MATCH (d {id: $id})
+            OPTIONAL MATCH (d)-[r1]-(n1)
+            OPTIONAL MATCH (n1)-[r2]-(n2)
+              WHERE n2.id <> $id
+            RETURN
+              d,
+              collect(DISTINCT n1) AS level1,
+              collect(DISTINCT n2) AS level2,
+              collect(DISTINCT {
+                from_id: CASE WHEN startNode(r1).id IS NOT NULL THEN startNode(r1).id ELSE '' END,
+                to_id:   CASE WHEN endNode(r1).id   IS NOT NULL THEN endNode(r1).id   ELSE '' END,
+                type:    type(r1),
+                props:   properties(r1)
+              }) AS edges1,
+              collect(DISTINCT {
+                from_id: CASE WHEN startNode(r2).id IS NOT NULL THEN startNode(r2).id ELSE '' END,
+                to_id:   CASE WHEN endNode(r2).id   IS NOT NULL THEN endNode(r2).id   ELSE '' END,
+                type:    type(r2),
+                props:   properties(r2)
+              }) AS edges2
+            """
 
         async with self._driver.session(database=database) as session:
             result = await session.run(cypher, id=decision_id)
@@ -262,7 +301,10 @@ class Neo4jGraphRepository(BaseGraphRepository):
         # Build edge list (deduplicated)
         seen_edges: set[tuple] = set()
         edges: list[Edge] = []
-        for raw_list in (record["edges1"], record["edges2"]):
+        raw_edge_lists = [record["edges1"]]
+        if depth >= 2:
+            raw_edge_lists.append(record["edges2"])
+        for raw_list in raw_edge_lists:
             for raw in raw_list:
                 if not raw or not raw.get("type"):
                     continue
@@ -379,6 +421,7 @@ class Neo4jGraphRepository(BaseGraphRepository):
         Returns list of {"node": <property dict>, "score": float}.
         """
         database = get_company_database(company_id)
+        _validate_index_name(index_name)
         cypher = (
             f"CALL db.index.vector.queryNodes('{index_name}', $k, $embedding) "
             "YIELD node, score "
@@ -395,7 +438,7 @@ class Neo4jGraphRepository(BaseGraphRepository):
     # Graph RAG query methods (Step 8c)
     # ------------------------------------------------------------------
 
-    async def get_rules_for_decision(self, company_id: str) -> list[dict]:
+    async def get_all_rules(self, company_id: str) -> list[dict]:
         """Return all active Rule nodes with GOVERNED_BY goals and REQUIRES_APPROVAL_FROM actors."""
         database = get_company_database(company_id)
         prefix = f"{company_id}:"
@@ -514,7 +557,7 @@ class Neo4jGraphRepository(BaseGraphRepository):
     ) -> list[dict]:
         """
         Find similar past decisions via vector search, then enrich with
-        their triggered rules, approvers, and outcomes.
+        their triggered rules, approvers, and outcomes in a single batch query.
         """
         similar = await self.vector_search(
             decision_embedding,
@@ -523,18 +566,54 @@ class Neo4jGraphRepository(BaseGraphRepository):
             label="Decision",
             index_name="decision_embeddings",
         )
-        enriched = []
+        if not similar:
+            return []
+
+        # Build a map of node_id -> (props, score)
+        node_ids = []
+        item_map: dict[str, dict] = {}
         for item in similar:
             node_props = item.get("node", {})
             node_id = node_props.get("id", "")
+            if node_id:
+                node_ids.append(node_id)
+                item_map[node_id] = {
+                    "props": node_props,
+                    "score": item.get("score", 0.0),
+                }
+
+        # Batch fetch all context in a single query instead of N round-trips
+        context_map: dict[str, list[dict]] = {nid: [] for nid in node_ids}
+        if node_ids:
+            database = get_company_database(company_id)
+            batch_cypher = (
+                "MATCH (d) WHERE d.id IN $node_ids "
+                "OPTIONAL MATCH (d)-[r1]->(n1) "
+                "WHERE type(r1) IN ['TRIGGERED', 'APPROVED_BY', 'GOVERNED_BY'] "
+                "RETURN d.id AS decision_id, "
+                "collect(DISTINCT {rel: type(r1), node_id: n1.id, label: n1.label, "
+                "node_type: n1.node_type}) AS context"
+            )
             try:
-                ctx = await self.get_governance_context(node_id, depth=1)
+                async with self._driver.session(database=database) as session:
+                    result = await session.run(batch_cypher, node_ids=node_ids)
+                    async for record in result:
+                        did = record["decision_id"]
+                        ctx_items = [
+                            c for c in record["context"]
+                            if c.get("rel") is not None
+                        ]
+                        context_map[did] = ctx_items
             except Exception:
-                ctx = {}
+                pass  # Fall back to empty context on failure
+
+        enriched = []
+        for node_id in node_ids:
+            info = item_map[node_id]
             enriched.append({
-                **node_props,
-                "score": item.get("score", 0.0),
-                "context": ctx,
+                **info["props"],
+                "score": info["score"],
+                "context": context_map.get(node_id, []),
             })
         return enriched
 
@@ -543,7 +622,8 @@ class Neo4jGraphRepository(BaseGraphRepository):
     # ------------------------------------------------------------------
 
     _MUTATING_KEYWORDS = re.compile(
-        r'\b(CREATE|MERGE|SET|DELETE|DETACH|REMOVE|DROP|CALL\s*\{)\b',
+        r'\b(CREATE|MERGE|SET|DELETE|DETACH\s+DELETE|REMOVE|DROP|FOREACH|LOAD\s+CSV)\b'
+        r'|CALL\s*\{',
         re.IGNORECASE,
     )
     _LIMIT_PATTERN = re.compile(r'\bLIMIT\s+(\d+)\b', re.IGNORECASE)
@@ -555,27 +635,49 @@ class Neo4jGraphRepository(BaseGraphRepository):
         company_id: str = "default",
         result_limit: int = 50,
     ) -> list[dict]:
-        """Execute a read-only Cypher query with safety constraints."""
-        # 1. Reject mutations
-        if self._MUTATING_KEYWORDS.search(query):
+        """
+        Execute a read-only Cypher query with safety constraints.
+
+        Tenant isolation is enforced via database routing
+        (get_company_database(company_id)), not via query parameters.
+        """
+        # 1. Reject mutations — strip string literals first to avoid false positives
+        stripped = _strip_string_literals(query)
+        if self._MUTATING_KEYWORDS.search(stripped):
             raise ValueError(
                 "Mutating Cypher operations are not allowed in safe_cypher_read"
             )
 
         # 2. Enforce LIMIT
-        limit_match = self._LIMIT_PATTERN.search(query)
-        if limit_match:
-            existing_limit = int(limit_match.group(1))
-            if existing_limit > result_limit:
-                query = self._LIMIT_PATTERN.sub(f"LIMIT {result_limit}", query)
+        has_union = re.search(r'\bUNION\b', query, re.IGNORECASE) is not None
+        all_limits = list(self._LIMIT_PATTERN.finditer(query))
+
+        if all_limits:
+            if has_union:
+                # For UNION queries, only clamp the LAST LIMIT (applies to full result)
+                last_match = all_limits[-1]
+                existing_limit = int(last_match.group(1))
+                if existing_limit > result_limit:
+                    query = (
+                        query[:last_match.start()]
+                        + f"LIMIT {result_limit}"
+                        + query[last_match.end():]
+                    )
+            else:
+                # Non-UNION: replace the single LIMIT if too large (only first occurrence)
+                existing_limit = int(all_limits[0].group(1))
+                if existing_limit > result_limit:
+                    m = all_limits[0]
+                    query = (
+                        query[:m.start()]
+                        + f"LIMIT {result_limit}"
+                        + query[m.end():]
+                    )
         else:
             query = query.rstrip().rstrip(";") + f" LIMIT {result_limit}"
 
-        # 3. Inject company_id as parameter
+        # 3. Route to correct database
         safe_params = dict(params or {})
-        safe_params["_company_id"] = company_id
-
-        # 4. Route to correct database
         return await self.cypher_read(query, safe_params, company_id)
 
 

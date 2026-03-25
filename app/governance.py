@@ -14,7 +14,7 @@ Extension pattern — pure function extraction:
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from enum import Enum
 
 from app.schemas import Decision, ApprovalChainStep, ApprovalLevel
@@ -229,18 +229,6 @@ _STRATEGIC_IMPACT_BONUS: dict[str, float] = {
 }
 
 
-def _apply_translation(raw: dict, lang: str) -> dict:
-    """Apply English language overlay from a rules dict's 'translations' section.
-    Pure function — no I/O. Returns a merged dict with the translated fields."""
-    if "translations" not in raw:
-        return raw
-    translation = raw.get("translations", {}).get("en", {})
-    data = {**raw, **translation}
-    if "rules" in translation:
-        data["governance_rules"] = translation["rules"]
-    return data
-
-
 def load_rules(rules_path: str = None, company_id: str = None, lang: str = "en") -> dict:
     """Load governance rules, selecting by company_id and lang.
 
@@ -270,8 +258,7 @@ def load_rules(rules_path: str = None, company_id: str = None, lang: str = "en")
         logger.warning(f"Rules file not found: {rules_path} — returning empty rules")
         return {}
     with open(rules_path, 'r') as f:
-        raw = json.load(f)
-    return _apply_translation(raw, lang)
+        return json.load(f)
 
 
 def compute_risk_score(decision: Decision) -> float:
@@ -344,7 +331,7 @@ def find_role_in_hierarchy(role_name: str, rules_data: dict) -> dict:
     return None
 
 
-def extract_field_value(field: str, decision: Decision, company_context: dict) -> any:
+def extract_field_value(field: str, decision: Decision, company_context: dict) -> Any:
     """
     Generic field value extractor.
 
@@ -366,7 +353,7 @@ def extract_field_value(field: str, decision: Decision, company_context: dict) -
     return None
 
 
-def evaluate_company_rule(rule: dict, decision: Decision, company_context: dict) -> tuple[bool, any]:
+def evaluate_company_rule(rule: dict, decision: Decision, company_context: dict) -> tuple[bool, Any]:
     """
     Fully generic rule evaluation based on condition structure.
 
@@ -391,7 +378,7 @@ def evaluate_company_rule(rule: dict, decision: Decision, company_context: dict)
     return evaluate_single_condition(condition, decision, company_context)
 
 
-def evaluate_single_condition(condition: dict, decision: Decision, company_context: dict) -> tuple[bool, any]:
+def evaluate_single_condition(condition: dict, decision: Decision, company_context: dict) -> tuple[bool, Any]:
     """
     Generic condition evaluator.
 

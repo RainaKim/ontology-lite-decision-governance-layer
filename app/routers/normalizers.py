@@ -40,9 +40,18 @@ from app.schemas.responses import (
     RiskDimensionResponse,
     RiskSignalResponse,
     RiskEvidenceResponse,
+    ValidationPayload,
 )
 from app.repositories.decision_store import DecisionRecord
 from app.services import company_service
+
+
+def _get_department_owner_roles(company_config: Optional[dict]) -> set[str]:
+    """Load owner roles from company config if available, otherwise return empty set."""
+    if not company_config:
+        return set()
+    actors = company_config.get("actors", [])
+    return {a.get("role", "") for a in actors if a.get("is_department_owner", False)}
 
 
 # ---------------------------------------------------------------------------
@@ -515,7 +524,7 @@ def build_console_payload(
     effective_lang = lang or getattr(record, "lang", "en") or "en"
 
     # Build company summary
-    company_data = company_service.get_company_v1(record.company_id, lang=effective_lang)
+    company_data = company_service.get_company_v1(record.company_id, lang="en")
     company_summary = None
     if company_data:
         company_summary = CompanySummaryResponse(
@@ -537,7 +546,7 @@ def build_console_payload(
 
     # Raw company data (personnel hierarchy, rules) — used for owner enrichment
     # and approval chain name resolution throughout this function.
-    company_raw_data = company_service.get_company_data(record.company_id, lang=effective_lang)
+    company_raw_data = company_service.get_company_data(record.company_id, lang="en")
 
     # Build personnel role → person lookup once, shared across all enrichment steps
     _personnel_by_role: dict[str, dict] = {}
@@ -614,8 +623,8 @@ def build_console_payload(
                 role = owner.get("role", "") if isinstance(owner, dict) else str(owner)
                 owner_roles.add(role)
             # If department-level owner exists, prefer them
-            department_owner_roles = {"Finance Team Lead", "Internal Audit Director", "Compliance Officer", "CISO"}
-            if owner_roles & department_owner_roles:
+            department_owner_roles = _get_department_owner_roles(company_raw_data)
+            if department_owner_roles and owner_roles & department_owner_roles:
                 inferred_owner = True
             elif owners:
                 # If only escalation roles (CEO, CFO), do not infer owner
@@ -625,8 +634,8 @@ def build_console_payload(
             for owner in owners:
                 role = owner.get("role", "") if isinstance(owner, dict) else str(owner)
                 owner_roles.add(role)
-            department_owner_roles = {"Finance Team Lead", "Internal Audit Director", "Compliance Officer", "CISO"}
-            if owner_roles & department_owner_roles:
+            department_owner_roles = _get_department_owner_roles(company_raw_data)
+            if department_owner_roles and owner_roles & department_owner_roles:
                 inferred_owner = True
             elif owners:
                 inferred_owner = False
@@ -638,7 +647,7 @@ def build_console_payload(
             company_goals=company_goals,
         )
 
-        normalized_triggered, normalized_all = _normalize_rules(raw_triggered, record.company_id, effective_lang)
+        normalized_triggered, normalized_all = _normalize_rules(raw_triggered, record.company_id, "en")
         normalized_chain = _normalize_approval_chain(raw_chain, raw_triggered, company_raw_data, company_id=record.company_id)
 
         # Map governance status
@@ -693,10 +702,10 @@ def build_console_payload(
         raw_nodes = gp.get("nodes", []) or []
         raw_edges = gp.get("edges", []) or []
 
-        # EN lookups for label_en resolution (always use EN company data)
+        # EN lookups for label_en resolution (reuse already-fetched company data)
         _en_rules_by_id: dict[str, dict] = {}
         _en_goals_by_id: dict[str, dict] = {}
-        _en_company_data = company_service.get_company_data(record.company_id, lang="en")
+        _en_company_data = company_raw_data  # English-only — same data
         if _en_company_data:
             for _r in _en_company_data.get("governance_rules", []):
                 _rid = _r.get("rule_id")
@@ -1033,42 +1042,39 @@ def build_console_payload(
         except Exception:
             pass
 
-    # --- Governance Agent (Layer 2) validation result fields ---
+    # --- Governance Agent (Layer 2) validation result ---
     # Populated from an explicit validation_result parameter OR from the record.
     _vr = validation_result
     if _vr is None and getattr(record, "validation_result", None):
-        # Reconstruct from stored dict
         _vr_dict = record.validation_result
         if isinstance(_vr_dict, dict):
-            # Use duck-typed access
             _vr = _vr_dict
 
-    validation_verdict = None
-    validation_confidence = None
-    validation_reasoning = None
-    governance_gaps_out = None
-    similar_decisions_out = None
-
+    validation_payload = None
     if _vr is not None:
         if hasattr(_vr, "verdict"):
             # It's a ValidationResult Pydantic object
-            validation_verdict = _vr.verdict
-            validation_confidence = _vr.confidence
-            validation_reasoning = _vr.agent_reasoning
-            governance_gaps_out = [
-                g.model_dump() if hasattr(g, "model_dump") else g
-                for g in (_vr.governance_gaps or [])
-            ]
-            similar_decisions_out = [
-                p.model_dump() if hasattr(p, "model_dump") else p
-                for p in (_vr.precedent_decisions or [])[:3]
-            ]
+            validation_payload = ValidationPayload(
+                verdict=_vr.verdict,
+                confidence=_vr.confidence,
+                reasoning=_vr.agent_reasoning,
+                governance_gaps=[
+                    g.model_dump() if hasattr(g, "model_dump") else g
+                    for g in (_vr.governance_gaps or [])
+                ],
+                similar_decisions=[
+                    p.model_dump() if hasattr(p, "model_dump") else p
+                    for p in (_vr.precedent_decisions or [])[:3]
+                ],
+            )
         elif isinstance(_vr, dict):
-            validation_verdict = _vr.get("verdict")
-            validation_confidence = _vr.get("confidence")
-            validation_reasoning = _vr.get("agent_reasoning")
-            governance_gaps_out = _vr.get("governance_gaps")
-            similar_decisions_out = (_vr.get("precedent_decisions") or [])[:3]
+            validation_payload = ValidationPayload(
+                verdict=_vr.get("verdict"),
+                confidence=_vr.get("confidence"),
+                reasoning=_vr.get("agent_reasoning"),
+                governance_gaps=_vr.get("governance_gaps"),
+                similar_decisions=(_vr.get("precedent_decisions") or [])[:3],
+            )
 
     return ConsolePayloadResponse(
         decision_id=record.decision_id,
@@ -1088,9 +1094,5 @@ def build_console_payload(
         governance_evidence=governance_evidence,
         risk_response_simulation=simulation_payload,
         external_signals=external_signals_payload,
-        validation_verdict=validation_verdict,
-        validation_confidence=validation_confidence,
-        validation_reasoning=validation_reasoning,
-        governance_gaps=governance_gaps_out,
-        similar_decisions=similar_decisions_out,
+        validation=validation_payload,
     )

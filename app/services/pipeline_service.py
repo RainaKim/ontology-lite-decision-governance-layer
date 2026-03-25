@@ -2,13 +2,16 @@
 Pipeline Service - Async orchestrator for the full governance pipeline.
 
 Execution order (strict):
-  1. LLM extraction           (extractor.extract)
-  2. Governance evaluation    (governance.evaluate_governance)
-  3. Graph upsert + retrieval (graph_repository)
-  2d. Semantics inference     (risk_evidence_llm — OPTIONAL, non-fatal, currently stub)
-  2c. Risk Scoring            (risk_scoring_service — non-fatal, consumes semantics if available)
-  3. Deterministic reasoning stub (Nova removed — LangChain replacement pending)
-  4. Decision Pack            (decision_pack.build_decision_pack)
+  Step 1: LLM extraction           (extractor.extract)
+  Step 2: Decision context          (optional LLM — non-fatal)
+  Step 3: Governance evaluation     (governance.evaluate_governance)
+  Step 4: Graph upsert + retrieval  (graph_repository)
+  Step 5: Semantics inference       (optional LLM — non-fatal)
+  Step 6: Risk scoring              (risk_scoring_service — non-fatal)
+  Step 7: Governance agent          (LangGraph — non-fatal, requires Neo4j)
+  Step 8: Reasoning stub            (deterministic — Nova removed)
+  Step 9: Simulation + External Signals (parallel, non-fatal)
+  Step 10: Decision Pack            (decision_pack.build_decision_pack)
 
 Updates DecisionRecord at each step so the polling endpoint reflects progress.
 Never raises — stores error and marks record failed.
@@ -44,16 +47,10 @@ async def run_pipeline(
 
     try:
         # ── Step 1: Extraction ───────────────────────────────────────────────
-        # current_step stays 0 (processing) while extraction runs.
-        # Set to 1 AFTER extraction stores results → SSE emits "extraction_complete"
-        # unlocking the entities panel only when data is ready.
         decision_store.update_status(decision_id, "processing", current_step=0)
         logger.info(f"[{decision_id}] Step 1: Extraction")
 
-        # Run synchronous LLM call in a thread pool so the event loop stays free.
-        # Without this, the OpenAI HTTP call blocks the event loop for the full
-        # LLM latency (~2-3s), preventing the SSE generator from polling.
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         extraction_response = await loop.run_in_executor(
             None,
             lambda: extractor.extract(decision_text=record.input_text, request_id=decision_id, company_id=record.company_id),
@@ -67,12 +64,10 @@ async def run_pipeline(
             extraction_metadata=extraction_meta,
         )
         decision_store.update_status(decision_id, "processing", current_step=1)
-        logger.info(f"[{decision_id}] Step 1 complete → extraction_complete")
+        logger.info(f"[{decision_id}] Step 1 complete")
 
-        # ── Step 1b: Decision Context Extraction (optional LLM) ──────────────
-        # Extracts left-panel-safe structured entities from the raw decision text.
-        # Non-fatal: a failure here must not block the rest of the pipeline.
-        logger.info(f"[{decision_id}] Step 1b: Decision Context Extraction (optional LLM)")
+        # ── Step 2: Decision Context Extraction (optional LLM) ──────────────
+        logger.info(f"[{decision_id}] Step 2: Decision Context Extraction (optional LLM)")
         try:
             from app.services.decision_context_service import extract_decision_context
 
@@ -82,7 +77,6 @@ async def run_pipeline(
                     decision_text=record.input_text,
                     agent_name=record.agent_name,
                     agent_name_en=record.agent_name_en,
-                    lang=record.lang,
                 ),
             )
             if _ctx_result is not None:
@@ -99,14 +93,12 @@ async def run_pipeline(
                 exc_info=True,
             )
 
-        # ── Step 2: Governance evaluation + Graph ────────────────────────────
-        # Both governance and graph map to frontend step 2 ("policy_complete").
-        # Set to 2 only after BOTH finish so the panel unlocks with full data.
-        logger.info(f"[{decision_id}] Step 2: Governance evaluation")
+        # ── Step 3: Governance evaluation + Graph ────────────────────────────
+        logger.info(f"[{decision_id}] Step 3: Governance evaluation")
 
         from app.governance import evaluate_governance
 
-        company_data = company_service.get_company_data(record.company_id, lang=record.lang)
+        company_data = company_service.get_company_data(record.company_id, lang="en")
 
         logger.info(
             f"[{decision_id}] Governance input: "
@@ -121,7 +113,6 @@ async def run_pipeline(
             decision=decision_obj,
             company_context=company_data or {},
             company_id=record.company_id,
-            lang=record.lang,
         )
         gov_dict = gov_result.to_dict()
         derived = gov_dict.pop("derived_attributes", {})
@@ -132,7 +123,8 @@ async def run_pipeline(
             derived_attributes=derived,
         )
 
-        logger.info(f"[{decision_id}] Step 2b: Graph mapping")
+        # ── Step 4: Graph mapping ────────────────────────────────────────────
+        logger.info(f"[{decision_id}] Step 4: Graph mapping")
 
         graph_payload = None
         try:
@@ -160,13 +152,10 @@ async def run_pipeline(
             logger.error(f"[{decision_id}] Graph step failed (non-fatal): {e}", exc_info=True)
 
         decision_store.update_status(decision_id, "processing", current_step=2)
-        logger.info(f"[{decision_id}] Step 2 complete → policy_complete")
+        logger.info(f"[{decision_id}] Steps 3-4 complete")
 
-        # ── Step 2d: Optional Semantics Inference ───────────────────────────
-        # LLM classifies goal impacts + compliance facts as structured JSON.
-        # Non-fatal: None is stored when the call fails or API key is absent.
-        # Result is consumed by risk scoring (step 2c) as fallback input only.
-        logger.info(f"[{decision_id}] Step 2d: Semantics Inference (optional LLM)")
+        # ── Step 5: Optional Semantics Inference ─────────────────────────────
+        logger.info(f"[{decision_id}] Step 5: Semantics Inference (optional LLM)")
         _risk_semantics_dict: dict | None = None
         try:
             from app.services.risk_evidence_llm import infer_risk_semantics
@@ -176,7 +165,6 @@ async def run_pipeline(
             }
             _triggered_for_sem = gov_dict.get("triggered_rules", [])
 
-            loop = asyncio.get_event_loop()
             _semantics = await loop.run_in_executor(
                 None,
                 lambda: infer_risk_semantics(
@@ -204,11 +192,8 @@ async def run_pipeline(
                 exc_info=True,
             )
 
-        # ── Step 2c: Risk Scoring ────────────────────────────────────────────
-        # Runs after governance + graph so it has triggered_rules + goal edges.
-        # Consumes semantics (if available) as fallback for missing structural data.
-        # Non-fatal: a failure here must not block the rest of the pipeline.
-        logger.info(f"[{decision_id}] Step 2c: Risk Scoring")
+        # ── Step 6: Risk Scoring ─────────────────────────────────────────────
+        logger.info(f"[{decision_id}] Step 6: Risk Scoring")
         try:
             from app.services.risk_scoring_service import RiskScoringService
 
@@ -217,7 +202,7 @@ async def run_pipeline(
                 decision_payload=decision_obj.model_dump(),
                 company_payload=company_data or {},
                 governance_result={**gov_dict, "derived_attributes": derived},
-                graph_payload=graph_payload,
+                graph_data=graph_payload,
                 risk_semantics=_risk_semantics_dict,
                 company_id=record.company_id,
             )
@@ -226,7 +211,6 @@ async def run_pipeline(
                 risk_scoring=_risk_result.to_dict(),
             )
             # Sync derived_attributes.risk_level to the quantified risk scoring band
-            # so that the feed card and the detail view always show the same value.
             _band_to_level = {"LOW": "low", "MEDIUM": "medium", "HIGH": "high", "CRITICAL": "critical"}
             _synced_level = _band_to_level.get(_risk_result.aggregate.band.upper(), derived.get("risk_level", "medium"))
             derived = {**derived, "risk_level": _synced_level}
@@ -242,17 +226,17 @@ async def run_pipeline(
                 exc_info=True,
             )
 
-        # ── Step 2e: Governance Agent Validation (non-fatal) ─────────────────
-        # Runs Layer 2 governance agent when Neo4j is configured.
-        # Result stored on record for build_console_payload() to consume.
+        # ── Step 7: Governance Agent Validation (non-fatal) ──────────────────
         import os as _os
         if _os.getenv("NEO4J_URI"):
-            logger.info(f"[{decision_id}] Step 2e: Governance Agent Validation (Neo4j available)")
+            logger.info(f"[{decision_id}] Step 7: Governance Agent Validation (Neo4j available)")
+            _neo4j_repo = None
             try:
                 from app.validation.governance_agent import run_governance_agent
                 from app.graph.neo4j_repository import Neo4jGraphRepository
 
                 _neo4j_repo = Neo4jGraphRepository()
+                await _neo4j_repo.initialize(record.company_id or "nexus_analytics")
                 _validation_result = await run_governance_agent(
                     company_id=record.company_id or "nexus_analytics",
                     decision_text=record.input_text,
@@ -276,24 +260,27 @@ async def run_pipeline(
                     f"[{decision_id}] Governance agent validation failed (non-fatal): {_val_e}",
                     exc_info=True,
                 )
+            finally:
+                if _neo4j_repo is not None:
+                    try:
+                        await _neo4j_repo.close()
+                    except Exception:
+                        pass
         else:
-            logger.info(f"[{decision_id}] Step 2e: Governance Agent skipped (NEO4J_URI not set)")
+            logger.info(f"[{decision_id}] Step 7: Governance Agent skipped (NEO4J_URI not set)")
 
-        # ── Step 3: Reasoning (deterministic stub — Nova removed) ────────────
-        # Nova has been removed. LangChain-based replacement is pending.
-        # Returns a deterministic stub so the pipeline continues without error.
-        logger.info(f"[{decision_id}] Step 3: Reasoning (Nova removed — deterministic stub)")
+        # ── Step 8: Reasoning (deterministic stub — Nova removed) ────────────
+        logger.info(f"[{decision_id}] Step 8: Reasoning (deterministic stub)")
         reasoning = {
             "source": "deterministic",
             "graph_reasoning": None,
         }
         decision_store.store_results(decision_id, reasoning=reasoning)
         decision_store.update_status(decision_id, "processing", current_step=3)
-        logger.info(f"[{decision_id}] Step 3 complete → reasoning_complete (deterministic stub)")
+        logger.info(f"[{decision_id}] Step 8 complete")
 
-        # ── Steps 4b + 4c: Simulation & External Signals (parallel) ────────
-        # Both steps are independent and non-fatal. Run them concurrently.
-        logger.info(f"[{decision_id}] Steps 4b+4c: Simulation + External Signals (parallel)")
+        # ── Step 9: Simulation & External Signals (parallel) ─────────────────
+        logger.info(f"[{decision_id}] Step 9: Simulation + External Signals (parallel)")
 
         async def _run_simulation():
             try:
@@ -307,7 +294,6 @@ async def run_pipeline(
                     risk_scoring=record.risk_scoring or {},
                     company_payload=company_data or {},
                     company_id=record.company_id,
-                    lang=record.lang,
                 )
                 decision_store.store_results(decision_id, simulation=_sim_result)
                 n_scenarios = len(_sim_result.get("scenarios", []))
@@ -329,7 +315,6 @@ async def run_pipeline(
                     decision=decision_obj.model_dump(),
                     governance_result=gov_dict,
                     risk_scoring=record.risk_scoring,
-                    lang=record.lang,
                 )
                 if result is not None:
                     decision_store.store_results(
@@ -359,14 +344,11 @@ async def run_pipeline(
             _run_external_signals(),
         )
 
-        # ── Step 4: Decision Pack ────────────────────────────────────────────
-        # Set status=complete after pack is built → SSE emits "complete" event
-        logger.info(f"[{decision_id}] Step 4: Decision Pack")
+        # ── Step 10: Decision Pack ───────────────────────────────────────────
+        logger.info(f"[{decision_id}] Step 10: Decision Pack")
 
         from app.decision_pack import build_decision_pack
 
-        # Pass graph reasoning insights to decision pack so it can
-        # detect strategic misalignments.
         _graph_insights = (reasoning or {}).get("graph_reasoning")
 
         decision_pack = build_decision_pack(
@@ -374,7 +356,6 @@ async def run_pipeline(
             governance=gov_dict,
             company=company_data or {},
             graph_insights=_graph_insights,
-            lang=record.lang,
             risk_scoring=record.risk_scoring,
             external_signals=_ext_payload.model_dump() if _ext_payload else None,
             decision_context=record.decision_context,
@@ -395,7 +376,6 @@ async def run_pipeline(
                 if decision_obj.cost is not None:
                     _contract_value = int(decision_obj.cost)
 
-                # Derive workspace status from governance flags
                 _gov_flags = set(gov_dict.get("flags", []))
                 _blocking_flags = {
                     "HIGH_RISK", "CRITICAL_CONFLICT", "FINANCIAL_THRESHOLD_EXCEEDED",
@@ -437,5 +417,3 @@ async def run_pipeline(
     except Exception as e:
         logger.error(f"[{decision_id}] Pipeline failed: {e}", exc_info=True)
         decision_store.store_error(decision_id, str(e))
-
-

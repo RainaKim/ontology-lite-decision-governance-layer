@@ -32,7 +32,7 @@ from app.validation.tools import create_tools
 def mock_repo():
     """Create a mock BaseGraphRepository with all required async methods."""
     repo = AsyncMock()
-    repo.get_rules_for_decision = AsyncMock(return_value=[
+    repo.get_all_rules = AsyncMock(return_value=[
         {
             "rule_id": "nexus:rule:R1",
             "label": "CFO Approval Required",
@@ -289,11 +289,11 @@ class TestToolFunctions:
         result = await tool.ainvoke({"company_id": "nexus_analytics"})
         assert len(result) == 1
         assert result[0]["rule_id"] == "nexus:rule:R1"
-        mock_repo.get_rules_for_decision.assert_awaited_once_with("nexus_analytics")
+        mock_repo.get_all_rules.assert_awaited_once_with("nexus_analytics")
 
     @pytest.mark.asyncio
     async def test_search_governance_rules_error(self, mock_repo):
-        mock_repo.get_rules_for_decision = AsyncMock(side_effect=Exception("DB error"))
+        mock_repo.get_all_rules = AsyncMock(side_effect=Exception("DB error"))
         tools = create_tools(mock_repo)
         tool = next(t for t in tools if t.name == "search_governance_rules")
         result = await tool.ainvoke({"company_id": "nexus_analytics"})

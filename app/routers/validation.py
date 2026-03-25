@@ -10,10 +10,18 @@ No SSE, no streaming. Returns the complete validation result as JSON.
 from __future__ import annotations
 
 import logging
+import os
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
+
+from app.governance import evaluate_governance, load_company_config
+from app.graph.base import BaseGraphRepository
+from app.schemas import Decision
+from app.validation.governance_agent import run_governance_agent
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +51,10 @@ class ValidationRequest(BaseModel):
 class ValidationResponse(BaseModel):
     """Output of the validation endpoint."""
 
+    request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    validated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     decision_id: Optional[str] = None
     company_id: str
     verdict: str = Field(description="APPROVE | REJECT | ESCALATE | REVIEW")
@@ -62,7 +74,17 @@ class ValidationResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@router.post("", response_model=ValidationResponse)
+@router.post(
+    "",
+    response_model=ValidationResponse,
+    summary="Validate an AI-proposed decision",
+    description=(
+        "Runs the deterministic governance rule engine (Layer 1) "
+        "and the LangGraph governance agent (Layer 2) against the "
+        "company's governance ontology. Returns a synchronous verdict."
+    ),
+    response_description="Governance validation result including verdict, confidence, and reasoning",
+)
 async def validate_decision(request: ValidationRequest):
     """
     Validate an AI-proposed decision against company governance rules.
@@ -74,19 +96,48 @@ async def validate_decision(request: ValidationRequest):
     uses JWT + RBAC via a DB-backed user model. The validation endpoint will
     be wired into the auth layer when the full pipeline is deployed.
     """
+    # Phase 1: load company config and build Decision object
     try:
-        from app.validation.governance_agent import run_governance_agent
-        from app.graph.base import BaseGraphRepository
+        decision_obj = Decision(
+            decision_statement=request.decision_text,
+            goals=[],
+            kpis=[],
+            risks=[],
+            owners=[],
+            assumptions=[],
+            confidence=0.7,
+            **{
+                k: v
+                for k, v in request.decision_dimensions.items()
+                if k in Decision.model_fields
+            },
+        )
+        gov_result = evaluate_governance(
+            decision=decision_obj,
+            company_context={},
+            company_id=request.company_id,
+        )
+        gov_dict = gov_result.to_dict()
+    except Exception as e:
+        logger.error(f"Layer 1 governance evaluation failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Validation failed: governance evaluation error: {str(e)}",
+        )
 
-        # Use InMemoryGraphRepository as fallback when Neo4j is not configured
-        import os
-
-        repo: BaseGraphRepository
+    # Phase 2: run governance agent (Layer 2)
+    repo: BaseGraphRepository
+    try:
         if os.getenv("NEO4J_URI"):
             try:
                 from app.graph.neo4j_repository import Neo4jGraphRepository
 
                 repo = Neo4jGraphRepository()
+                try:
+                    await repo.initialize(request.company_id)
+                except Exception:
+                    await repo.close()
+                    raise
             except Exception:
                 from app.graph_repository import InMemoryGraphRepository
 
@@ -96,52 +147,33 @@ async def validate_decision(request: ValidationRequest):
 
             repo = InMemoryGraphRepository()
 
-        # Run Layer 1: deterministic governance
-        from app.governance import evaluate_governance, load_company_config
-        from app.schemas import Decision
-
-        # Build a minimal Decision object from request
-        decision_kwargs = {
-            "decision_statement": request.decision_text,
-            "goals": [],
-            "kpis": [],
-            "risks": [],
-            "owners": [],
-            "assumptions": [],
-            "confidence": 0.7,
-        }
-        # Map known dimensions onto Decision fields
-        dims = request.decision_dimensions
-        if "cost" in dims:
-            decision_kwargs["cost"] = dims["cost"]
-        if "headcount_change" in dims:
-            decision_kwargs["headcount_change"] = dims["headcount_change"]
-        if "uses_pii" in dims:
-            decision_kwargs["uses_pii"] = dims["uses_pii"]
-        if "involves_hiring" in dims:
-            decision_kwargs["involves_hiring"] = dims["involves_hiring"]
-        if "affects_compliance" in dims:
-            decision_kwargs["involves_compliance_risk"] = dims["affects_compliance"]
-
-        decision_obj = Decision(**decision_kwargs)
-        gov_result = evaluate_governance(
-            decision=decision_obj,
-            company_context={},
-            company_id=request.company_id,
-        )
-        gov_dict = gov_result.to_dict()
-
-        # Run Layer 2: governance agent
-        result = await run_governance_agent(
-            company_id=request.company_id,
-            decision_text=request.decision_text,
-            decision_payload=request.decision_dimensions,
-            governance_result=gov_dict,
-            risk_scoring=None,
-            graph_context=None,
-            repo=repo,
+        try:
+            result = await run_governance_agent(
+                company_id=request.company_id,
+                decision_text=request.decision_text,
+                decision_payload=request.decision_dimensions,
+                governance_result=gov_dict,
+                risk_scoring=None,
+                graph_context=None,
+                repo=repo,
+            )
+        finally:
+            if hasattr(repo, "close"):
+                try:
+                    await repo.close()
+                except Exception:
+                    pass
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Governance agent failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Validation failed: governance agent error: {str(e)}",
         )
 
+    # Phase 3: assemble response
+    try:
         return ValidationResponse(
             decision_id=None,
             company_id=request.company_id,
@@ -165,10 +197,9 @@ async def validate_decision(request: ValidationRequest):
                 for p in result.precedent_decisions[:3]
             ],
         )
-
     except Exception as e:
-        logger.error(f"Validation failed: {e}", exc_info=True)
+        logger.error(f"Response assembly failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Validation failed: {str(e)}",
+            detail=f"Validation failed: response assembly error: {str(e)}",
         )

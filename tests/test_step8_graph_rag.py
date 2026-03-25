@@ -111,10 +111,10 @@ def seeded_repo(repo):
 # ===========================================================================
 
 
-class TestGetRulesForDecision:
+class TestGetAllRules:
     def test_returns_rules_with_goals_and_approvers(self, seeded_repo):
         results = asyncio.get_event_loop().run_until_complete(
-            seeded_repo.get_rules_for_decision("nexus")
+            seeded_repo.get_all_rules("nexus")
         )
         assert len(results) == 3
         rule_ids = {r["rule_id"] for r in results}
@@ -129,7 +129,7 @@ class TestGetRulesForDecision:
 
     def test_returns_empty_for_unknown_company(self, seeded_repo):
         results = asyncio.get_event_loop().run_until_complete(
-            seeded_repo.get_rules_for_decision("unknown_company")
+            seeded_repo.get_all_rules("unknown_company")
         )
         assert results == []
 
@@ -311,12 +311,13 @@ class TestSafeCypherReadNeo4j:
         )
         assert "LIMIT 10" in captured["query"]
 
-    def test_injects_company_id_parameter(self):
+    def test_passes_params_through(self):
         repo = self._make_repo()
         captured = {}
 
         async def mock_cypher_read(query, params, company_id):
             captured["params"] = params
+            captured["company_id"] = company_id
             return []
 
         repo.cypher_read = mock_cypher_read
@@ -328,8 +329,10 @@ class TestSafeCypherReadNeo4j:
                 company_id="nexus",
             )
         )
-        assert captured["params"]["_company_id"] == "nexus"
+        # Tenant isolation is via database routing, not query params
+        assert "_company_id" not in captured["params"]
         assert captured["params"]["foo"] == "bar"
+        assert captured["company_id"] == "nexus"
 
 
 # ===========================================================================
@@ -493,7 +496,7 @@ class TestEnrichApprovalChainFromGraph:
 # ===========================================================================
 
 
-class TestNeo4jGetRulesForDecision:
+class TestNeo4jGetAllRules:
     def _make_repo_with_session(self):
         """Create a Neo4jGraphRepository with a properly mocked async session."""
         repo = object.__new__(Neo4jGraphRepository)
@@ -532,7 +535,7 @@ class TestNeo4jGetRulesForDecision:
         mock_session.run = mock_run_fn
 
         results = asyncio.get_event_loop().run_until_complete(
-            repo.get_rules_for_decision("nexus")
+            repo.get_all_rules("nexus")
         )
         assert len(results) == 1
         assert results[0]["rule_id"] == "nexus:rule:r1"
@@ -541,22 +544,44 @@ class TestNeo4jGetRulesForDecision:
 
 
 class TestNeo4jSearchSimilarDecisions:
-    def _make_repo(self):
+    def _make_repo_with_session(self):
+        """Create a Neo4jGraphRepository with a properly mocked async session."""
         repo = object.__new__(Neo4jGraphRepository)
-        repo._driver = AsyncMock()
-        return repo
+        mock_driver = MagicMock()
+        mock_session = AsyncMock()
 
-    def test_calls_vector_search_and_get_governance_context(self):
-        repo = self._make_repo()
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+        mock_driver.session.return_value = mock_ctx
+
+        repo._driver = mock_driver
+        return repo, mock_session
+
+    def test_calls_vector_search_and_batch_context(self):
+        repo, mock_session = self._make_repo_with_session()
 
         async def mock_vector_search(embedding, top_k, company_id, label, index_name):
             return [{"node": {"id": "nexus:decision:d1", "label": "Test"}, "score": 0.95}]
 
-        async def mock_get_governance_context(decision_id, depth=1):
-            return {"decision": None, "actors": [], "policies": [], "risks": [], "edges": []}
-
         repo.vector_search = mock_vector_search
-        repo.get_governance_context = mock_get_governance_context
+
+        # Mock the batch context query
+        mock_record = {
+            "decision_id": "nexus:decision:d1",
+            "context": [{"rel": "TRIGGERED", "node_id": "nexus:rule:r1", "label": "R1", "node_type": "Rule"}],
+        }
+
+        async def aiter_records():
+            for item in [mock_record]:
+                yield item
+
+        async def mock_run_fn(*args, **kwargs):
+            result = MagicMock()
+            result.__aiter__ = lambda _: aiter_records()
+            return result
+
+        mock_session.run = mock_run_fn
 
         results = asyncio.get_event_loop().run_until_complete(
             repo.search_similar_decisions([0.1] * 1536, "nexus", top_k=1)
@@ -565,3 +590,4 @@ class TestNeo4jSearchSimilarDecisions:
         assert results[0]["id"] == "nexus:decision:d1"
         assert results[0]["score"] == 0.95
         assert "context" in results[0]
+        assert len(results[0]["context"]) == 1

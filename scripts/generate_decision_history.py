@@ -163,18 +163,22 @@ async def write_decisions_to_neo4j(
         from app.graph.neo4j_repository import Neo4jGraphRepository
         repo = Neo4jGraphRepository()
 
-    from app.onboarding.transform.embedder import embed_text
+    from app.onboarding.transform.embedder import embed_chunks
     from app.ontology.models import Node
     from app.ontology.node_types import NodeType
 
+    # Batch embed all descriptions in a single API call
+    descriptions = [d.get("description", "") for d in decisions]
+    all_embeddings = await embed_chunks(descriptions)  # single API call
+
     written = 0
-    for decision in decisions:
+    for i, decision in enumerate(decisions):
         decision_id = decision.get("id", f"DEC-{written:03d}")
         description = decision.get("description", "")
         node_id = f"{company_id}:decision:{decision_id.lower().replace('-', '_')}"
 
-        # Embed the decision description
-        embedding = await embed_text(description)
+        # Use pre-computed embedding from batch call
+        embedding = all_embeddings[i] if all_embeddings else None
 
         node = Node(
             id=node_id,

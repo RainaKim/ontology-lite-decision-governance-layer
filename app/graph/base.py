@@ -149,7 +149,7 @@ class BaseGraphRepository(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    async def get_rules_for_decision(
+    async def get_all_rules(
         self,
         company_id: str,
     ) -> list[dict]:
@@ -230,9 +230,9 @@ class BaseGraphRepository(ABC):
         1. Only MATCH, CALL, RETURN, WITH, WHERE, ORDER BY, UNWIND,
            OPTIONAL MATCH are allowed.
            Rejects: CREATE, MERGE, SET, DELETE, DETACH, REMOVE, DROP,
-           CALL {...} IN TRANSACTIONS.
-        2. company_id is injected as a parameter — callers cannot bypass
-           tenant isolation.
+           FOREACH, LOAD CSV, CALL {...} subqueries.
+        2. Tenant isolation is enforced via database routing
+           (get_company_database(company_id)), not via query parameters.
         3. LIMIT is enforced: if the query contains no LIMIT, one is appended.
            If it contains a LIMIT > result_limit, it is clamped.
         4. Database routing uses get_company_database(company_id).
