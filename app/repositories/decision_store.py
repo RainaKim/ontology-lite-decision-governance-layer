@@ -50,6 +50,7 @@ class DecisionRecord:
     simulation: Optional[dict] = None
     decision_context: Optional[dict] = None
     external_signals: Optional[dict] = None
+    validation_result: Optional[dict] = None
     error: Optional[str] = None
     workspace_decision_id: Optional[str] = None  # DB decision ID to update after analysis
 
@@ -125,6 +126,7 @@ def store_results(
     simulation: dict = None,
     decision_context: dict = None,
     external_signals: dict = None,
+    validation_result: dict = None,
 ) -> None:
     """Persist pipeline outputs onto the record."""
     record = _store.get(decision_id)
@@ -154,6 +156,8 @@ def store_results(
         record.decision_context = decision_context
     if external_signals is not None:
         record.external_signals = external_signals
+    if validation_result is not None:
+        record.validation_result = validation_result
     record.updated_at = _now()
 
 

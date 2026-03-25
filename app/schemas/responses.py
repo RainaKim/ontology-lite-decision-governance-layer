@@ -510,3 +510,26 @@ class ConsolePayloadResponse(BaseModel):
     # Additive only. NEVER modifies internal governance decisions or evidence.
     # Separation from governance_evidence is enforced: these are external sources only.
     external_signals: Optional[ExternalSignalsPayload] = None
+
+    # --- Governance Agent (Layer 2) fields — populated by ValidationResult ---
+    # These are additive and Optional; the payload is backward compatible.
+    validation_verdict: Optional[str] = Field(
+        default=None,
+        description="Governance agent verdict: APPROVE | REJECT | ESCALATE | REVIEW",
+    )
+    validation_confidence: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Governance agent confidence in the verdict (0.0-1.0)",
+    )
+    validation_reasoning: Optional[str] = Field(
+        default=None,
+        description="Governance agent reasoning for the verdict (2-4 sentences)",
+    )
+    governance_gaps: Optional[list[dict[str, Any]]] = Field(
+        default=None,
+        description="Governance gaps detected by the governance agent",
+    )
+    similar_decisions: Optional[list[dict[str, Any]]] = Field(
+        default=None,
+        description="Similar past decisions found via vector search (top 3)",
+    )

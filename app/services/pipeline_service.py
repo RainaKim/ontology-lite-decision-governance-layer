@@ -242,6 +242,43 @@ async def run_pipeline(
                 exc_info=True,
             )
 
+        # ── Step 2e: Governance Agent Validation (non-fatal) ─────────────────
+        # Runs Layer 2 governance agent when Neo4j is configured.
+        # Result stored on record for build_console_payload() to consume.
+        import os as _os
+        if _os.getenv("NEO4J_URI"):
+            logger.info(f"[{decision_id}] Step 2e: Governance Agent Validation (Neo4j available)")
+            try:
+                from app.validation.governance_agent import run_governance_agent
+                from app.graph.neo4j_repository import Neo4jGraphRepository
+
+                _neo4j_repo = Neo4jGraphRepository()
+                _validation_result = await run_governance_agent(
+                    company_id=record.company_id or "nexus_analytics",
+                    decision_text=record.input_text,
+                    decision_payload=decision_obj.model_dump() if decision_obj else {},
+                    governance_result=gov_dict,
+                    risk_scoring=record.risk_scoring,
+                    graph_context=graph_payload,
+                    repo=_neo4j_repo,
+                )
+                decision_store.store_results(
+                    decision_id,
+                    validation_result=_validation_result.model_dump(),
+                )
+                logger.info(
+                    f"[{decision_id}] Governance agent complete — "
+                    f"verdict={_validation_result.verdict}, "
+                    f"confidence={_validation_result.confidence:.2f}"
+                )
+            except Exception as _val_e:
+                logger.warning(
+                    f"[{decision_id}] Governance agent validation failed (non-fatal): {_val_e}",
+                    exc_info=True,
+                )
+        else:
+            logger.info(f"[{decision_id}] Step 2e: Governance Agent skipped (NEO4J_URI not set)")
+
         # ── Step 3: Reasoning (deterministic stub — Nova removed) ────────────
         # Nova has been removed. LangChain-based replacement is pending.
         # Returns a deterministic stub so the pipeline continues without error.

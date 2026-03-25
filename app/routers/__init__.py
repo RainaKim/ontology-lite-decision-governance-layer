@@ -24,6 +24,7 @@ from app.routers.sso import router as sso_router
 from app.routers.workspace import router as workspace_router
 from app.routers.analysis import router as analysis_router
 from app.routers.agents import router as agents_router
+from app.routers.validation import router as validation_router
 
 __all__ = [
     "auth_router",
@@ -34,4 +35,5 @@ __all__ = [
     "workspace_router",
     "analysis_router",
     "agents_router",
+    "validation_router",
 ]
