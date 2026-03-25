@@ -492,7 +492,11 @@ def _build_decision_context_from_record(
 # Full Console Payload Builder
 # ---------------------------------------------------------------------------
 
-def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) -> ConsolePayloadResponse:
+def build_console_payload(
+    record: DecisionRecord,
+    lang: Optional[str] = None,
+    validation_result=None,
+) -> ConsolePayloadResponse:
     """
     Build the full ConsolePayloadResponse from a DecisionRecord.
 
@@ -1029,6 +1033,43 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
         except Exception:
             pass
 
+    # --- Governance Agent (Layer 2) validation result fields ---
+    # Populated from an explicit validation_result parameter OR from the record.
+    _vr = validation_result
+    if _vr is None and getattr(record, "validation_result", None):
+        # Reconstruct from stored dict
+        _vr_dict = record.validation_result
+        if isinstance(_vr_dict, dict):
+            # Use duck-typed access
+            _vr = _vr_dict
+
+    validation_verdict = None
+    validation_confidence = None
+    validation_reasoning = None
+    governance_gaps_out = None
+    similar_decisions_out = None
+
+    if _vr is not None:
+        if hasattr(_vr, "verdict"):
+            # It's a ValidationResult Pydantic object
+            validation_verdict = _vr.verdict
+            validation_confidence = _vr.confidence
+            validation_reasoning = _vr.agent_reasoning
+            governance_gaps_out = [
+                g.model_dump() if hasattr(g, "model_dump") else g
+                for g in (_vr.governance_gaps or [])
+            ]
+            similar_decisions_out = [
+                p.model_dump() if hasattr(p, "model_dump") else p
+                for p in (_vr.precedent_decisions or [])[:3]
+            ]
+        elif isinstance(_vr, dict):
+            validation_verdict = _vr.get("verdict")
+            validation_confidence = _vr.get("confidence")
+            validation_reasoning = _vr.get("agent_reasoning")
+            governance_gaps_out = _vr.get("governance_gaps")
+            similar_decisions_out = (_vr.get("precedent_decisions") or [])[:3]
+
     return ConsolePayloadResponse(
         decision_id=record.decision_id,
         status=status,
@@ -1047,4 +1088,9 @@ def build_console_payload(record: DecisionRecord, lang: Optional[str] = None) ->
         governance_evidence=governance_evidence,
         risk_response_simulation=simulation_payload,
         external_signals=external_signals_payload,
+        validation_verdict=validation_verdict,
+        validation_confidence=validation_confidence,
+        validation_reasoning=validation_reasoning,
+        governance_gaps=governance_gaps_out,
+        similar_decisions=similar_decisions_out,
     )
