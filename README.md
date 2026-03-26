@@ -11,7 +11,7 @@ The hard part isn't building the approval workflow. It's knowing what the compan
 The result is a system where AI agents can operate with real autonomy — and humans retain real accountability.
 
 ```
-AI Agent proposes: "Hire 3 senior ML engineers at $150K each"
+AI Agent proposes: "Build customer scoring using EU PII data"
                               │
                ┌──────────────▼──────────────┐
                │     Onboarding Graph         │
@@ -25,17 +25,23 @@ AI Agent proposes: "Hire 3 senior ML engineers at $150K each"
                │  (runs for every decision)   │
                │                             │
                │  Layer 1: Rule Engine        │
-               │    Triggered: R1 (>$50K CFO) │
-               │    Triggered: R2 (Board)     │
-               │    Triggered: R5 (Hiring)    │
-               │    Approval: CFO → Board     │
-               │    Risk: 61 MEDIUM           │
+               │    Triggered: R3 (PII)       │
+               │    Triggered: R6 (flag)      │
+               │    Approval: General Counsel │
+               │                             │
+               │  External Signals (Tavily)   │
+               │    "GDPR enforcement up 40%" │
+               │    RiskAdjustment: +9 compl. │ ← adjusts score before aggregate
+               │                             │
+               │  Risk Scoring                │
+               │    Compliance: 70 → 83 HIGH  │ ← external signal applied
+               │    Aggregate: MEDIUM → HIGH  │
                │                             │
                │  Layer 2: Governance Agent   │
                │    (LangGraph, max 3 rounds) │
                │    Graph RAG + Vector RAG    │
-               │    Gap detection             │
-               │    Verdict: ESCALATE 0.94    │
+               │    External context in prompt│
+               │    Verdict: ESCALATE 0.95    │
                └──────────────┬──────────────┘
                               │
                ┌──────────────▼──────────────┐
@@ -139,6 +145,33 @@ Three independent dimensions, each 0-100:
 Bands: 0-39 LOW · 40-69 MEDIUM · 70-84 HIGH · 85-100 CRITICAL
 
 Every score carries evidence — human-readable labels, source attribution, and confidence. No score is a black box.
+
+**External signal adjustments** are applied before the aggregate is computed. When Tavily returns a relevant regulatory or market signal, the LLM extracts a structured `RiskAdjustment` (dimension, delta -15 to +15, confidence-weighted) that shifts the affected dimension score. A GDPR enforcement trend pushing compliance from 70 → 83 is treated as a first-class risk input, not a footnote.
+
+### External Signals
+
+Real-time market and regulatory context fetched per decision via Tavily search + LLM synthesis:
+
+```
+Decision context → Tavily queries (1-2 targeted)
+       │
+       ▼
+Raw search results → LLM (fast tier) → ExternalSignal[] + RiskAdjustment[]
+       │                                       │
+       │                               ← applied to risk scores
+       │
+       ▼
+Governance agent receives signal summaries as context
+```
+
+| Signal Type | Examples |
+|-------------|---------|
+| `regulatory_guidance` | "GDPR enforcement actions up 40% in 2024" → +9 compliance |
+| `market_benchmark` | "ML engineer median comp $185K — your $150K is below market" → -5 financial |
+| `trend_signal` | "Series B hiring freeze trend — 60% of peers paused headcount" → +6 strategic |
+| `industry_benchmark` | "AWS reserved pricing dropped 12% this quarter" → -4 financial |
+
+Falls back to curated static signals when `TAVILY_API_KEY` is not set. All failures are non-fatal.
 
 ---
 
@@ -245,6 +278,7 @@ capable_llm = get_llm("capable")  # governance agent synthesis
 | Graph + vector storage | Neo4j 5.11+ — native vector index, no separate vector store |
 | Embeddings | OpenAI text-embedding-3-small (1536d) |
 | Validation | Pydantic v2 — all LLM outputs validated before use |
+| External signals | Tavily search + LLM synthesis → `RiskAdjustment[]` |
 | Database | SQLite (dev) + SQLAlchemy ORM + Alembic |
 | Auth | JWT + RBAC + Google OAuth2 + Azure AD OIDC |
 
@@ -296,6 +330,26 @@ curl -X POST http://localhost:8001/v1/validate \
     "financial": { "score": 72 },
     "compliance_privacy": { "score": 0 },
     "strategic": { "score": 50 }
+  },
+  "external_signals": {
+    "marketSignals": [
+      {
+        "title": "ML Engineer Compensation Benchmarks — B2B SaaS 2024",
+        "summary": "Median ML engineer comp in B2B SaaS reached $185K in 2024.",
+        "decisionRelevance": "Your proposed $150K is 19% below market, which may affect hiring success.",
+        "confidence": 0.82
+      }
+    ],
+    "regulatorySignals": [],
+    "operationalSignals": [],
+    "riskAdjustments": [
+      {
+        "dimension": "financial",
+        "delta": -4,
+        "rationale": "Below-market comp reduces absolute spend risk but signals potential quality risk.",
+        "confidence": 0.75
+      }
+    ]
   }
 }
 ```
@@ -396,6 +450,8 @@ cp .env.example .env
 #   NEO4J_USER=neo4j
 #   NEO4J_PASSWORD=password
 #   NEO4J_DB_NEXUS_ANALYTICS=neo4j
+# Optional (live external signals):
+#   TAVILY_API_KEY=tvly-...   ← without this, falls back to curated static signals
 
 # 3. Database migrations
 alembic upgrade head
