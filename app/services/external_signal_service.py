@@ -21,7 +21,7 @@ import logging
 from pathlib import Path
 from typing import Optional, Protocol
 
-from app.schemas.external_signals import ExternalSignalsPayload
+from app.schemas.external_signals import ExternalSignal, ExternalSignalSource, ExternalSignalsPayload, RiskAdjustment
 
 logger = logging.getLogger(__name__)
 
@@ -99,41 +99,17 @@ def build_external_signals(
     decision: dict,
     governance_result: dict,
     risk_scoring: Optional[dict],
-    lang: str = "en",
     live_provider: Optional[LiveFetchProvider] = None,
 ) -> Optional[ExternalSignalsPayload]:
     """
-    Orchestrate the full external signal retrieval pipeline.
+    Orchestrate external signal retrieval: Tavily live search → LLM synthesis → curated fallback.
 
-    Args:
-        company_id:         Company ID from the decision record.
-        decision:           Decision dict (from decision_obj.model_dump()).
-        governance_result:  Governance evaluation dict (gov_dict).
-        risk_scoring:       Risk scoring result dict (record.risk_scoring), may be None.
-        lang:               Language code "ko" | "en".
-        live_provider:      Optional live fetch provider (defaults to best-effort stub).
-
-    Returns:
-        ExternalSignalsPayload if signals were generated, else None.
+    Returns ExternalSignalsPayload with riskAdjustments populated when live search succeeds.
+    Falls back to curated signals (no adjustments) when Tavily is unavailable.
     """
     try:
         profile = load_company_external_profile(company_id)
-        if profile is None:
-            logger.info(
-                f"[external_signals][{company_id}] No external profile found — skipping"
-            )
-            return None
 
-        query_context = infer_external_signal_query_context(
-            decision, governance_result, risk_scoring, company_id
-        )
-
-        # Step 3: Live fetch hook (best-effort stub — currently always returns [])
-        provider = live_provider or _DEFAULT_LIVE_PROVIDER
-        live_query = _build_live_query(profile, query_context)
-        retrieve_live_sources(provider, live_query)
-
-        # Build structured context dicts for curated fallback
         decision_type = _infer_decision_type(decision)
         decision_context = {
             "decision_text": decision.get("decision_statement", ""),
@@ -144,17 +120,48 @@ def build_external_signals(
         }
         triggered_rules = (governance_result or {}).get("triggered_rules", [])
 
-        # Step 4: Curated fallback
-        logger.info(
-            f"[external_signals][{company_id}] Using curated fallback"
-        )
-        from app.providers.curated_external_signal_provider import get_fallback_signals
+        # ── Attempt Tavily live fetch ──────────────────────────────────────────
+        import os as _os
+        if _os.getenv("TAVILY_API_KEY"):
+            try:
+                from app.providers.tavily_live_fetch_provider import fetch_and_synthesize
 
+                company_profile = profile or {}
+                raw_signals, raw_adjustments = fetch_and_synthesize(
+                    decision_context=decision_context,
+                    company_profile=company_profile,
+                    triggered_rules=triggered_rules,
+                )
+
+                if raw_signals:
+                    signals = _convert_synthesized_signals(raw_signals)
+                    adjustments = _convert_synthesized_adjustments(raw_adjustments)
+                    payload = _group_signals_into_payload(signals, adjustments)
+                    logger.info(
+                        "[external_signals][%s] Tavily live — %d signals, %d adjustments",
+                        company_id,
+                        len(signals),
+                        len(adjustments),
+                    )
+                    return payload
+                else:
+                    logger.info("[external_signals][%s] Tavily returned no signals — using curated fallback", company_id)
+            except Exception as _te:
+                logger.warning("[external_signals][%s] Tavily fetch failed (non-fatal): %s", company_id, _te, exc_info=True)
+
+        # ── Curated fallback ──────────────────────────────────────────────────
+        if profile is None:
+            logger.info("[external_signals][%s] No profile and no Tavily key — skipping", company_id)
+            return None
+
+        logger.info("[external_signals][%s] Using curated fallback", company_id)
+        from app.providers.curated_external_signal_provider import get_fallback_signals
         return get_fallback_signals(company_id, decision_context, triggered_rules)
 
     except Exception as exc:
         logger.warning(
-            f"[external_signals][{company_id}] Signal retrieval failed (non-fatal): {exc}",
+            "[external_signals][%s] Signal retrieval failed (non-fatal): %s",
+            company_id, exc,
             exc_info=True,
         )
         return None
@@ -353,3 +360,83 @@ def _infer_strategic_impact(governance_result: Optional[dict]) -> str:
         if any(kw in flag.upper() for kw in _STRATEGIC_IMPACT_KEYWORDS):
             return "Potential strategic conflict"
     return "N/A"
+
+
+# ── Tavily synthesis converters ───────────────────────────────────────────────
+
+
+def _convert_synthesized_signals(raw_signals: list[dict]) -> list[ExternalSignal]:
+    """Convert LLM-synthesized signal dicts to ExternalSignal objects."""
+    result = []
+    for i, s in enumerate(raw_signals):
+        try:
+            signal = ExternalSignal(
+                id=s.get("id", f"EXT_SIG_{i+1:03d}"),
+                category=s.get("category", "market_benchmark"),
+                title=s.get("title", "External Signal"),
+                summary=s.get("summary", ""),
+                decisionRelevance=s.get("decision_relevance", ""),
+                confidence=s.get("confidence", 0.6),
+                source=ExternalSignalSource(
+                    sourceId=s.get("id", f"SRC_{i+1:03d}"),
+                    title=s.get("source_title", s.get("title", "Unknown Source")),
+                    sourceLabel=s.get("source_title", "External")[:30],
+                    sourceType=s.get("source_type", "market_research"),
+                    url=s.get("url"),
+                    recency="recent",
+                ),
+                tags=s.get("tags", []),
+            )
+            result.append(signal)
+        except Exception as e:
+            logger.warning("[external_signals] Failed to convert signal %d: %s", i, e)
+    return result
+
+
+def _convert_synthesized_adjustments(raw_adjustments: list[dict]) -> list[RiskAdjustment]:
+    """Convert LLM-synthesized adjustment dicts to RiskAdjustment objects."""
+    result = []
+    _valid_dimensions = {"financial", "compliance", "strategic"}
+    for adj in raw_adjustments:
+        try:
+            dim = adj.get("dimension", "")
+            if dim not in _valid_dimensions:
+                continue
+            result.append(RiskAdjustment(
+                dimension=dim,
+                delta=max(-15, min(15, int(adj.get("delta", 0)))),
+                rationale=adj.get("rationale", ""),
+                confidence=float(adj.get("confidence", 0.5)),
+                source_signal_id=adj.get("source_signal_id", ""),
+            ))
+        except Exception as e:
+            logger.warning("[external_signals] Failed to convert adjustment: %s", e)
+    return result
+
+
+def _group_signals_into_payload(
+    signals: list[ExternalSignal],
+    adjustments: list[RiskAdjustment],
+) -> ExternalSignalsPayload:
+    """Group signals by category into ExternalSignalsPayload."""
+    from datetime import datetime, timezone
+
+    _MARKET_CATEGORIES = {"market_benchmark", "trend_signal"}
+    _REGULATORY_CATEGORIES = {"regulatory_guidance", "compliance_signal"}
+
+    market, regulatory, operational = [], [], []
+    for sig in signals:
+        if sig.category in _MARKET_CATEGORIES:
+            market.append(sig)
+        elif sig.category in _REGULATORY_CATEGORIES:
+            regulatory.append(sig)
+        else:
+            operational.append(sig)
+
+    return ExternalSignalsPayload(
+        marketSignals=market,
+        regulatorySignals=regulatory,
+        operationalSignals=operational,
+        riskAdjustments=adjustments,
+        generatedAt=datetime.now(timezone.utc).isoformat(),
+    )

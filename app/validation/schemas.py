@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from operator import add as _list_add
 from enum import Enum
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
@@ -85,29 +85,37 @@ class ValidationResult(BaseModel):
     agent_reasoning: str
     precedent_decisions: list[PrecedentDecision] = Field(default_factory=list)
     governance_gaps: list[GovernanceGap] = Field(default_factory=list)
-    goal_impacts: list[dict] = Field(default_factory=list)
+    goal_impacts: list[dict[str, Any]] = Field(default_factory=list)
     triggered_rule_ids: list[str] = Field(default_factory=list)
-    approval_chain: list[dict] = Field(default_factory=list)
+    approval_chain: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
 # LangGraph state
 # ---------------------------------------------------------------------------
 
-_VALID_VERDICTS = {"APPROVE", "REJECT", "ESCALATE", "REVIEW"}
+_VALID_VERDICTS: frozenset[str] = frozenset(v.value for v in GovernanceVerdict)
+
+_MAX_MESSAGES = 20
 
 
-def _trim_messages(messages: list, max_keep: int = 20) -> list:
+def _messages_reducer(existing: list, new: list) -> list:
+    """Append new messages to existing, then trim to keep bounded size.
+
+    Keeps the system message (index 0) plus the last (_MAX_MESSAGES - 1)
+    messages so the conversation never grows unboundedly.
     """
-    Keep the system message (first) and the last ``max_keep - 1`` messages.
+    combined = existing + new
+    if len(combined) <= _MAX_MESSAGES:
+        return combined
+    system_msgs = [m for m in combined[:1] if hasattr(m, 'type') and getattr(m, 'type', '') == 'system']
+    tail = combined[-(_MAX_MESSAGES - len(system_msgs)):]
+    return system_msgs + tail
 
-    Prevents unbounded growth of ``agent_messages`` in LangGraph state
-    when ``_list_add`` is used as the reducer.
-    """
-    if len(messages) <= max_keep:
-        return messages
-    # Preserve the system message (always first) plus the tail
-    return [messages[0]] + messages[-(max_keep - 1):]
+
+def _replace_reducer(existing: list, new: list) -> list:
+    """Last writer wins — replaces existing value entirely."""
+    return new if new else existing
 
 
 class ValidationState(TypedDict):
@@ -125,13 +133,13 @@ class ValidationState(TypedDict):
     risk_scoring: Optional[dict]     # RiskScoringResult shape
     graph_context: Optional[dict]    # from get_governance_context()
 
-    # Agent-populated fields (use operator.add for lists)
-    precedent_decisions: Annotated[list, _list_add]
-    governance_gaps: Annotated[list, _list_add]
+    # Agent-populated fields
+    precedent_decisions: Annotated[list, _replace_reducer]
+    governance_gaps: Annotated[list, _replace_reducer]
     goal_impacts: Annotated[list, _list_add]
     agent_reasoning: str
     verdict: str
     confidence: float
-    messages: Annotated[list, _list_add]
+    messages: Annotated[list, _messages_reducer]
     external_signals: Optional[dict]
     error: Optional[str]

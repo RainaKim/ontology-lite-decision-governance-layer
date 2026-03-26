@@ -587,6 +587,7 @@ class RiskScoringService:
         risk_semantics: Optional[dict] = None,
         company_id: Optional[str] = None,
         company_config=None,
+        external_signal_adjustments: Optional[list[dict]] = None,
         # Deprecated aliases — accepted for backward compatibility
         graph_payload: Optional[dict] = None,
         graph_context: Optional[dict] = None,
@@ -639,6 +640,26 @@ class RiskScoringService:
         if proc_dim is not None:
             dims.append(proc_dim)
             confidence_deductions += proc_ded
+
+        # Apply external signal risk adjustments to dimension scores
+        if external_signal_adjustments:
+            _dim_by_id = {d.id: d for d in dims}
+            for adj in external_signal_adjustments:
+                dim_id = adj.get("dimension")
+                delta = int(adj.get("delta", 0))
+                confidence = float(adj.get("confidence", 0.5))
+                if not dim_id or delta == 0 or dim_id not in _dim_by_id:
+                    continue
+                # Weight the adjustment by confidence (min 0.5x, max 1.0x)
+                effective_delta = int(delta * max(0.5, confidence))
+                d = _dim_by_id[dim_id]
+                old_score = d.score
+                d.score = max(0, min(100, d.score + effective_delta))
+                d.band = _band(d.score)
+                logger.info(
+                    "[risk_scoring] External signal adjustment: %s %+d (confidence=%.2f) — score %d→%d",
+                    dim_id, effective_delta, confidence, old_score, d.score,
+                )
 
         aggregate = self._aggregate(dims, cp, confidence_deductions, company_config=company_config)
 

@@ -229,6 +229,23 @@ async def main():
     company_id = "nexus_analytics"
     n = 20
 
+    # Check for existing synthetic decisions to avoid duplicates
+    try:
+        from app.graph.neo4j_repository import Neo4jGraphRepository
+        _check_repo = Neo4jGraphRepository()
+        existing_check = await _check_repo.safe_cypher_read(
+            "MATCH (d:Decision) WHERE d.source = 'synthetic_history' RETURN count(d) AS cnt",
+            company_id=company_id,
+        )
+        await _check_repo.close()
+        if existing_check and existing_check[0].get("cnt", 0) > 0:
+            print(f"WARNING: {existing_check[0]['cnt']} synthetic Decision nodes already exist.")
+            print("Delete them first or re-running will create duplicates.")
+            print("To delete: MATCH (d:Decision) WHERE d.source = 'synthetic_history' DETACH DELETE d")
+            sys.exit(1)
+    except Exception as exc:
+        logger.warning("Could not check for existing decisions: %s", exc)
+
     logger.info(f"Generating {n} synthetic decisions for {company_id}...")
 
     # Try LLM generation first, fall back to hardcoded

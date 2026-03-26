@@ -438,20 +438,42 @@ class Neo4jGraphRepository(BaseGraphRepository):
     # Graph RAG query methods (Step 8c)
     # ------------------------------------------------------------------
 
-    async def get_all_rules(self, company_id: str) -> list[dict]:
-        """Return all active Rule nodes with GOVERNED_BY goals and REQUIRES_APPROVAL_FROM actors."""
+    async def get_all_rules(
+        self,
+        company_id: str,
+        rule_ids: Optional[list[str]] = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Return Rule nodes with GOVERNED_BY goals and REQUIRES_APPROVAL_FROM actors.
+
+        When rule_ids is provided, fetch only those rules (ignores limit).
+        Otherwise returns up to `limit` rules ordered by rule_id.
+        """
         database = get_company_database(company_id)
         prefix = f"{company_id}:"
-        cypher = (
-            "MATCH (r:Rule) WHERE r.id STARTS WITH $prefix "
-            "OPTIONAL MATCH (r)-[:GOVERNED_BY]->(g:Goal) "
-            "OPTIONAL MATCH (r)-[:REQUIRES_APPROVAL_FROM]->(a:Actor) "
-            "RETURN r.id AS rule_id, r.label AS label, properties(r) AS properties, "
-            "collect(DISTINCT {id: g.id, label: g.label}) AS goals, "
-            "collect(DISTINCT {id: a.id, label: a.label}) AS approvers"
-        )
+        if rule_ids:
+            cypher = (
+                "MATCH (r:Rule) WHERE r.id IN $rule_ids "
+                "OPTIONAL MATCH (r)-[:GOVERNED_BY]->(g:Goal) "
+                "OPTIONAL MATCH (r)-[:REQUIRES_APPROVAL_FROM]->(a:Actor) "
+                "RETURN r.id AS rule_id, r.label AS label, properties(r) AS properties, "
+                "collect(DISTINCT {id: g.id, label: g.label}) AS goals, "
+                "collect(DISTINCT {id: a.id, label: a.label}) AS approvers"
+            )
+            params: dict = {"rule_ids": rule_ids}
+        else:
+            cypher = (
+                "MATCH (r:Rule) WHERE r.id STARTS WITH $prefix "
+                "OPTIONAL MATCH (r)-[:GOVERNED_BY]->(g:Goal) "
+                "OPTIONAL MATCH (r)-[:REQUIRES_APPROVAL_FROM]->(a:Actor) "
+                "RETURN r.id AS rule_id, r.label AS label, properties(r) AS properties, "
+                "collect(DISTINCT {id: g.id, label: g.label}) AS goals, "
+                "collect(DISTINCT {id: a.id, label: a.label}) AS approvers "
+                f"LIMIT {int(limit)}"
+            )
+            params = {"prefix": prefix}
         async with self._driver.session(database=database) as session:
-            result = await session.run(cypher, prefix=prefix)
+            result = await session.run(cypher, **params)
             records = []
             async for record in result:
                 goals = [g for g in record["goals"] if g.get("id") is not None]
@@ -623,7 +645,7 @@ class Neo4jGraphRepository(BaseGraphRepository):
 
     _MUTATING_KEYWORDS = re.compile(
         r'\b(CREATE|MERGE|SET|DELETE|DETACH\s+DELETE|REMOVE|DROP|FOREACH|LOAD\s+CSV)\b'
-        r'|CALL\s*\{',
+        r'|CALL\s*\{|CALL\s+\w',
         re.IGNORECASE,
     )
     _LIMIT_PATTERN = re.compile(r'\bLIMIT\s+(\d+)\b', re.IGNORECASE)
@@ -648,31 +670,13 @@ class Neo4jGraphRepository(BaseGraphRepository):
                 "Mutating Cypher operations are not allowed in safe_cypher_read"
             )
 
-        # 2. Enforce LIMIT
-        has_union = re.search(r'\bUNION\b', query, re.IGNORECASE) is not None
-        all_limits = list(self._LIMIT_PATTERN.finditer(query))
+        # 2. Enforce LIMIT — clamp ALL occurrences (important for UNION queries)
+        def _clamp_limit(m: re.Match) -> str:
+            val = int(m.group(1))
+            return f"LIMIT {min(val, result_limit)}"
 
-        if all_limits:
-            if has_union:
-                # For UNION queries, only clamp the LAST LIMIT (applies to full result)
-                last_match = all_limits[-1]
-                existing_limit = int(last_match.group(1))
-                if existing_limit > result_limit:
-                    query = (
-                        query[:last_match.start()]
-                        + f"LIMIT {result_limit}"
-                        + query[last_match.end():]
-                    )
-            else:
-                # Non-UNION: replace the single LIMIT if too large (only first occurrence)
-                existing_limit = int(all_limits[0].group(1))
-                if existing_limit > result_limit:
-                    m = all_limits[0]
-                    query = (
-                        query[:m.start()]
-                        + f"LIMIT {result_limit}"
-                        + query[m.end():]
-                    )
+        if self._LIMIT_PATTERN.search(query):
+            query = self._LIMIT_PATTERN.sub(_clamp_limit, query)
         else:
             query = query.rstrip().rstrip(";") + f" LIMIT {result_limit}"
 

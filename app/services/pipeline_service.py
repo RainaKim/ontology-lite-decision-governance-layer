@@ -7,10 +7,11 @@ Execution order (strict):
   Step 3: Governance evaluation     (governance.evaluate_governance)
   Step 4: Graph upsert + retrieval  (graph_repository)
   Step 5: Semantics inference       (optional LLM — non-fatal)
-  Step 6: Risk scoring              (risk_scoring_service — non-fatal)
-  Step 7: Governance agent          (LangGraph — non-fatal, requires Neo4j)
+  Step 5b: External signals         (Tavily live search + curated fallback — non-fatal)
+  Step 6: Risk scoring              (risk_scoring_service — non-fatal, receives ext adjustments)
+  Step 7: Governance agent          (LangGraph — non-fatal, requires Neo4j, receives ext signals)
   Step 8: Reasoning stub            (deterministic — Nova removed)
-  Step 9: Simulation + External Signals (parallel, non-fatal)
+  Step 9: Simulation                (non-fatal)
   Step 10: Decision Pack            (decision_pack.build_decision_pack)
 
 Updates DecisionRecord at each step so the polling endpoint reflects progress.
@@ -42,13 +43,13 @@ async def run_pipeline(
     """
     record = decision_store.get(decision_id)
     if not record:
-        logger.error(f"[{decision_id}] Record not found — aborting pipeline")
+        logger.error("[%s] Record not found — aborting pipeline", decision_id)
         return
 
     try:
         # ── Step 1: Extraction ───────────────────────────────────────────────
         decision_store.update_status(decision_id, "processing", current_step=0)
-        logger.info(f"[{decision_id}] Step 1: Extraction")
+        logger.info("[%s] Step 1: Extraction", decision_id)
 
         loop = asyncio.get_running_loop()
         extraction_response = await loop.run_in_executor(
@@ -64,10 +65,10 @@ async def run_pipeline(
             extraction_metadata=extraction_meta,
         )
         decision_store.update_status(decision_id, "processing", current_step=1)
-        logger.info(f"[{decision_id}] Step 1 complete")
+        logger.info("[%s] Step 1 complete", decision_id)
 
         # ── Step 2: Decision Context Extraction (optional LLM) ──────────────
-        logger.info(f"[{decision_id}] Step 2: Decision Context Extraction (optional LLM)")
+        logger.info("[%s] Step 2: Decision Context Extraction (optional LLM)", decision_id)
         try:
             from app.services.decision_context_service import extract_decision_context
 
@@ -86,7 +87,7 @@ async def run_pipeline(
                     f"{len(_ctx_result.get('entities', []))} entities"
                 )
             else:
-                logger.info(f"[{decision_id}] Decision context not available — skipped")
+                logger.info("[%s] Decision context not available — skipped", decision_id)
         except Exception as _ctx_e:
             logger.warning(
                 f"[{decision_id}] Decision Context Extraction failed (non-fatal): {_ctx_e}",
@@ -94,7 +95,7 @@ async def run_pipeline(
             )
 
         # ── Step 3: Governance evaluation + Graph ────────────────────────────
-        logger.info(f"[{decision_id}] Step 3: Governance evaluation")
+        logger.info("[%s] Step 3: Governance evaluation", decision_id)
 
         from app.governance import evaluate_governance
 
@@ -124,13 +125,13 @@ async def run_pipeline(
         )
 
         # ── Step 4: Graph mapping ────────────────────────────────────────────
-        logger.info(f"[{decision_id}] Step 4: Graph mapping")
+        logger.info("[%s] Step 4: Graph mapping", decision_id)
 
         graph_payload = None
         try:
             decision_dict = decision_obj.model_dump()
             gov_for_graph = {**gov_dict, "derived_attributes": derived}
-            logger.info(f"[{decision_id}] Graph: decision_dict has {len(decision_dict.get('goals', []))} goals, {len(decision_dict.get('kpis', []))} KPIs")
+            logger.info("[%s] Graph: decision_dict has %d goals, %d KPIs", decision_id, len(decision_dict.get('goals', [])), len(decision_dict.get('kpis', [])))
 
             decision_graph = await graph_repo.upsert_decision_graph(
                 decision=decision_dict,
@@ -138,7 +139,7 @@ async def run_pipeline(
                 decision_id=decision_id,
                 company_context=company_data or {},
             )
-            logger.info(f"[{decision_id}] Graph: built {len(decision_graph.nodes)} nodes, {len(decision_graph.edges)} edges")
+            logger.info("[%s] Graph: built %d nodes, %d edges", decision_id, len(decision_graph.nodes), len(decision_graph.edges))
             graph_payload = {
                 "decision_id": decision_graph.decision_id,
                 "nodes": [n.model_dump() for n in decision_graph.nodes],
@@ -147,15 +148,15 @@ async def run_pipeline(
             }
 
             decision_store.store_results(decision_id, graph_payload=graph_payload)
-            logger.info(f"[{decision_id}] Graph: stored graph_payload successfully")
+            logger.info("[%s] Graph: stored graph_payload successfully", decision_id)
         except Exception as e:
-            logger.error(f"[{decision_id}] Graph step failed (non-fatal): {e}", exc_info=True)
+            logger.error("[%s] Graph step failed (non-fatal): %s", decision_id, e, exc_info=True)
 
         decision_store.update_status(decision_id, "processing", current_step=2)
-        logger.info(f"[{decision_id}] Steps 3-4 complete")
+        logger.info("[%s] Steps 3-4 complete", decision_id)
 
         # ── Step 5: Optional Semantics Inference ─────────────────────────────
-        logger.info(f"[{decision_id}] Step 5: Semantics Inference (optional LLM)")
+        logger.info("[%s] Step 5: Semantics Inference (optional LLM)", decision_id)
         _risk_semantics_dict: dict | None = None
         try:
             from app.services.risk_evidence_llm import infer_risk_semantics
@@ -185,15 +186,54 @@ async def run_pipeline(
                     f"global_confidence={_semantics.global_confidence:.2f}"
                 )
             else:
-                logger.info(f"[{decision_id}] Semantics not available — skipped")
+                logger.info("[%s] Semantics not available — skipped", decision_id)
         except Exception as _e:
             logger.warning(
                 f"[{decision_id}] Semantics Inference failed (non-fatal): {_e}",
                 exc_info=True,
             )
 
+        # ── Step 5b: External Signals (before risk scoring) ─────────────────
+        logger.info("[%s] Step 5b: External Signals (live search + curated fallback)", decision_id)
+        _ext_payload = None
+        _ext_adjustments: list[dict] = []
+        try:
+            from app.services.external_signal_service import build_external_signals
+
+            _ext_payload = build_external_signals(
+                company_id=record.company_id,
+                decision=decision_obj.model_dump(),
+                governance_result=gov_dict,
+                risk_scoring=None,  # risk scoring hasn't run yet
+            )
+            if _ext_payload is not None:
+                decision_store.store_results(
+                    decision_id, external_signals=_ext_payload.model_dump()
+                )
+                _ext_adjustments = [
+                    a.model_dump() if hasattr(a, "model_dump") else a
+                    for a in (_ext_payload.riskAdjustments or [])
+                ]
+                logger.info(
+                    f"[{decision_id}] External signals assembled — "
+                    f"market={len(_ext_payload.marketSignals)}, "
+                    f"regulatory={len(_ext_payload.regulatorySignals)}, "
+                    f"operational={len(_ext_payload.operationalSignals)}, "
+                    f"risk_adjustments={len(_ext_adjustments)}"
+                )
+            else:
+                logger.info(
+                    f"[{decision_id}] External signals: no payload "
+                    f"(no profile configured or sources unavailable)"
+                )
+        except Exception as _ext_e:
+            logger.error(
+                f"[{decision_id}] External signal retrieval failed (non-fatal): {_ext_e}",
+                exc_info=True,
+            )
+
         # ── Step 6: Risk Scoring ─────────────────────────────────────────────
-        logger.info(f"[{decision_id}] Step 6: Risk Scoring")
+        logger.info("[%s] Step 6: Risk Scoring", decision_id)
         try:
             from app.services.risk_scoring_service import RiskScoringService
 
@@ -205,6 +245,7 @@ async def run_pipeline(
                 graph_data=graph_payload,
                 risk_semantics=_risk_semantics_dict,
                 company_id=record.company_id,
+                external_signal_adjustments=_ext_adjustments or None,
             )
             decision_store.store_results(
                 decision_id,
@@ -229,7 +270,7 @@ async def run_pipeline(
         # ── Step 7: Governance Agent Validation (non-fatal) ──────────────────
         import os as _os
         if _os.getenv("NEO4J_URI"):
-            logger.info(f"[{decision_id}] Step 7: Governance Agent Validation (Neo4j available)")
+            logger.info("[%s] Step 7: Governance Agent Validation (Neo4j available)", decision_id)
             _neo4j_repo = None
             try:
                 from app.validation.governance_agent import run_governance_agent
@@ -245,6 +286,7 @@ async def run_pipeline(
                     risk_scoring=record.risk_scoring,
                     graph_context=graph_payload,
                     repo=_neo4j_repo,
+                    external_signals=record.external_signals,
                 )
                 decision_store.store_results(
                     decision_id,
@@ -267,85 +309,45 @@ async def run_pipeline(
                     except Exception:
                         pass
         else:
-            logger.info(f"[{decision_id}] Step 7: Governance Agent skipped (NEO4J_URI not set)")
+            logger.info("[%s] Step 7: Governance Agent skipped (NEO4J_URI not set)", decision_id)
 
         # ── Step 8: Reasoning (deterministic stub — Nova removed) ────────────
-        logger.info(f"[{decision_id}] Step 8: Reasoning (deterministic stub)")
+        logger.info("[%s] Step 8: Reasoning (deterministic stub)", decision_id)
         reasoning = {
             "source": "deterministic",
             "graph_reasoning": None,
         }
         decision_store.store_results(decision_id, reasoning=reasoning)
         decision_store.update_status(decision_id, "processing", current_step=3)
-        logger.info(f"[{decision_id}] Step 8 complete")
+        logger.info("[%s] Step 8 complete", decision_id)
 
-        # ── Step 9: Simulation & External Signals (parallel) ─────────────────
-        logger.info(f"[{decision_id}] Step 9: Simulation + External Signals (parallel)")
-
-        async def _run_simulation():
-            try:
-                from app.services.risk_response_simulation_service import (
-                    RiskResponseSimulationService,
-                )
-                _sim_service = RiskResponseSimulationService()
-                _sim_result = _sim_service.simulate(
-                    decision_payload=decision_obj.model_dump(),
-                    governance_result=gov_dict,
-                    risk_scoring=record.risk_scoring or {},
-                    company_payload=company_data or {},
-                    company_id=record.company_id,
-                )
-                decision_store.store_results(decision_id, simulation=_sim_result)
-                n_scenarios = len(_sim_result.get("scenarios", []))
-                logger.info(
-                    f"[{decision_id}] Simulation complete — {n_scenarios} scenario(s) generated"
-                )
-            except Exception as _sim_e:
-                logger.error(
-                    f"[{decision_id}] Simulation failed (non-fatal): {_sim_e}",
-                    exc_info=True,
-                )
-
-        async def _run_external_signals():
-            try:
-                from app.services.external_signal_service import build_external_signals
-
-                result = build_external_signals(
-                    company_id=record.company_id,
-                    decision=decision_obj.model_dump(),
-                    governance_result=gov_dict,
-                    risk_scoring=record.risk_scoring,
-                )
-                if result is not None:
-                    decision_store.store_results(
-                        decision_id, external_signals=result.model_dump()
-                    )
-                    logger.info(
-                        f"[{decision_id}] External signals assembled — "
-                        f"market={len(result.marketSignals)}, "
-                        f"regulatory={len(result.regulatorySignals)}, "
-                        f"operational={len(result.operationalSignals)}"
-                    )
-                else:
-                    logger.info(
-                        f"[{decision_id}] External signals: no payload "
-                        f"(no profile configured or sources unavailable)"
-                    )
-                return result
-            except Exception as _ext_e:
-                logger.error(
-                    f"[{decision_id}] External signal retrieval failed (non-fatal): {_ext_e}",
-                    exc_info=True,
-                )
-                return None
-
-        _, _ext_payload = await asyncio.gather(
-            _run_simulation(),
-            _run_external_signals(),
-        )
+        # ── Step 9: Simulation ─────────────────────────────────────────────────
+        logger.info("[%s] Step 9: Simulation", decision_id)
+        try:
+            from app.services.risk_response_simulation_service import (
+                RiskResponseSimulationService,
+            )
+            _sim_service = RiskResponseSimulationService()
+            _sim_result = _sim_service.simulate(
+                decision_payload=decision_obj.model_dump(),
+                governance_result=gov_dict,
+                risk_scoring=record.risk_scoring or {},
+                company_payload=company_data or {},
+                company_id=record.company_id,
+            )
+            decision_store.store_results(decision_id, simulation=_sim_result)
+            n_scenarios = len(_sim_result.get("scenarios", []))
+            logger.info(
+                f"[{decision_id}] Simulation complete — {n_scenarios} scenario(s) generated"
+            )
+        except Exception as _sim_e:
+            logger.error(
+                f"[{decision_id}] Simulation failed (non-fatal): {_sim_e}",
+                exc_info=True,
+            )
 
         # ── Step 10: Decision Pack ───────────────────────────────────────────
-        logger.info(f"[{decision_id}] Step 10: Decision Pack")
+        logger.info("[%s] Step 10: Decision Pack", decision_id)
 
         from app.decision_pack import build_decision_pack
 
@@ -364,7 +366,7 @@ async def run_pipeline(
 
         # ── Done ─────────────────────────────────────────────────────────────
         decision_store.update_status(decision_id, "complete", current_step=4)
-        logger.info(f"[{decision_id}] Pipeline complete")
+        logger.info("[%s] Pipeline complete", decision_id)
 
         # ── Write-back: update workspace DB record if linked ─────────────────
         if record.workspace_decision_id:
@@ -415,5 +417,5 @@ async def run_pipeline(
                 )
 
     except Exception as e:
-        logger.error(f"[{decision_id}] Pipeline failed: {e}", exc_info=True)
+        logger.error("[%s] Pipeline failed: %s", decision_id, e, exc_info=True)
         decision_store.store_error(decision_id, str(e))

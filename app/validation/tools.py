@@ -35,14 +35,24 @@ def create_tools(repo: BaseGraphRepository) -> list:
     """
 
     @tool
-    async def search_governance_rules(company_id: str) -> list[dict]:
-        """Search for all active governance rules for a company.
+    async def search_governance_rules(
+        company_id: str,
+        rule_ids: Optional[list[str]] = None,
+    ) -> list[dict]:
+        """Fetch governance rules enriched with goals and required approvers.
 
-        Returns a list of rules with their conditions, consequences,
-        governed goals, and required approvers.
+        When rule_ids is provided (e.g. the triggered rule IDs already
+        identified by Layer 1), only those rules are returned -- this is
+        the preferred usage to avoid fetching hundreds of extracted rules.
+
+        When rule_ids is omitted, returns up to 20 canonical rules.
+
+        Args:
+            company_id: The company whose rules to fetch.
+            rule_ids: Optional list of specific rule IDs to look up.
         """
         try:
-            return await repo.get_all_rules(company_id)
+            return await repo.get_all_rules(company_id, rule_ids=rule_ids, limit=20)
         except Exception as exc:
             logger.warning("search_governance_rules failed: %s", exc)
             return []
@@ -59,6 +69,7 @@ def create_tools(repo: BaseGraphRepository) -> list:
         approvers, and outcomes.
         """
         try:
+            # Deferred import: avoids circular dependency (embedder -> config -> validation)
             from app.onboarding.transform.embedder import embed_text
 
             embedding = await embed_text(query_text)
@@ -135,14 +146,17 @@ def create_tools(repo: BaseGraphRepository) -> list:
         """Get the current Tier 2 operational context snapshot for a company.
 
         Returns budget remaining, headcount vs plan, active risk flags,
-        and other operational data. Currently returns mock data --
-        will be replaced by a real API call in Phase 3.
+        and other operational data.
+
+        NOTE: Returns simulated operational data when live integration is not configured.
         """
         # Mock Tier 2 snapshot -- Phase 3 will wire this to
         # POST /v1/companies/{id}/context
         return {
             "company_id": company_id,
             "source": "mock",
+            "data_source": "mock_stub",
+            "note": "Live operational integration not configured. These values are simulated for demonstration.",
             "budget": {
                 "annual_total": 5_000_000,
                 "spent_ytd": 3_200_000,

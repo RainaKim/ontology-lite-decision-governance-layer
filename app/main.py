@@ -19,7 +19,7 @@ from app.llm_client import LLMClient
 from app.extractor import DecisionExtractor
 from app.graph_repository import InMemoryGraphRepository
 from app.services import company_service
-from app.routers import auth_router, companies_router, decisions_router, fixtures_router, sso_router, workspace_router, analysis_router, agents_router
+from app.routers import auth_router, companies_router, decisions_router, fixtures_router, sso_router, workspace_router, analysis_router, agents_router, validation_router
 
 # Configure logging
 logging.basicConfig(
@@ -105,6 +105,7 @@ app.include_router(sso_router)    # /v1/auth/sso/google/*, /v1/auth/sso/azure/*
 app.include_router(workspace_router)  # /v1/workspace/metrics, /v1/workspace/decisions
 app.include_router(analysis_router)   # /v1/decisions/{id}/reasoning-trace, /simulate, /risk-history, /evidence
 app.include_router(agents_router)     # /v1/agents, /v1/escalation-rules
+app.include_router(validation_router) # /v1/validate
 
 
 # ── Root-level endpoints (no /v1 prefix) ─────────────────────────────────────

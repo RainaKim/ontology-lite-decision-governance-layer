@@ -289,7 +289,9 @@ class TestToolFunctions:
         result = await tool.ainvoke({"company_id": "nexus_analytics"})
         assert len(result) == 1
         assert result[0]["rule_id"] == "nexus:rule:R1"
-        mock_repo.get_all_rules.assert_awaited_once_with("nexus_analytics")
+        mock_repo.get_all_rules.assert_awaited_once_with(
+            "nexus_analytics", rule_ids=None, limit=20
+        )
 
     @pytest.mark.asyncio
     async def test_search_governance_rules_error(self, mock_repo):
