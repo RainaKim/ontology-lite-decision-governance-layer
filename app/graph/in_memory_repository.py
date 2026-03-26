@@ -61,6 +61,11 @@ class InMemoryGraphRepository(BaseGraphRepository):
 
     async def write_node(self, node: Node, company_id: str) -> None:
         """Upsert a node by ID (last write wins)."""
+        if not node.id.startswith(f"{company_id}:"):
+            raise ValueError(
+                f"Node ID '{node.id}' does not start with company prefix '{company_id}:'. "
+                "All node IDs must follow the '{company_id}:{node_type}:{semantic_id}' convention."
+            )
         self._nodes[node.id] = node
 
     async def write_edge(self, edge: Edge, company_id: str) -> None:
@@ -212,18 +217,34 @@ class InMemoryGraphRepository(BaseGraphRepository):
     # Graph RAG query methods (Step 8c)
     # ------------------------------------------------------------------
 
-    async def get_all_rules(self, company_id: str) -> list[dict]:
-        """Return all Rule nodes with GOVERNED_BY goals and REQUIRES_APPROVAL_FROM actors."""
+    async def get_all_rules(
+        self,
+        company_id: str,
+        rule_ids: Optional[list[str]] = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Return Rule nodes with GOVERNED_BY goals and REQUIRES_APPROVAL_FROM actors.
+
+        When rule_ids is provided, fetch only those rules (ignores limit).
+        Otherwise returns up to `limit` rules.
+        """
         prefix = f"{company_id}:"
-        rule_nodes = [
-            n for n in self._nodes.values()
-            if n.type == NodeType.RULE and n.id.startswith(prefix)
-        ]
+        if rule_ids:
+            rule_nodes = [
+                n for n in self._nodes.values()
+                if n.type == NodeType.RULE and n.id in rule_ids
+            ]
+        else:
+            rule_nodes = [
+                n for n in self._nodes.values()
+                if n.type == NodeType.RULE and n.id.startswith(prefix)
+            ][:limit]
         results = []
+        adjacency = self._adjacency
         for rule in rule_nodes:
             goals = []
             approvers = []
-            for edge in self._edges:
+            for edge in adjacency.get(rule.id, []):
                 if edge.from_node == rule.id:
                     pred = edge.predicate if isinstance(edge.predicate, str) else edge.predicate
                     target = self._nodes.get(edge.to_node)

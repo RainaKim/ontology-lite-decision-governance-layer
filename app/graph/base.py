@@ -152,10 +152,15 @@ class BaseGraphRepository(ABC):
     async def get_all_rules(
         self,
         company_id: str,
+        rule_ids: Optional[list[str]] = None,
+        limit: int = 20,
     ) -> list[dict]:
         """
-        Return all active Rule nodes with conditions, consequences,
-        and GOVERNED_BY goals.
+        Return Rule nodes with conditions, consequences, and GOVERNED_BY goals.
+
+        When rule_ids is provided, only those rules are returned (used to enrich
+        already-triggered rules without fetching hundreds of extracted rules).
+        When rule_ids is None, returns up to `limit` rules.
 
         Returns list of dicts:
             {rule_id, label, properties, goals: [...], approvers: [...]}

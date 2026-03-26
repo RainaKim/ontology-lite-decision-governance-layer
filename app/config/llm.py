@@ -27,8 +27,8 @@ _DEFAULTS: dict[str, dict[str, str]] = {
         "capable": "claude-sonnet-4-6",
     },
     "openai": {
-        "fast": "gpt-4o-mini",
-        "capable": "gpt-4o",
+        "fast": "gpt-5.4-mini",
+        "capable": "gpt-5.4",
     },
     "bedrock": {
         "fast": "us.amazon.nova-2-lite-v1:0",

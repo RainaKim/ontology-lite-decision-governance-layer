@@ -14,7 +14,7 @@ Design contract:
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,10 +30,29 @@ class ExternalSignalSource(BaseModel):
             "operational_study | labor_regulation"
         )
     )
+    url: Optional[str] = Field(default=None, description="Source URL (populated by live search)")
     recency: Optional[str] = Field(
         default=None,
         description="Recency indicator: 'recent' | 'quarterly' | 'annual' | year string e.g. '2025'"
     )
+
+
+class RiskAdjustment(BaseModel):
+    """
+    A structured risk score adjustment derived from an external signal.
+
+    These are computed by LLM synthesis and applied to risk dimension scores
+    BEFORE final risk band computation. Delta is clamped to [-15, +15].
+    """
+    dimension: Literal["financial", "compliance", "strategic"]
+    delta: int = Field(
+        description="Points to add to dimension score (-15 to +15). Negative = reduces risk.",
+        ge=-15,
+        le=15,
+    )
+    rationale: str = Field(description="One sentence explaining why this adjustment applies.")
+    confidence: float = Field(ge=0.0, le=1.0)
+    source_signal_id: str = Field(description="ID of the ExternalSignal that caused this adjustment.")
 
 
 class ExternalSignal(BaseModel):
@@ -83,4 +102,5 @@ class ExternalSignalsPayload(BaseModel):
     marketSignals: list[ExternalSignal] = Field(default_factory=list)
     regulatorySignals: list[ExternalSignal] = Field(default_factory=list)
     operationalSignals: list[ExternalSignal] = Field(default_factory=list)
+    riskAdjustments: list[RiskAdjustment] = Field(default_factory=list)
     generatedAt: Optional[str] = None

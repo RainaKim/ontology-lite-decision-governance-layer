@@ -30,8 +30,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.constants import END, START
@@ -44,7 +45,6 @@ from app.validation.schemas import (
     ValidationResult,
     ValidationState,
     _VALID_VERDICTS,
-    _trim_messages,
 )
 from app.validation.tools import create_tools
 
@@ -72,6 +72,9 @@ Rules:
 - Always check for governance gaps in triggered rules
 - Review the Layer 1 analysis which already identifies triggered rules and approval \
 requirements. Use tools only for additional context not already provided.
+- When calling search_governance_rules, ALWAYS pass the triggered rule IDs from the \
+Layer 1 result as rule_ids -- never call it without rule_ids (fetching all rules wastes \
+context and causes token overflow).
 - APPROVE only if all rules are satisfied and confidence > 0.85
 - REJECT only if rules are clearly violated with no remediation path
 - ESCALATE when critical compliance rules are triggered or higher authority sign-off \
@@ -85,21 +88,25 @@ Verdict definitions:
 - ESCALATE: decision needs higher authority sign-off
 - REVIEW: decision needs human review before proceeding
 
-After your analysis, you MUST output your final verdict as a JSON block:
+After your analysis, end your response with EXACTLY this JSON block (use the key name \
+"verdict", not "decision" or "action"):
 ```json
 {
-  "verdict": "APPROVE|REJECT|ESCALATE|REVIEW",
-  "confidence": 0.0-1.0,
-  "reasoning": "your 2-4 sentence explanation"
+  "verdict": "APPROVE",
+  "confidence": 0.85,
+  "reasoning": "2-4 sentence explanation for the decision-maker"
 }
 ```
+Replace the example values. Use one of: APPROVE, REJECT, ESCALATE, REVIEW.
 """
 
 # ---------------------------------------------------------------------------
 # Max tool-calling rounds (prevents infinite loops)
 # ---------------------------------------------------------------------------
 
-_MAX_TOOL_ROUNDS = 3
+_MAX_TOOL_ROUNDS = int(os.getenv("GOVERNANCE_AGENT_MAX_ROUNDS", "3"))
+_MAX_CONTEXT_CHARS = 1000
+_MAX_RULE_TEXT_CHARS = 500
 
 # ---------------------------------------------------------------------------
 # Lazily-cached LLM client (P1: avoid re-creating per request)
@@ -123,6 +130,28 @@ def _get_llm_capable():
         _llm_capable = get_llm("capable")
         _llm_factory_id = current_factory_id
     return _llm_capable
+
+
+def _reset_llm_cache() -> None:
+    """Reset cached LLM client. Call between tests that patch get_llm."""
+    global _llm_capable, _llm_factory_id
+    _llm_capable = None
+    _llm_factory_id = None
+
+
+# ---------------------------------------------------------------------------
+# Graph cache — avoid recompiling StateGraph on every request
+# ---------------------------------------------------------------------------
+
+_graph_cache: dict[int, Any] = {}
+
+
+def _get_or_build_graph(repo: BaseGraphRepository) -> Any:
+    """Return a cached compiled graph for the given repo instance."""
+    key = id(repo)
+    if key not in _graph_cache:
+        _graph_cache[key] = build_governance_agent(repo)
+    return _graph_cache[key]
 
 
 # ---------------------------------------------------------------------------
@@ -153,9 +182,6 @@ def build_governance_agent(repo: BaseGraphRepository):
         # On first call, inject system prompt and decision context
         if not messages:
             messages = _build_initial_messages(state)
-
-        # Cap message list to prevent unbounded growth
-        messages = _trim_messages(messages, max_keep=20)
 
         response = await llm_with_tools.ainvoke(messages)
         return {"messages": [response]}
@@ -241,6 +267,7 @@ async def run_governance_agent(
     risk_scoring: Optional[dict],
     graph_context: Optional[dict],
     repo: BaseGraphRepository,
+    external_signals: Optional[dict] = None,
 ) -> ValidationResult:
     """
     Run the governance agent and return a ValidationResult.
@@ -248,7 +275,7 @@ async def run_governance_agent(
     Non-fatal: returns a default ValidationResult on any error.
     """
     try:
-        agent = build_governance_agent(repo)
+        agent = _get_or_build_graph(repo)
         initial_state: ValidationState = {
             "company_id": company_id,
             "decision_text": decision_text,
@@ -263,7 +290,7 @@ async def run_governance_agent(
             "verdict": "REVIEW",
             "confidence": 0.5,
             "messages": [],
-            "external_signals": None,
+            "external_signals": external_signals,
             "error": None,
         }
         final_state = await agent.ainvoke(
@@ -309,10 +336,10 @@ def _build_initial_messages(state: ValidationState) -> list:
         f"Decision: {state['decision_text']}",
         "",
         "--- Layer 1 Governance Result ---",
-        f"Triggered rules: {json.dumps(gov.get('triggered_rules', []), default=str)[:1000]}",
+        f"Triggered rules: {json.dumps(gov.get('triggered_rules', []), default=str)[:_MAX_CONTEXT_CHARS]}",
         f"Flags: {gov.get('flags', [])}",
         f"Requires human review: {gov.get('requires_human_review', False)}",
-        f"Approval chain: {json.dumps(gov.get('approval_chain', []), default=str)[:500]}",
+        f"Approval chain: {json.dumps(gov.get('approval_chain', []), default=str)[:_MAX_RULE_TEXT_CHARS]}",
     ]
 
     if risk:
@@ -330,6 +357,33 @@ def _build_initial_messages(state: ValidationState) -> list:
             "--- Graph Context ---",
             f"Nodes: {meta.get('node_count', 0)}, Edges: {meta.get('edge_count', 0)}",
         ])
+
+    # External signals context (from Tavily live search or curated fallback)
+    ext = state.get("external_signals")
+    if ext and isinstance(ext, dict):
+        market = ext.get("marketSignals", [])
+        regulatory = ext.get("regulatorySignals", [])
+        operational = ext.get("operationalSignals", [])
+        adjustments = ext.get("riskAdjustments", [])
+
+        all_sigs = (market + regulatory + operational)[:4]
+        if all_sigs:
+            context_parts.extend(["", "--- External Market & Regulatory Context ---"])
+            for sig in all_sigs:
+                context_parts.append(
+                    f"- [{(sig.get('category') or '').upper()}] "
+                    f"{sig.get('title', '')}: {sig.get('summary', '')} "
+                    f"— {sig.get('decisionRelevance', '')}"
+                )
+            if adjustments:
+                context_parts.append("\nExternal signals have adjusted risk scores:")
+                for adj in adjustments:
+                    delta = adj.get("delta", 0)
+                    sign = "+" if delta > 0 else ""
+                    context_parts.append(
+                        f"  - {(adj.get('dimension') or '').capitalize()}: "
+                        f"{sign}{delta} pts — {adj.get('rationale', '')}"
+                    )
 
     context_text = "\n".join(context_parts)
 
@@ -381,7 +435,7 @@ def _extract_verdict_from_messages(messages: list) -> tuple[str, float, str]:
 
 def _parse_verdict_json(text: str) -> tuple[str, float, str]:
     """Parse a verdict JSON block from text."""
-    default = ("REVIEW", 0.5, text[:500] if text else "No response")
+    default = ("REVIEW", 0.5, text[:_MAX_RULE_TEXT_CHARS] if text else "No response")
 
     # 1. Try direct json.loads on the entire text
     try:
@@ -409,7 +463,7 @@ def _parse_verdict_json(text: str) -> tuple[str, float, str]:
 
     # 4. Regex fallback for simple (non-nested) JSON
     if json_str is None:
-        match = re.search(r'\{[^{}]*"verdict"[^{}]*\}', text, re.DOTALL)
+        match = re.search(r'\{[^{}]*"(?:verdict|decision|action)"[^{}]*\}', text, re.DOTALL)
         if match:
             json_str = match.group(0)
 
@@ -424,11 +478,15 @@ def _parse_verdict_json(text: str) -> tuple[str, float, str]:
         return _extract_verdict_from_text(text)
 
 
+_VERDICT_KEYS = ('"verdict"', '"decision"', '"action"')
+
+
 def _find_balanced_json(text: str) -> Optional[str]:
     """
-    Find the outermost balanced ``{...}`` block that contains ``"verdict"``.
+    Find the outermost balanced ``{...}`` block containing a verdict key.
 
-    Returns the matched JSON string or None.
+    Accepts "verdict", "decision", or "action" to handle LLMs that deviate
+    from the prompt schema.
     """
     start = None
     depth = 0
@@ -441,7 +499,7 @@ def _find_balanced_json(text: str) -> Optional[str]:
             depth -= 1
             if depth == 0 and start is not None:
                 candidate = text[start : i + 1]
-                if '"verdict"' in candidate:
+                if any(k in candidate for k in _VERDICT_KEYS):
                     return candidate
                 start = None
     return None
@@ -449,12 +507,16 @@ def _find_balanced_json(text: str) -> Optional[str]:
 
 def _extract_from_dict(data: dict, text: str) -> tuple[str, float, str]:
     """Extract verdict/confidence/reasoning from a parsed dict."""
-    verdict = str(data.get("verdict", "REVIEW")).upper()
+    used_key = next((k for k in ("verdict", "decision", "action") if k in data), None)
+    if used_key and used_key != "verdict":
+        logger.warning("LLM used '%s' instead of 'verdict' key — check system prompt", used_key)
+    raw = data.get(used_key) if used_key else "REVIEW"
+    verdict = str(raw).upper()
     if verdict not in _VALID_VERDICTS:
         verdict = "REVIEW"
     confidence = float(data.get("confidence", 0.5))
     confidence = max(0.0, min(1.0, confidence))
-    reasoning = str(data.get("reasoning", data.get("agent_reasoning", "")))
+    reasoning = str(data.get("reasoning") or data.get("summary") or data.get("justification") or data.get("agent_reasoning") or "")
     return verdict, confidence, reasoning
 
 
@@ -463,8 +525,8 @@ def _extract_verdict_from_text(text: str) -> tuple[str, float, str]:
     upper = text.upper()
     for v in ["ESCALATE", "REJECT", "APPROVE", "REVIEW"]:
         if v in upper:
-            return v, 0.5, text[:500]
-    return "REVIEW", 0.5, text[:500]
+            return v, 0.5, text[:_MAX_RULE_TEXT_CHARS]
+    return "REVIEW", 0.5, text[:_MAX_RULE_TEXT_CHARS]
 
 
 def _extract_precedents_from_messages(messages: list) -> list[dict]:
@@ -503,10 +565,12 @@ def _extract_gaps_from_messages(messages: list) -> list[dict]:
             if isinstance(data, list):
                 for item in data[:10]:
                     if isinstance(item, dict) and "gap_label" in item:
+                        severity = item.get("severity", "medium")
+                        gap_type = item.get("gap_type", "governance_config")
                         gaps.append({
-                            "gap_type": "governance_config",
+                            "gap_type": gap_type,
                             "description": item.get("gap_label", ""),
-                            "severity": "medium",
+                            "severity": severity,
                         })
         except (json.JSONDecodeError, TypeError):
             pass
