@@ -500,9 +500,11 @@ python scripts/generate_decision_history.py
 
 ---
 
-## Mock Companies
+## Frontend Repo
 
-Two companies. Different industries. Both use identical application code — only `configs/*.json` differs.
+https://github.com/RainaKim/Sentra
+
+## Demo Companies
 
 | Company | Industry | Size | Primary Governance Focus |
 |---------|----------|------|--------------------------|
