@@ -247,9 +247,9 @@ Nodes without embeddings: `Rule`, `Actor`, `Goal`, `Edge relationships`
 Provider-agnostic — never hardcoded. All config via env vars:
 
 ```bash
-LLM_PROVIDER=openai          # anthropic | openai | bedrock
-LLM_MODEL_FAST=gpt-5.4-mini  # extraction, classification, summarization
-LLM_MODEL_CAPABLE=gpt-5.4    # graph reasoning, contradiction analysis, synthesis
+LLM_PROVIDER=anthropic       # anthropic | openai
+LLM_MODEL_FAST=claude-haiku-4-5-20251001   # extraction, classification, summarization
+LLM_MODEL_CAPABLE=claude-sonnet-4-6        # graph reasoning, contradiction analysis, synthesis
 ```
 
 ```python
@@ -263,7 +263,6 @@ capable_llm = get_llm("capable")  # governance agent synthesis
 |----------|-----------|---------------|
 | Anthropic | claude-haiku-4-5 | claude-sonnet-4-6 |
 | OpenAI | gpt-5.4-mini | gpt-5.4 |
-| Bedrock | nova-2-lite | nova-pro |
 
 ---
 
@@ -278,7 +277,7 @@ capable_llm = get_llm("capable")  # governance agent synthesis
 | Graph + vector storage | Neo4j 5.11+ — native vector index, no separate vector store |
 | Embeddings | OpenAI text-embedding-3-small (1536d) |
 | Validation | Pydantic v2 — all LLM outputs validated before use |
-| External signals | Tavily search + LLM synthesis → `RiskAdjustment[]` |
+| External signals | Tavily search + LLM synthesis → `RiskAdjustment[]` (curated fallback when no API key) |
 | Database | SQLite (dev) + SQLAlchemy ORM + Alembic |
 | Auth | JWT + RBAC + Google OAuth2 + Azure AD OIDC |
 
@@ -380,7 +379,12 @@ decision-governance-layer/
 │   │   └── in_memory_repository.py    # Dev/test: lazy adjacency index, LRU eviction
 │   ├── onboarding/
 │   │   ├── onboarding_graph.py        # LangGraph app (orchestrator + scout swarm)
+│   │   ├── prompts.py                 # Scout + transform prompt templates
+│   │   ├── schemas.py                 # Onboarding state + artifact models
+│   │   ├── seed.py                    # Initial graph seeding from company config
+│   │   ├── validation.py              # Post-onboarding graph validation
 │   │   ├── scouts/
+│   │   │   ├── base.py                # Base scout interface
 │   │   │   ├── document_scout.py      # PDFs, policy docs, org charts
 │   │   │   ├── conversation_scout.py  # Email threads, Slack, meeting minutes
 │   │   │   ├── data_scout.py          # Spreadsheets, approval logs, CSVs
@@ -394,24 +398,39 @@ decision-governance-layer/
 │   │   ├── schemas.py                 # ValidationState (TypedDict), ValidationResult, GovernanceVerdict
 │   │   ├── governance_agent.py        # LangGraph governance agent (agent→tools→synthesize)
 │   │   └── tools.py                   # 6 LangChain tools (graph RAG, vector RAG, gap detection)
+│   ├── providers/
+│   │   ├── tavily_live_fetch_provider.py      # Tavily search → ExternalSignal[]
+│   │   └── curated_external_signal_provider.py # Static fallback signals (no API key needed)
 │   ├── services/
 │   │   ├── pipeline_service.py        # Async pipeline orchestrator
 │   │   ├── risk_scoring_service.py    # 3-dimension quantified risk scoring with evidence
 │   │   ├── risk_response_simulation_service.py  # Counterfactual scenario engine
+│   │   ├── risk_evidence_llm.py       # Structured LLM semantics (optional, non-fatal)
 │   │   ├── external_signal_service.py # Market/regulatory signal orchestrator
+│   │   ├── evidence_registry_service.py # Evidence provenance tracking
+│   │   ├── decision_context_service.py  # Decision context enrichment
+│   │   ├── company_service.py         # Company CRUD
+│   │   ├── user_service.py            # User CRUD
+│   │   ├── auth_service.py            # JWT token management
 │   │   ├── rbac_service.py            # Role-based access control
 │   │   └── sso_service.py             # Google OAuth2, Azure AD OIDC
 │   ├── routers/
 │   │   ├── validation.py              # POST /v1/validate
 │   │   ├── decisions.py               # Legacy pipeline endpoints
 │   │   ├── workspace.py               # Dashboard + metrics
+│   │   ├── analysis.py                # Decision entity extraction
 │   │   ├── agents.py                  # Agent registry + escalation rules
+│   │   ├── companies.py               # Company management
 │   │   ├── auth.py                    # JWT auth
 │   │   ├── sso.py                     # SSO callbacks
+│   │   ├── fixtures.py                # Demo data fixtures
 │   │   └── normalizers.py             # Response shape enforcement
 │   ├── schemas/                       # Pydantic v2 request/response contracts
 │   ├── models/                        # SQLAlchemy ORM (User, Company, Agent, Decision)
-│   └── repositories/                  # Data access layer
+│   ├── repositories/                  # Data access layer
+│   └── demo_fixtures/                 # External profiles + signal sources
+│       ├── external_profiles/         # Company external context profiles
+│       └── external_sources/          # Curated signal source definitions
 ├── configs/
 │   └── nexus_analytics.json           # Company 1 governance config (rules, goals, hierarchy)
 ├── dev/
@@ -420,14 +439,13 @@ decision-governance-layer/
 │       ├── personas/                  # Company persona definitions
 │       └── ground_truth/              # Expected ontology for eval
 ├── scripts/
-│   └── generate_decision_history.py   # Seed synthetic Decision nodes into Neo4j (run once)
+│   ├── generate_decision_history.py   # Seed synthetic Decision nodes into Neo4j (run once)
+│   └── run_onboarding.py             # Run onboarding pipeline for a company
 ├── tests/                             # 301 tests (pytest)
 ├── alembic/versions/                  # DB migrations
-├── docs/
-│   ├── ONBOARDING_SPEC.md
-│   └── PHASE2_VALIDATION_TODOS.md
-└── configs/
-    └── nexus_analytics.json
+└── docs/
+    ├── ONBOARDING_SPEC.md
+    └── PHASE2_VALIDATION_TODOS.md
 ```
 
 ---
@@ -442,8 +460,8 @@ pip install -r requirements.txt
 # 2. Environment
 cp .env.example .env
 # Required:
-#   LLM_PROVIDER=openai
-#   OPENAI_API_KEY=sk-...
+#   LLM_PROVIDER=anthropic     (or openai)
+#   ANTHROPIC_API_KEY=sk-...   (or OPENAI_API_KEY)
 #   JWT_SECRET=<random secret>
 # Optional (Neo4j):
 #   NEO4J_URI=bolt://localhost:7687
@@ -520,25 +538,23 @@ Company 1 governance rules:
 
 ## Test Coverage
 
-301 tests across 17 test files:
+301 tests across 16 test files (4 additional files skipped pending refactor):
 
 | Area | Tests |
 |------|-------|
+| Onboarding Pipeline (scout swarm, transform, graph seeding) | 47 |
 | Phase 2: Graph RAG (hybrid retrieval, Cypher safety) | 32 |
 | Phase 2: Governance Agent (LangGraph, tool calling) | 32 |
+| Risk Scoring (3 dimensions, bands, evidence provenance) | 32 |
+| Graph Validation (ontology constraints, edge predicates) | 29 |
+| Auth (JWT, signup, login) | 23 |
+| Neo4j Schema (constraints, indexes, init) | 22 |
+| Onboarding Seed (config → graph seeding) | 21 |
 | Phase 2: Decision Pack wiring | 20 |
-| Risk Scoring (3 dimensions, bands, evidence provenance) | 26 |
-| Risk Response Simulation (counterfactual re-evaluation) | 21 |
-| External Signals (orchestrator + curated fallback) | 23 |
-| Nova External Signal Summarizer | 19 |
-| RBAC (role enforcement, tenant isolation) | 14 |
 | SSO (Google OAuth2, Azure AD OIDC) | 15 |
-| Auth (JWT, signup, login) | 12 |
-| Risk Semantics (LLM fallback layer) | 16 |
-| Other (extractor, evidence registry, decision context) | 71 |
+| RBAC (role enforcement, tenant isolation) | 14 |
+| Risk Semantics (LLM fallback layer) | 14 |
 
-Run integration tests (requires `OPENAI_API_KEY`):
-
-```bash
-python -m pytest tests/ -v -m integration
-```
+4 test files currently skipped (depend on old fixtures pending refactor):
+`test_evidence_registry_service`, `test_external_signal_service`,
+`test_governance_evidence_integration`, `test_risk_response_simulation`
