@@ -1,0 +1,172 @@
+{
+  "company_id": "nexus_analytics",
+  "company_name": "Nexus Analytics",
+  "industry": "b2b_saas",
+  "jurisdiction": ["US"],
+  "currency": "USD",
+  "decision_dimensions": [
+    {"key": "cost", "type": "number", "unit": "USD", "description": "Total cost of the decision"},
+    {"key": "headcount_change", "type": "number", "unit": "headcount", "description": "Net change in headcount"},
+    {"key": "affects_compliance", "type": "boolean", "description": "Whether the decision affects data compliance"},
+    {"key": "involves_hiring", "type": "boolean", "description": "Whether the decision involves hiring"},
+    {"key": "uses_pii", "type": "boolean", "description": "Whether the decision involves PII or customer data"},
+    {"key": "discount_pct", "type": "number", "unit": "%", "description": "Discount percentage offered"},
+    {"key": "vendor_contract_value", "type": "number", "unit": "USD", "description": "Value of vendor contract"}
+  ],
+  "strategic_goals": [
+    {
+      "goal_id": "G1",
+      "label": "Revenue Growth",
+      "description": "Expand global revenue through new markets and customer acquisition",
+      "priority": "high",
+      "owner_role": "VP Sales",
+      "kpis": [
+        {"kpi_id": "K1", "label": "ARR Growth Rate", "unit": "%", "target": "> 40%"},
+        {"kpi_id": "K2", "label": "New Logo Count", "unit": "customers", "target": "> 50"}
+      ]
+    },
+    {
+      "goal_id": "G2",
+      "label": "Cost Stability",
+      "description": "Maintain operational cost discipline and budget adherence",
+      "priority": "high",
+      "owner_role": "CFO",
+      "kpis": [
+        {"kpi_id": "K3", "label": "Budget Variance", "unit": "%", "target": "< 5%"},
+        {"kpi_id": "K4", "label": "Burn Rate", "unit": "USD/month", "target": "< $800K"}
+      ]
+    },
+    {
+      "goal_id": "G3",
+      "label": "Data Compliance",
+      "description": "Ensure all data handling meets regulatory requirements (SOC2, GDPR, CCPA)",
+      "priority": "critical",
+      "owner_role": "General Counsel",
+      "kpis": [
+        {"kpi_id": "K5", "label": "Compliance Incidents", "unit": "count", "target": "0"},
+        {"kpi_id": "K6", "label": "Audit Pass Rate", "unit": "%", "target": "100%"}
+      ]
+    },
+    {
+      "goal_id": "G4",
+      "label": "Engineering Velocity",
+      "description": "Increase engineering output and reduce time-to-ship for product features",
+      "priority": "medium",
+      "owner_role": "CTO",
+      "kpis": [
+        {"kpi_id": "K7", "label": "Sprint Velocity", "unit": "points", "target": "> 80"},
+        {"kpi_id": "K8", "label": "Time to Production", "unit": "days", "target": "< 14"}
+      ]
+    }
+  ],
+  "governance_rules": [
+    {
+      "rule_id": "R1",
+      "name": "CFO Approval for Spend Over $50K",
+      "description": "Any expenditure exceeding $50,000 requires CFO sign-off before commitment",
+      "conditions": [{"field": "cost", "operator": ">", "value": 50000}],
+      "consequence": {"action": "require_approval", "approver_role": "CFO"},
+      "source": "documented",
+      "confidence": "high",
+      "governed_by_goal_ids": ["G2"]
+    },
+    {
+      "rule_id": "R2",
+      "name": "Board Approval for Spend Over $200K",
+      "description": "Any expenditure exceeding $200,000 requires board-level approval",
+      "conditions": [{"field": "cost", "operator": ">", "value": 200000}],
+      "consequence": {"action": "require_approval", "approver_role": "Board"},
+      "source": "documented",
+      "confidence": "high",
+      "governed_by_goal_ids": ["G2"]
+    },
+    {
+      "rule_id": "R3",
+      "name": "Legal Sign-off for Customer Data Usage",
+      "description": "Any decision involving customer data requires General Counsel review",
+      "conditions": [{"field": "uses_pii", "operator": "is_true"}],
+      "consequence": {"action": "require_approval", "approver_role": "General Counsel"},
+      "source": "documented",
+      "confidence": "high",
+      "governed_by_goal_ids": ["G3"]
+    },
+    {
+      "rule_id": "R4",
+      "name": "Procurement Review for Vendor Contracts Over $100K",
+      "description": "Vendor contracts exceeding $100,000 require procurement review and CFO approval",
+      "conditions": [{"field": "vendor_contract_value", "operator": ">", "value": 100000}],
+      "consequence": {"action": "require_review", "approver_role": "CFO", "message": "Vendor contract exceeds $100K threshold — procurement review required"},
+      "source": "documented",
+      "confidence": "high",
+      "governed_by_goal_ids": ["G2"]
+    },
+    {
+      "rule_id": "R5",
+      "name": "HR and Department Head Approval for Hiring",
+      "description": "All hiring decisions require both HR and the relevant department head approval",
+      "conditions": [{"field": "involves_hiring", "operator": "is_true"}],
+      "consequence": {"action": "require_approval", "approver_role": "Department Head", "message": "Hiring requires HR + department head approval"},
+      "source": "documented",
+      "confidence": "high",
+      "governed_by_goal_ids": ["G4", "G2"]
+    },
+    {
+      "rule_id": "R6",
+      "name": "Q4 Spending Freeze",
+      "description": "No new discretionary spend commitments after October 15 in Q4 (informal policy announced by CFO)",
+      "conditions": [{"field": "cost", "operator": ">", "value": 0}],
+      "consequence": {"action": "flag", "message": "Q4 spending freeze may apply — verify with CFO"},
+      "source": "inferred",
+      "confidence": "medium",
+      "governed_by_goal_ids": ["G2"],
+      "temporal_scope": "Q4"
+    },
+    {
+      "rule_id": "R7",
+      "name": "CTO Dev Tool Procurement Bypass",
+      "description": "CTO has been observed bypassing formal procurement for developer tools under $20K (pattern inferred from Jira tickets, never formally documented)",
+      "conditions": [{"field": "cost", "operator": "<", "value": 20000}],
+      "consequence": {"action": "flag", "message": "CTO dev tool bypass pattern detected — consider formalizing"},
+      "source": "inferred",
+      "confidence": "low",
+      "governed_by_goal_ids": ["G4"]
+    }
+  ],
+  "approval_hierarchy": [
+    {"role": "Board", "reports_to": null, "approval_limit": null, "approval_limit_note": "Board-level approval for spend > $200K"},
+    {"role": "CEO", "reports_to": "Board", "approval_limit": null, "approval_limit_note": "Unlimited"},
+    {"role": "CFO", "reports_to": "CEO", "approval_limit": 200000},
+    {"role": "CTO", "reports_to": "CEO", "approval_limit": null, "approval_limit_note": "Technical decisions only"},
+    {"role": "VP Sales", "reports_to": "CEO", "approval_limit": null, "approval_limit_note": "15% discount authority"},
+    {"role": "General Counsel", "reports_to": "CEO", "approval_limit": null, "approval_limit_note": "Compliance gatekeeper"}
+  ],
+  "departments": [
+    {"dept_id": "executive", "label": "Executive", "member_roles": ["CEO"]},
+    {"dept_id": "finance", "label": "Finance", "member_roles": ["CFO"]},
+    {"dept_id": "engineering", "label": "Engineering", "member_roles": ["CTO"]},
+    {"dept_id": "sales", "label": "Sales", "member_roles": ["VP Sales"]},
+    {"dept_id": "legal", "label": "Legal", "member_roles": ["General Counsel"]}
+  ],
+  "risk_weights": {
+    "financial": 0.40,
+    "compliance": 0.35,
+    "strategic": 0.25
+  },
+  "goal_conflicts": [
+    {
+      "goal_id_a": "G4",
+      "goal_id_b": "G2",
+      "description": "Engineering hiring velocity vs budget stability"
+    },
+    {
+      "goal_id_a": "G1",
+      "goal_id_b": "G3",
+      "description": "Sales revenue growth vs data compliance requirements"
+    },
+    {
+      "goal_id_a": "G4",
+      "goal_id_b": "G3",
+      "description": "Fast engineering shipping vs privacy review requirements"
+    }
+  ]
+}

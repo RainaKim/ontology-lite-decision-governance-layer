@@ -28,6 +28,27 @@ Thumbs.db
 # Logs
 *.log
 
+# Development tooling — mock data generation, simulator output (per CLAUDE.md)
+dev/
+
+# SQLite dev database
+dev.db
+*.db
+
+# Test cache
+.pytest_cache/
+
+# Working/iteration docs — for local reference only, not part of repo
+docs/GRAPH_EVALUATION_REPORT.md
+docs/GRAPH_EVALUATION_V2.md
+docs/V4_GPT54_EVALUATION_REPORT.md
+docs/V4_ITERATION_FIXES.md
+docs/V3_UPGRADE_PLAN.md
+docs/UPGRADE_PLAN_REVIEWED.md
+docs/PHASE2_VALIDATION_TODOS.md
+
 # Internal reference docs (for Claude Code only)
 docs/BUILD_PLAN.md
 docs/README_VISION.md
+
+.claude
