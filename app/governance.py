@@ -94,7 +94,9 @@ def load_company_config(company_id: str):
     Returns None if no config file is found or if parsing fails (graceful fallback).
     """
     from app.config.company_config import CompanyConfig
+    from app.config.company_registry import resolve_config_id
 
+    company_id = resolve_config_id(company_id)
     search_paths = [
         Path(__file__).parent.parent / "configs" / f"{company_id}.json",
         Path(__file__).parent.parent / "dev" / "simulate" / "personas" / f"{company_id}.json",
