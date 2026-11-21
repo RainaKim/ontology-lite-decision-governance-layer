@@ -1,11 +1,11 @@
 """
-Company Service - Load and cache mock company data.
+Company Service - Load and cache company governance data from CompanyConfig JSON.
 
-Contract-compliant company IDs (api_contract_v1.md):
-  nexus_dynamics    → mock_company_nexus.json           (Nexus Dynamics)
-  mayo_central      → mock_company_healthcare_merged.json (Mayo Central Hospital)
+Source of truth: configs/{config_id}.json (CompanyConfig). The API company_id
+(DB primary key, e.g. "nexus_dynamics") maps to a config file via
+app.config.company_registry.COMPANY_CONFIG_IDS.
 
-No DB. In-memory cache loaded once at startup.
+No DB. In-memory cache loaded once at startup. English only.
 """
 
 import json
@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Optional
 
 from app.schemas.responses import CompanySummaryResponse, CompanyDetailResponse
-from app.config.company_registry import COMPANY_RULES_FILES as _REGISTRY_BY_COMPANY
+from app.config.company_config import CompanyConfig
+from app.config.company_registry import COMPANY_CONFIG_IDS as _CONFIG_IDS
 
 logger = logging.getLogger(__name__)
 
@@ -22,83 +23,88 @@ _cache: dict[str, dict] = {}           # key: "{lang}:{company_id}"
 _summaries_v1: dict[str, list[CompanySummaryResponse]] = {"ko": [], "en": []}
 _details_v1: dict[str, dict[str, CompanyDetailResponse]] = {"ko": {}, "en": {}}
 
+_CONFIGS_DIR = Path(__file__).parent.parent.parent / "configs"
+
+
+def _to_context(company_id: str, config: CompanyConfig) -> dict:
+    """Adapt a CompanyConfig into the dict shape the routers/pipeline consume."""
+    raw = config.model_dump(mode="json")
+    hierarchy = raw.get("approval_hierarchy", [])
+    return {
+        **raw,
+        "_id": company_id,
+        "company": {
+            "id": company_id,
+            "name": config.company_name,
+            "industry": config.industry,
+            "size": "",
+            "description": "",
+        },
+        "metadata": {"governance_framework": config.industry},
+        "approval_hierarchy": {
+            "levels": [
+                {
+                    "level": i + 1,
+                    "title": e["role"],
+                    "max_budget_authority": e.get("approval_limit"),
+                    "note": e.get("approval_limit_note"),
+                }
+                for i, e in enumerate(hierarchy)
+            ],
+            "personnel": [],
+        },
+    }
+
 
 def _load_all() -> None:
-    """Load all companies (both langs) into cache. Called once at startup."""
-    root = Path(__file__).parent.parent.parent  # project root
-
-    for company_id, files in _REGISTRY_BY_COMPANY.items():
-        filename = files.get("merged")
-        if not filename:
-            logger.warning(f"No 'merged' file for {company_id} — skipping")
-            continue
-
-        path = root / filename
+    """Load all registered companies into cache. Called once at startup."""
+    for company_id, config_id in _CONFIG_IDS.items():
+        path = _CONFIGS_DIR / f"{config_id}.json"
         try:
             with open(path, "r") as f:
-                raw = json.load(f)
+                config = CompanyConfig.model_validate(json.load(f))
         except FileNotFoundError:
-            logger.warning(f"Company file not found: {path} — skipping {company_id}")
+            logger.warning(f"Company config not found: {path} — skipping {company_id}")
             continue
         except Exception as e:
-            logger.error(f"Failed to load {filename}: {e}")
+            logger.error(f"Failed to load {path.name}: {e}")
             continue
 
+        data = _to_context(company_id, config)
+        levels = data["approval_hierarchy"]["levels"]
+        chain_summary = " > ".join(lvl["title"] for lvl in levels[:4])
+
+        summary = CompanySummaryResponse(
+            id=company_id,
+            name=config.company_name,
+            industry=config.industry,
+            size="",
+            governance_framework=config.industry,
+        )
+        detail = CompanyDetailResponse(
+            **summary.model_dump(),
+            description="",
+            approval_chain_summary=chain_summary,
+            total_governance_rules=len(config.governance_rules),
+            strategic_goals=[
+                {
+                    "goal_id": g.goal_id,
+                    "name": g.label,
+                    "owner_id": g.owner_role,
+                    "priority": g.priority,
+                }
+                for g in config.strategic_goals
+            ],
+            approval_hierarchy=data["approval_hierarchy"],
+        )
+
+        # English only: both lang keys point at the same data (callers still pass lang).
         for lang in ("ko", "en"):
-            translation = raw.get("translations", {}).get(lang, {})
-
-            # Build a lang-specific view: translation fields override top-level
-            data = {**raw, **translation}
-            # Map 'rules' key back to 'governance_rules' for backward compatibility
-            if "rules" in translation:
-                data["governance_rules"] = translation["rules"]
-            data["_id"] = company_id
             _cache[f"{lang}:{company_id}"] = data
+            _summaries_v1[lang].append(summary)
+            _details_v1[lang][company_id] = detail
 
-            company_meta = data.get("company", {})
-            company_metadata = data.get("metadata", {})
-
-            governance_framework = (
-                company_metadata.get("governance_framework")
-                or company_meta.get("industry", "")
-            )
-
-            _summaries_v1[lang].append(CompanySummaryResponse(
-                id=company_id,
-                name=company_meta.get("name", company_id),
-                industry=company_meta.get("industry", ""),
-                size=company_meta.get("size", ""),
-                governance_framework=governance_framework,
-            ))
-
-            approval_hierarchy = data.get("approval_hierarchy", {})
-            governance_rules = data.get("governance_rules", [])
-            strategic_goals = data.get("strategic_goals", [])
-            levels = approval_hierarchy.get("levels", [])
-            chain_summary = " > ".join([lvl.get("title", "") for lvl in levels[:4]])
-
-            _details_v1[lang][company_id] = CompanyDetailResponse(
-                id=company_id,
-                name=company_meta.get("name", company_id),
-                industry=company_meta.get("industry", ""),
-                size=company_meta.get("size", ""),
-                governance_framework=governance_framework,
-                description=company_meta.get("description", ""),
-                approval_chain_summary=chain_summary,
-                total_governance_rules=len(governance_rules),
-                strategic_goals=[
-                    {
-                        "goal_id": g.get("goal_id"),
-                        "name": g.get("name"),
-                        "owner_id": g.get("owner_id"),
-                        "priority": g.get("priority"),
-                    }
-                    for g in strategic_goals
-                ],
-                approval_hierarchy=approval_hierarchy,
-            )
-
-            logger.info(f"Loaded company [{lang}]: {company_id} ({company_meta.get('name')})")
+        logger.info(f"Loaded company: {company_id} <- configs/{config_id}.json ({config.company_name})")
 
 
 def init() -> None:

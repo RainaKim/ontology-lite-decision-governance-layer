@@ -1,17 +1,17 @@
-# Single source of truth for company ID → rules file and profile aliases.
-# Add a new row here when onboarding a new company — no other code changes needed.
-#
-# NOTE: Legacy mock JSON files (mock_company_nexus.json, mock_company_healthcare_merged.json)
-# have been removed. Rules files will be populated when Neo4j-backed CompanyConfig is implemented.
-
 COMPANY_RULES_FILES: dict[str, dict[str, str]] = {
-    # "nexus_dynamics": {
-    #     "merged": "nexus_dynamics_config.json",
-    # },
-    # "mayo_central": {
-    #     "merged": "mayo_central_config.json",
-    # },
 }
+
+# API/DB company_id -> configs/{config_id}.json stem (CompanyConfig, Tier 1 governance config).
+# Add one row per company; the pipeline itself stays company-agnostic.
+COMPANY_CONFIG_IDS: dict[str, str] = {
+    "nexus_dynamics": "nexus_analytics",
+}
+
+
+def resolve_config_id(company_id: str) -> str:
+    """Return the configs/ file stem for a company_id (identity when no alias is registered)."""
+    return COMPANY_CONFIG_IDS.get(company_id, company_id)
+
 
 PROFILE_ALIASES: dict[str, str] = {
     "mayo_central": "mayo_central_hospital",
