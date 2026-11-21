@@ -30,6 +30,12 @@ config = context.config
 
 # Override sqlalchemy.url with DATABASE_URL env var (takes precedence over alembic.ini).
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./dev.db")
+# Normalize to the installed driver (psycopg2): Render gives "postgres://",
+# and a hand-edited URL may name "postgresql+psycopg://" (psycopg3, not installed).
+for _prefix in ("postgres://", "postgresql://", "postgresql+psycopg://"):
+    if DATABASE_URL.startswith(_prefix):
+        DATABASE_URL = "postgresql+psycopg2://" + DATABASE_URL[len(_prefix):]
+        break
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 if config.config_file_name is not None:

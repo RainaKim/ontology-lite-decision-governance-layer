@@ -30,9 +30,12 @@ DATABASE_URL: str = os.environ.get(
     "sqlite:///./dev.db",  # dev/local fallback
 )
 
-# Render gives "postgres://" but SQLAlchemy requires "postgresql://"
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+# Normalize to the installed driver (psycopg2): Render gives "postgres://",
+# and a hand-edited URL may name "postgresql+psycopg://" (psycopg3, not installed).
+for _prefix in ("postgres://", "postgresql://", "postgresql+psycopg://"):
+    if DATABASE_URL.startswith(_prefix):
+        DATABASE_URL = "postgresql+psycopg2://" + DATABASE_URL[len(_prefix):]
+        break
 
 # SQLite requires check_same_thread=False for multi-threaded use (FastAPI).
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
